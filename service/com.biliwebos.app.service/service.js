@@ -1,0 +1,248 @@
+// Bilibili API proxy service for webOS TV
+// Runs as background Node.js service, communicates via Luna bus
+// Also starts a local HTTP proxy for video segments and images
+// Node.js v16.19.1 on webOS TV 24
+
+var Service = require('webos-service');
+var https = require('https');
+var http = require('http');
+var zlib = require('zlib');
+var fs = require('fs');
+var path = require('path');
+var url = require('url');
+
+var service = new Service('com.biliwebos.app.service');
+
+// Cookie storage
+var COOKIE_FILE = path.join('/media/internal', 'bili_cookies.json');
+var storedCookies = {};
+try {
+  if (fs.existsSync(COOKIE_FILE)) {
+    storedCookies = JSON.parse(fs.readFileSync(COOKIE_FILE, 'utf-8'));
+  }
+} catch (e) { }
+
+function saveCookies() {
+  try { fs.writeFileSync(COOKIE_FILE, JSON.stringify(storedCookies)); } catch (e) { }
+}
+
+function serializeCookies(cookies) {
+  return Object.keys(cookies).map(function (k) { return k + '=' + cookies[k]; }).join('; ');
+}
+
+function isAllowedHost(host) {
+  var allowed = [
+    'api.bilibili.com', 'passport.bilibili.com', 'api.live.bilibili.com',
+    's1.hdslb.com', 'i0.hdslb.com', 'i1.hdslb.com', 'i2.hdslb.com',
+    'comment.bilibili.com'
+  ];
+  for (var i = 0; i < allowed.length; i++) {
+    if (host === allowed[i]) return true;
+  }
+  return host.indexOf('.bilivideo.') >= 0 || host.indexOf('.hdslb.com') >= 0 ||
+    host.indexOf('.akamaized.net') >= 0;
+}
+
+// Make HTTPS request helper
+function makeRequest(parsedUrl, method, body, contentType, range, callback) {
+  var hostname = parsedUrl.hostname;
+  var port = parsedUrl.port ? parseInt(parsedUrl.port) : 443;
+  var isCDN = hostname.indexOf('bilivideo') >= 0 || hostname.indexOf('akamaized') >= 0;
+
+  var headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://www.bilibili.com/',
+    'Accept': isCDN ? '*/*' : 'application/json, text/plain, */*',
+    'Accept-Language': 'zh-CN,zh;q=0.9',
+    'Accept-Encoding': isCDN ? 'identity' : 'gzip, deflate',
+    'Cookie': serializeCookies(storedCookies)
+  };
+  if (!isCDN) headers['Origin'] = 'https://www.bilibili.com';
+  if (contentType) headers['Content-Type'] = contentType;
+  if (range) headers['Range'] = range;
+
+  var options = {
+    hostname: hostname, port: port,
+    path: parsedUrl.pathname + (parsedUrl.search || ''),
+    method: method || 'GET',
+    headers: headers,
+    rejectUnauthorized: false
+  };
+
+  var req = https.request(options, function (res) {
+    var setCookieHeaders = res.headers['set-cookie'];
+    if (setCookieHeaders) {
+      setCookieHeaders.forEach(function (sc) {
+        var parts = sc.split(';')[0];
+        var eqIdx = parts.indexOf('=');
+        if (eqIdx > 0) {
+          storedCookies[parts.substring(0, eqIdx).trim()] = parts.substring(eqIdx + 1).trim();
+        }
+      });
+      saveCookies();
+    }
+    callback(null, res);
+  });
+
+  req.on('error', function (err) { callback(err); });
+  if (body) req.write(body);
+  req.end();
+}
+
+// Decompress response
+function decompressResponse(res, callback) {
+  var chunks = [];
+  res.on('data', function (c) { chunks.push(c); });
+  res.on('end', function () {
+    var buf = Buffer.concat(chunks);
+    var encoding = res.headers['content-encoding'];
+    if (encoding === 'gzip') {
+      zlib.gunzip(buf, function (err, r) { callback(err ? buf : r); });
+    } else if (encoding === 'deflate') {
+      zlib.inflate(buf, function (err, r) {
+        if (!err) { callback(r); return; }
+        zlib.inflateRaw(buf, function (err2, r2) { callback(err2 ? buf : r2); });
+      });
+    } else {
+      callback(buf);
+    }
+  });
+}
+
+// ==================== Luna Bus Methods ====================
+
+service.register('fetch', function (message) {
+  var targetUrl = message.payload.url;
+  if (!targetUrl) { message.respond({ returnValue: false, error: 'No URL' }); return; }
+
+  var parsed;
+  try { parsed = new URL(targetUrl); } catch (e) {
+    message.respond({ returnValue: false, error: 'Invalid URL' }); return;
+  }
+  if (!isAllowedHost(parsed.hostname)) {
+    message.respond({ returnValue: false, error: 'Host not allowed' }); return;
+  }
+
+  makeRequest(parsed, message.payload.method, message.payload.body,
+    message.payload.contentType, message.payload.range, function (err, res) {
+      if (err) { message.respond({ returnValue: false, error: err.message }); return; }
+
+      decompressResponse(res, function (data) {
+        var ct = res.headers['content-type'] || '';
+        if (ct.indexOf('json') >= 0 || ct.indexOf('text') >= 0 || ct.indexOf('xml') >= 0) {
+          message.respond({
+            returnValue: true, status: res.statusCode, contentType: ct,
+            body: data.toString('utf-8'),
+            newCookies: storedCookies
+          });
+        } else {
+          message.respond({
+            returnValue: true, status: res.statusCode, contentType: ct,
+            bodyBase64: data.toString('base64'), bodyLength: data.length
+          });
+        }
+      });
+    });
+});
+
+service.register('getCookies', function (message) {
+  message.respond({ returnValue: true, cookies: storedCookies });
+});
+
+service.register('setCookies', function (message) {
+  var c = message.payload.cookies || {};
+  Object.keys(c).forEach(function (k) { storedCookies[k] = c[k]; });
+  saveCookies();
+  message.respond({ returnValue: true });
+});
+
+service.register('clearCookies', function (message) {
+  storedCookies = {};
+  saveCookies();
+  message.respond({ returnValue: true });
+});
+
+service.register('ping', function (message) {
+  message.respond({
+    returnValue: true, status: 'ok',
+    cookieKeys: Object.keys(storedCookies),
+    nodeVersion: process.version,
+    localProxyPort: LOCAL_PROXY_PORT
+  });
+});
+
+// ==================== Local HTTP Proxy ====================
+// For video segments, images, and HLS streams that browser fetches directly
+
+var LOCAL_PROXY_PORT = 7654;
+
+var localServer = http.createServer(function (req, res) {
+  // URL format: /proxy/{host}/{path}
+  var reqPath = req.url;
+  if (!reqPath.startsWith('/proxy/')) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
+
+  var targetPath = reqPath.slice(7);
+  var slashIdx = targetPath.indexOf('/');
+  var hostWithPort = slashIdx > 0 ? targetPath.slice(0, slashIdx) : targetPath;
+  var apiPath = slashIdx > 0 ? targetPath.slice(slashIdx) : '/';
+
+  var hostParts = hostWithPort.split(':');
+  var hostname = hostParts[0];
+
+  if (!isAllowedHost(hostname)) {
+    res.writeHead(403);
+    res.end('Host not allowed');
+    return;
+  }
+
+  var parsed;
+  try {
+    parsed = new URL('https://' + hostWithPort + apiPath);
+  } catch (e) {
+    res.writeHead(400);
+    res.end('Bad URL');
+    return;
+  }
+
+  makeRequest(parsed, req.method, null, null, req.headers['range'], function (err, proxyRes) {
+    if (err) {
+      res.writeHead(502);
+      res.end(err.message);
+      return;
+    }
+
+    var responseHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
+    };
+    if (proxyRes.headers['content-range']) responseHeaders['Content-Range'] = proxyRes.headers['content-range'];
+    if (proxyRes.headers['content-length']) responseHeaders['Content-Length'] = proxyRes.headers['content-length'];
+    if (proxyRes.headers['accept-ranges']) responseHeaders['Accept-Ranges'] = proxyRes.headers['accept-ranges'];
+
+    res.writeHead(proxyRes.statusCode, responseHeaders);
+    proxyRes.pipe(res);
+  });
+});
+
+localServer.on('error', function (err) {
+  console.error('[LocalProxy] Error:', err.message);
+  // Try next port
+  if (err.code === 'EADDRINUSE') {
+    LOCAL_PROXY_PORT++;
+    localServer.listen(LOCAL_PROXY_PORT, '127.0.0.1');
+  }
+});
+
+localServer.listen(LOCAL_PROXY_PORT, '127.0.0.1', function () {
+  console.log('[BiliService] Local proxy on port ' + LOCAL_PROXY_PORT);
+});
+
+// Keep service alive
+var keepAlive;
+service.activityManager.create('keepAlive', function (activity) {
+  keepAlive = activity;
+});

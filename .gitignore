@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.ipk
+screenshot*.png
+verify-screenshot.png
+proxy/cookies.json
+.claude/
