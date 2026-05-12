@@ -3,6 +3,7 @@
 // Fallback: uses HTTP proxy on Mac
 import { storage } from '../utils/storage';
 import { getWbiKeys, signWbi } from './wbi';
+import { selectLiveStreamSource, selectLiveStreamUrl } from './liveStreamSelector';
 
 const API_HOST = 'api.bilibili.com';
 const PASSPORT_HOST = 'passport.bilibili.com';
@@ -261,23 +262,14 @@ export async function getLiveStreamUrl(roomId) {
   var res = await smartFetch('api.live.bilibili.com',
     '/xlive/web-room/v2/index/getRoomPlayInfo?room_id=' + roomId + '&protocol=0,1&format=0,1,2&codec=0,1,2&platform=web&ptype=8');
   var streams = res && res.data && res.data.playurl_info && res.data.playurl_info.playurl && res.data.playurl_info.playurl.stream;
-  if (!streams) return null;
-  // Find HLS AVC stream
-  for (var s = 0; s < streams.length; s++) {
-    var formats = streams[s].format || [];
-    for (var f = 0; f < formats.length; f++) {
-      if (formats[f].format_name === 'fmp4' || formats[f].format_name === 'ts') {
-        var codecs = formats[f].codec || [];
-        for (var c = 0; c < codecs.length; c++) {
-          if (codecs[c].codec_name === 'avc') {
-            var info = (codecs[c].url_info || [{}])[0];
-            return (info.host || '') + (codecs[c].base_url || '') + (info.extra || '');
-          }
-        }
-      }
-    }
-  }
-  return null;
+  return selectLiveStreamUrl(streams);
+}
+
+export async function getLiveStreamSource(roomId) {
+  var res = await smartFetch('api.live.bilibili.com',
+    '/xlive/web-room/v2/index/getRoomPlayInfo?room_id=' + roomId + '&protocol=0,1&format=0,1,2&codec=0,1,2&platform=web&ptype=8');
+  var streams = res && res.data && res.data.playurl_info && res.data.playurl_info.playurl && res.data.playurl_info.playurl.stream;
+  return selectLiveStreamSource(streams);
 }
 
 // ============ Search ============

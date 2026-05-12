@@ -3,6 +3,10 @@ import https from 'node:https';
 import { URL } from 'node:url';
 import zlib from 'node:zlib';
 import { pipeline } from 'node:stream';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { rewriteHlsPlaylist } = require('../service/com.biliwebos.app.service/cast/hlsPlaylist.js');
 
 // Prevent crash on unhandled errors
 process.on('uncaughtException', (err) => {
@@ -216,8 +220,6 @@ const server = http.createServer((req, res) => {
         responseHeaders['Accept-Ranges'] = proxyRes.headers['accept-ranges'];
       }
 
-      res.writeHead(proxyRes.statusCode, responseHeaders);
-
       let stream = proxyRes;
       if (encoding === 'gzip') {
         stream = proxyRes.pipe(zlib.createGunzip());
@@ -248,6 +250,27 @@ const server = http.createServer((req, res) => {
       } else if (encoding === 'br') {
         stream = proxyRes.pipe(zlib.createBrotliDecompress());
       }
+
+      const isHlsPlaylist = contentType.includes('mpegurl') || apiPath.endsWith('.m3u8');
+      if (isHlsPlaylist) {
+        const chunks = [];
+        stream.on('data', c => chunks.push(c));
+        stream.on('end', () => {
+          const playlist = rewriteHlsPlaylist(Buffer.concat(chunks).toString('utf-8'), `https://${hostWithPort}${fullPath}`, `http://127.0.0.1:${PORT}`);
+          responseHeaders['Content-Length'] = Buffer.byteLength(playlist);
+          delete responseHeaders['Content-Range'];
+          res.writeHead(proxyRes.statusCode, responseHeaders);
+          res.end(playlist);
+        });
+        stream.on('error', (err) => {
+          console.error('Playlist rewrite error:', err.message);
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+        });
+        return;
+      }
+
+      res.writeHead(proxyRes.statusCode, responseHeaders);
 
       stream.pipe(res);
       stream.on('error', (err) => {
