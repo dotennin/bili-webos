@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getPlayUrl, getDanmaku, getVideoInfo, reportHeartbeat, getRelated } from '../api/client';
+import { getPlayUrl, getDanmaku, getVideoInfo, reportHeartbeat, getRelated, castReportProgress, castReportState } from '../api/client';
 import { formatDuration, QUALITY_MAP } from '../utils/format';
 import { storage } from '../utils/storage';
 import { setCustomKeyHandler } from '../hooks/useFocus';
@@ -50,20 +50,22 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   }, []);
 
   const loadVideo = useCallback(async (player) => {
-    if (!video?.bvid) return;
+    if (!video?.bvid && !video?.aid) return;
     setLoading(true);
+    castReportState({ playState: 'loading' }).catch(() => {});
     try {
       let cid = video.cid;
       if (!cid) {
-        const info = await getVideoInfo(video.bvid);
+        const info = await getVideoInfo(video);
         cid = info?.data?.cid;
         if (info?.data?.title) setVideoTitle(info.data.title);
+        if (!video.bvid && info?.data?.bvid) video.bvid = info.data.bvid;
       }
       if (!cid) return;
       cidRef.current = cid;
 
       const settings = storage.getSettings();
-      const res = await getPlayUrl(video.bvid, cid, settings.quality || 80);
+      const res = await getPlayUrl(video, cid, settings.quality || 80);
       const dash = res?.data?.dash;
       if (!dash) return;
 
@@ -95,12 +97,14 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
       videoRef.current.play();
       setPlaying(true);
       setLoading(false);
+      castReportState({ playState: 'playing' }).catch(() => {});
 
       videoRef.current.addEventListener('ended', () => {
         setEnded(true);
         setShowControls(true);
         setFocusArea('endscreen');
         setFocusIdx(0);
+        castReportState({ playState: 'end' }).catch(() => {});
       });
 
       try { setDanmakus(await getDanmaku(cid)); } catch {}
@@ -111,6 +115,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     } catch (err) {
       console.error('Load video error:', err);
       setLoading(false);
+      castReportState({ playState: 'error', error: err?.message || 'load-failed' }).catch(() => {});
     }
   }, [video]);
 
@@ -158,11 +163,44 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   useEffect(() => {
     timeUpdateRef.current = setInterval(() => {
       if (videoRef.current) {
-        setCurrentTime(videoRef.current.currentTime);
-        setDuration(videoRef.current.duration || 0);
+        const nextCurrentTime = videoRef.current.currentTime;
+        const nextDuration = videoRef.current.duration || 0;
+        setCurrentTime(nextCurrentTime);
+        setDuration(nextDuration);
+        castReportProgress({
+          duration: Math.floor(nextDuration),
+          position: Math.floor(nextCurrentTime),
+        }).catch(() => {});
       }
     }, 500);
     return () => clearInterval(timeUpdateRef.current);
+  }, []);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+
+    const handlePlay = () => {
+      setPlaying(true);
+      castReportState({ playState: 'playing' }).catch(() => {});
+    };
+    const handlePause = () => {
+      if (!ended) castReportState({ playState: 'paused' }).catch(() => {});
+      setPlaying(false);
+    };
+
+    el.addEventListener('play', handlePlay);
+    el.addEventListener('pause', handlePause);
+    return () => {
+      el.removeEventListener('play', handlePlay);
+      el.removeEventListener('pause', handlePause);
+    };
+  }, [ended]);
+
+  useEffect(() => {
+    return () => {
+      castReportState({ playState: 'stop' }).catch(() => {});
+    };
   }, []);
 
   // Heartbeat
@@ -226,12 +264,12 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
   // Change quality
   const changeQuality = useCallback(async (qn) => {
-    if (!video?.bvid || !shakaRef.current) return;
+    if ((!video?.bvid && !video?.aid) || !shakaRef.current) return;
     setCurrentQuality(qn);
     storage.setSettings({ ...storage.getSettings(), quality: qn });
     try {
       let cid = video.cid || cidRef.current;
-      const res = await getPlayUrl(video.bvid, cid, qn);
+      const res = await getPlayUrl(video, cid, qn);
       const dash = res?.data?.dash;
       if (dash) {
         const pos = videoRef.current.currentTime;
@@ -248,6 +286,49 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
       console.error('Quality change error:', e);
     }
   }, [video]);
+
+  useEffect(() => {
+    storage.setSettings({ ...storage.getSettings(), danmaku: danmakuEnabled });
+  }, [danmakuEnabled]);
+
+  useEffect(() => {
+    const handleCastCommand = (event) => {
+      const command = event.detail;
+      if (!command || !videoRef.current) return;
+
+      if (command.type === 'pause') {
+        videoRef.current.pause();
+        setPlaying(false);
+        castReportState({ playState: 'paused' }).catch(() => {});
+        return;
+      }
+      if (command.type === 'resume') {
+        videoRef.current.play();
+        setPlaying(true);
+        castReportState({ playState: 'playing' }).catch(() => {});
+        return;
+      }
+      if (command.type === 'seek') {
+        videoRef.current.currentTime = Math.max(0, command.positionSec || 0);
+        castReportProgress({
+          duration: Math.floor(videoRef.current.duration || 0),
+          position: Math.floor(videoRef.current.currentTime || 0),
+        }).catch(() => {});
+        return;
+      }
+      if (command.type === 'switchDanmaku') {
+        setDanmakuEnabled(!!command.open);
+        return;
+      }
+      if (command.type === 'stop') {
+        videoRef.current.pause();
+        onBack?.();
+      }
+    };
+
+    window.addEventListener('bili-cast-command', handleCastCommand);
+    return () => window.removeEventListener('bili-cast-command', handleCastCommand);
+  }, [onBack]);
 
   // ========== Keyboard handler ==========
   useEffect(() => {
@@ -338,8 +419,13 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           e.preventDefault();
           const btn = CONTROLS[focusIdx];
           if (btn === 'play') {
-            if (videoRef.current.paused) { videoRef.current.play(); setPlaying(true); }
-            else { videoRef.current.pause(); setPlaying(false); }
+            if (videoRef.current.paused) {
+              videoRef.current.play(); setPlaying(true);
+              castReportState({ playState: 'playing' }).catch(() => {});
+            } else {
+              videoRef.current.pause(); setPlaying(false);
+              castReportState({ playState: 'paused' }).catch(() => {});
+            }
           } else if (btn === 'danmaku') {
             setDanmakuEnabled(prev => !prev);
           } else if (btn === 'quality') {
