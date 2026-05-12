@@ -20,6 +20,12 @@ function toNumber(value) {
   return isFinite(n) ? n : 0;
 }
 
+function parseQuality(value) {
+  if (value == null) return 0;
+  var n = Number(value);
+  return isFinite(n) ? n : 0;
+}
+
 function normalizePlayPayload(payload) {
   payload = payload || {};
   var roomId = toNumber(payload.roomId || payload.room_id);
@@ -119,6 +125,12 @@ CastController.prototype.handleCommand = function (sessionId, action, rawBody) {
     this.status.playState = 'stop';
   } else if (action === 'Seek') {
     intent = { type: 'seek', positionSec: toNumber(payload.seekTs || payload.position || payload.positionSec) };
+  } else if (action === 'FastForward') {
+    intent = { type: 'seekBy', deltaSec: Math.max(1, toNumber(payload.deltaSec || payload.step || 10)) };
+  } else if (action === 'Rewind') {
+    intent = { type: 'seekBy', deltaSec: -Math.max(1, toNumber(payload.deltaSec || payload.step || 10)) };
+  } else if (action === 'SwitchQuality' || action === 'SetQuality' || action === 'SwitchResolution') {
+    intent = { type: 'switchQuality', qn: parseQuality(payload.qn || payload.quality || payload.resolution) };
   } else if (action === 'SwitchDanmaku') {
     intent = { type: 'switchDanmaku', open: !!payload.open };
   }
