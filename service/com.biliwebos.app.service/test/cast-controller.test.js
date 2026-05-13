@@ -87,8 +87,104 @@ test('reporting state and progress produces outbound NVA events', () => {
   controller.reportState({ playState: 'playing' });
   controller.reportProgress({ duration: 100, position: 45 });
 
-  assert.deepEqual(sent, [
+  assert.deepEqual(sent.slice(-2), [
     { action: 'OnPlayState', content: { playState: 4 } },
     { action: 'OnProgress', content: { duration: 100, position: 45 } },
   ]);
+});
+
+test('quality and danmaku commands use official NVA names', () => {
+  const controller = new CastController();
+  const intents = [];
+
+  controller.onIntent((intent) => intents.push(intent));
+
+  const qnIntent = controller.handleCommand('session-1', 'SwitchQn', JSON.stringify({ qn: 112 }));
+  const dmIntent = controller.handleCommand('session-1', 'SwitchDanmaku', JSON.stringify({ open: false }));
+
+  assert.deepEqual(qnIntent, { type: 'switchQn', qn: 112 });
+  assert.deepEqual(dmIntent, { type: 'switchDanmaku', open: false });
+  assert.deepEqual(intents, [
+    { type: 'switchQn', qn: 112 },
+    { type: 'switchDanmaku', open: false },
+  ]);
+});
+
+test('reporting quality and danmaku emits official outbound events', () => {
+  const controller = new CastController();
+  const sent = [];
+
+  controller.attachSession({
+    id: 'session-1',
+    sendCommand(action, content) {
+      sent.push({ action, content });
+    },
+    sendReply() {},
+    sendEmpty() {},
+  });
+
+  controller.reportQuality({ currentQuality: 80, availableQualities: [80, 64, 32] });
+  controller.reportDanmaku({ open: true });
+
+  assert.deepEqual(sent, [
+    {
+      action: 'OnQnSwitch',
+      content: {
+        curQn: 80,
+        supportQnList: [
+          { description: '', displayDesc: '', needLogin: false, needVip: false, quality: 80, superscript: '' },
+          { description: '', displayDesc: '', needLogin: false, needVip: false, quality: 64, superscript: '' },
+          { description: '', displayDesc: '', needLogin: false, needVip: false, quality: 32, superscript: '' },
+        ],
+        userDesireQn: 80,
+      },
+    },
+    { action: 'OnDanmakuSwitch', content: { open: true } },
+  ]);
+});
+
+test('GetTVInfo returns qn and danmaku state', () => {
+  const controller = new CastController();
+  controller.handleCommand('session-1', 'Play', JSON.stringify({
+    aid: 1,
+    cid: 2,
+    bvid: 'BV1',
+    currentQn: 80,
+    desireQn: 80,
+    danmakuSwitchSave: false,
+  }));
+  controller.reportQuality({ currentQuality: 80, availableQualities: [120, 80, 64] });
+  controller.reportDanmaku({ open: false });
+
+  const status = controller.getStatus();
+
+  assert.equal(status.curQn, 80);
+  assert.equal(status.userDesireQn, 80);
+  assert.equal(status.danmakuOpen, false);
+  assert.deepEqual(status.supportQnList.map(item => item.quality), [120, 80, 64]);
+});
+
+test('playing a video does not spam outbound state by default', () => {
+  const controller = new CastController();
+  const sent = [];
+
+  controller.attachSession({
+    id: 'session-1',
+    sendCommand(action, content) {
+      sent.push({ action, content });
+    },
+    sendReply() {},
+    sendEmpty() {},
+  });
+
+  controller.handleCommand('session-1', 'Play', JSON.stringify({
+    aid: 12,
+    cid: 34,
+    bvid: 'BV1',
+    current_qn: 80,
+    desire_qn: 120,
+    danmakuSwitchSave: true,
+  }));
+
+  assert.equal(sent.length, 0);
 });

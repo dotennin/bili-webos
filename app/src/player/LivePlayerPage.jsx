@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getLiveStreamSource, castReportState } from '../api/client';
+import { getLiveStreamSource, castReportState, castReportQuality, castReportDanmaku } from '../api/client';
 import { storage } from '../utils/storage';
 import { setCustomKeyHandler } from '../hooks/useFocus';
 
@@ -38,6 +38,8 @@ export default function LivePlayerPage({ room, onBack }) {
   const playerKindRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [showInfo, setShowInfo] = useState(true);
+  const [requestedQn, setRequestedQn] = useState(null);
+  const [danmakuEnabled, setDanmakuEnabled] = useState(true);
   const infoTimer = useRef(null);
   const firstFrameTimer = useRef(null);
 
@@ -147,10 +149,21 @@ export default function LivePlayerPage({ room, onBack }) {
     async function load() {
       try {
         castReportState({ playState: 'loading' }).catch(() => {});
-        const source = await getLiveStreamSource(room.roomid);
+        const source = await getLiveStreamSource(room.roomid, requestedQn);
         if (!source || !videoRef.current) {
           throw new Error('live-stream-source-missing');
         }
+
+        const availableQualities = Array.isArray(source.availableQualities) && source.availableQualities.length > 0
+          ? source.availableQualities
+          : (requestedQn ? [requestedQn] : []);
+        const currentQuality = source.currentQuality || requestedQn || availableQualities[0] || 0;
+
+        castReportQuality({
+          currentQuality: currentQuality,
+          availableQualities: availableQualities,
+        }).catch(() => {});
+        castReportDanmaku({ open: danmakuEnabled }).catch(() => {});
 
         if (source.type === 'flv') await loadFlvPlayer(source.url);
         else await loadHlsPlayer(source.url);
@@ -206,14 +219,14 @@ export default function LivePlayerPage({ room, onBack }) {
       playerKindRef.current = null;
       castReportState({ playState: 'stop' }).catch(() => {});
     };
-  }, [room.roomid]);
+  }, [room.roomid, requestedQn]);
 
   useEffect(() => {
     const handleCastCommand = (event) => {
       const command = event.detail;
       if (!command) return;
       if (command.type === 'stop') {
-        onBack?.();
+        window.setTimeout(() => onBack?.(), 0);
         return;
       }
       if (!videoRef.current) return;
@@ -229,6 +242,14 @@ export default function LivePlayerPage({ room, onBack }) {
       }
       if (command.type === 'seek' && videoRef.current.duration) {
         videoRef.current.currentTime = Math.max(0, command.positionSec || 0);
+        return;
+      }
+      if (command.type === 'switchQn') {
+        setRequestedQn(command.qn || null);
+        return;
+      }
+      if (command.type === 'switchDanmaku') {
+        setDanmakuEnabled(!!command.open);
       }
     };
 
@@ -256,6 +277,10 @@ export default function LivePlayerPage({ room, onBack }) {
     setCustomKeyHandler(handler);
     return () => setCustomKeyHandler(null);
   }, [onBack]);
+
+  useEffect(() => {
+    castReportDanmaku({ open: danmakuEnabled }).catch(() => {});
+  }, [danmakuEnabled]);
 
   return (
     <div className="player-page">

@@ -85,6 +85,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const pendingCastAckRef = useRef(null);
+  const pendingCastStopRef = useRef(false);
 
   useEffect(() => {
     initKeyboardNav();
@@ -126,9 +127,8 @@ export default function App() {
       }
 
       if (command.type === 'stop') {
+        pendingCastStopRef.current = true;
         window.dispatchEvent(new CustomEvent('bili-cast-command', { detail: command }));
-        setPlayerVideo(null);
-        setLiveRoom(null);
         return;
       }
 
@@ -151,6 +151,12 @@ export default function App() {
       }).catch(() => {});
       pendingCastAckRef.current = null;
     }
+  }, [playerVideo, liveRoom]);
+
+  useEffect(() => {
+    if (!pendingCastStopRef.current) return;
+    if (playerVideo || liveRoom) return;
+    pendingCastStopRef.current = false;
   }, [playerVideo, liveRoom]);
 
   useEffect(() => {

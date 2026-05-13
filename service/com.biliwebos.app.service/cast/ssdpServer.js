@@ -1,5 +1,6 @@
 var dgram = require('dgram');
 var net = require('net');
+var fs = require('fs');
 
 var deviceProfile = require('./deviceProfile');
 var nvaSession = require('./nvaSession');
@@ -42,6 +43,22 @@ function CastLanServer(options) {
   this.tcpServer = null;
   this.broadcastTimer = null;
   this.nextSessionId = 1;
+}
+
+function pushCastDebug(kind, payload) {
+  try {
+    if (global.__biliCastDebug && typeof global.__biliCastDebug.push === 'function') {
+      global.__biliCastDebug.push(kind, payload);
+      return;
+    }
+  } catch (e) {}
+  try {
+    fs.appendFileSync('/media/developer/log/bili_cast_debug.log', JSON.stringify({
+      at: Date.now(),
+      kind: kind,
+      payload: payload || null,
+    }) + '\n');
+  } catch (e2) {}
 }
 
 CastLanServer.prototype.start = function (callback) {
@@ -98,25 +115,100 @@ CastLanServer.prototype.handleSocket = function (socket) {
   var self = this;
   var headerBuffer = '';
   var handled = false;
+  var firstChunkLogged = false;
+  try {
+    var acceptLine = '[Cast][ACCEPT] ' + JSON.stringify({
+      remoteAddress: socket.remoteAddress,
+      remotePort: socket.remotePort,
+      localAddress: socket.localAddress,
+      localPort: socket.localPort,
+    });
+    console.log(acceptLine);
+    pushCastDebug('accept', {
+      remoteAddress: socket.remoteAddress,
+      remotePort: socket.remotePort,
+      localAddress: socket.localAddress,
+      localPort: socket.localPort,
+    });
+  } catch (e) {}
 
   function onData(chunk) {
+    if (!firstChunkLogged) {
+      firstChunkLogged = true;
+      try {
+        var rawLine = '[Cast][SOCKET] ' + JSON.stringify({
+          remoteAddress: socket.remoteAddress,
+          remotePort: socket.remotePort,
+          localAddress: socket.localAddress,
+          localPort: socket.localPort,
+          firstBytes: chunk.toString('utf8').slice(0, 120),
+          firstHex: chunk.toString('hex').slice(0, 120),
+        });
+        console.log(rawLine);
+        pushCastDebug('socket', {
+          remoteAddress: socket.remoteAddress,
+          remotePort: socket.remotePort,
+          localAddress: socket.localAddress,
+          localPort: socket.localPort,
+          firstBytes: chunk.toString('utf8').slice(0, 120),
+          firstHex: chunk.toString('hex').slice(0, 120),
+        });
+      } catch (e) {}
+    }
     if (handled) return;
     headerBuffer += chunk.toString('utf8');
     var idx = headerBuffer.indexOf('\r\n\r\n');
     if (idx < 0) return;
-    handled = true;
 
-    var raw = headerBuffer.slice(0, idx);
-    var request = parseHeaders(raw);
+    var rawHead = headerBuffer.slice(0, idx);
+    var request = parseHeaders(rawHead);
+    var contentLength = parseInt(request.headers['content-length'] || '0', 10) || 0;
+    var bodyStart = idx + 4;
+    if (headerBuffer.length < bodyStart + contentLength) return;
+
+    handled = true;
+    request.body = contentLength > 0 ? headerBuffer.slice(bodyStart, bodyStart + contentLength) : '';
     socket.removeListener('data', onData);
     self.routeRequest(socket, request);
   }
 
   socket.on('data', onData);
+  socket.on('close', function () {
+    try {
+      var closeLine = '[Cast][CLOSE] ' + JSON.stringify({
+        remoteAddress: socket.remoteAddress,
+        remotePort: socket.remotePort,
+        localAddress: socket.localAddress,
+        localPort: socket.localPort,
+      });
+      console.log(closeLine);
+      pushCastDebug('close', {
+        remoteAddress: socket.remoteAddress,
+        remotePort: socket.remotePort,
+        localAddress: socket.localAddress,
+        localPort: socket.localPort,
+      });
+    } catch (e) {}
+  });
 };
 
 CastLanServer.prototype.routeRequest = function (socket, request) {
   var path = request.path || '/';
+  try {
+    var line = '[Cast][HTTP] ' + JSON.stringify({
+      method: request.method,
+      path: path,
+      headers: request.headers,
+      body: request.body ? request.body.slice(0, 512) : '',
+    });
+    console.log(line);
+    pushCastDebug('http', {
+      method: request.method,
+      path: path,
+      headers: request.headers,
+      body: request.body ? request.body.slice(0, 512) : '',
+    });
+  } catch (e) {}
   if (request.method === 'SETUP' && path === '/projection') {
     var session = new nvaSession.NvaSession(
       'session-' + (this.nextSessionId++),
@@ -150,11 +242,20 @@ CastLanServer.prototype.routeRequest = function (socket, request) {
   } else if (request.method === 'GET' && path === '/dlna/AVTransport.xml') {
     body = deviceProfile.renderAvTransportScpd();
     headers['Content-Type'] = 'text/xml; charset=utf-8';
+  } else if (request.method === 'GET' && path === '/dlna/RenderingControl.xml') {
+    body = deviceProfile.renderAvTransportScpd();
+    headers['Content-Type'] = 'text/xml; charset=utf-8';
+  } else if (request.method === 'GET' && path === '/dlna/ConnectionManager.xml') {
+    body = deviceProfile.renderAvTransportScpd();
+    headers['Content-Type'] = 'text/xml; charset=utf-8';
   } else if (request.method === 'GET' && path === '/dlna/NirvanaControl.xml') {
     body = deviceProfile.renderNirvanaScpd();
     headers['Content-Type'] = 'text/xml; charset=utf-8';
-  } else if (request.method === 'POST' && (path === '/AVTransport/action' || path === '/NirvanaControl/action')) {
+  } else if (request.method === 'POST' && (path === '/AVTransport/action' || path === '/RenderingControl/action' || path === '/ConnectionManager/action' || path === '/NirvanaControl/action')) {
     body = '';
+    if (request.body) {
+      pushCastDebug('soap', { path: path, body: request.body.slice(0, 1024) });
+    }
   } else {
     status = 404;
     statusText = 'Not Found';
@@ -162,6 +263,9 @@ CastLanServer.prototype.routeRequest = function (socket, request) {
   }
 
   headers['Content-Length'] = Buffer.byteLength(body);
+  if (request.method === 'POST' && body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'text/xml; charset=utf-8';
+  }
   socket.end(httpResponse(status, statusText, headers, body));
 };
 

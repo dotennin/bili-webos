@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getPlayUrl, getDanmaku, getVideoInfo, reportHeartbeat, getRelated, castReportProgress, castReportState } from '../api/client';
+import { getPlayUrl, getDanmaku, getVideoInfo, reportHeartbeat, getRelated, castReportProgress, castReportState, castReportQuality, castReportDanmaku, castReportSpeed } from '../api/client';
 import { formatDuration, QUALITY_MAP } from '../utils/format';
 import { storage } from '../utils/storage';
 import { setCustomKeyHandler } from '../hooks/useFocus';
@@ -71,6 +71,11 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
       setQualities((res?.data?.accept_quality || []).map(q => ({ qn: q, label: QUALITY_MAP[q] || `${q}` })));
       setCurrentQuality(res?.data?.quality || 80);
+      castReportQuality({
+        currentQuality: res?.data?.quality || 80,
+        availableQualities: res?.data?.accept_quality || [],
+      }).catch(() => {});
+      castReportDanmaku({ open: danmakuEnabled }).catch(() => {});
 
       const mpd = buildMPD(dash);
       const blob = new Blob([mpd], { type: 'application/dash+xml' });
@@ -117,7 +122,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
       setLoading(false);
       castReportState({ playState: 'error', error: err?.message || 'load-failed' }).catch(() => {});
     }
-  }, [video]);
+  }, [video, danmakuEnabled]);
 
   function buildMPD(dash) {
     const duration = dash.duration || 0;
@@ -281,14 +286,19 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         videoRef.current.currentTime = pos;
         videoRef.current.play();
         setCurrentQuality(res?.data?.quality || qn);
+        castReportQuality({
+          currentQuality: res?.data?.quality || qn,
+          availableQualities: res?.data?.accept_quality || qualities.map(q => q.qn),
+        }).catch(() => {});
       }
     } catch (e) {
       console.error('Quality change error:', e);
     }
-  }, [video]);
+  }, [video, qualities]);
 
   useEffect(() => {
     storage.setSettings({ ...storage.getSettings(), danmaku: danmakuEnabled });
+    castReportDanmaku({ open: danmakuEnabled }).catch(() => {});
   }, [danmakuEnabled]);
 
   useEffect(() => {
@@ -320,9 +330,17 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         setDanmakuEnabled(!!command.open);
         return;
       }
+      if (command.type === 'switchQn') {
+        if (command.qn) changeQuality(command.qn);
+        return;
+      }
+      if (command.type === 'switchSpeed') {
+        castReportSpeed({ speed: command.speed || 1 }).catch(() => {});
+        return;
+      }
       if (command.type === 'stop') {
         videoRef.current.pause();
-        onBack?.();
+        window.setTimeout(() => onBack?.(), 0);
       }
     };
 

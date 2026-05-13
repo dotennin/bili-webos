@@ -18,6 +18,31 @@ var CastLanServer = require('./cast/ssdpServer').CastLanServer;
 var rewriteHlsPlaylist = require('./cast/hlsPlaylist').rewriteHlsPlaylist;
 
 var service = new Service('com.biliwebos.app.service');
+var CAST_DEBUG_LOG = path.join('/media/developer/log', 'bili_cast_debug.log');
+var CAST_DEBUG_LIMIT = 50;
+var castDebugEvents = [];
+
+function appendCastLog(line) {
+  try {
+    fs.appendFileSync(CAST_DEBUG_LOG, line + '\n');
+  } catch (e) {}
+}
+
+function pushCastDebugEvent(kind, payload) {
+  var entry = {
+    at: Date.now(),
+    kind: kind,
+    payload: payload || null,
+  };
+  castDebugEvents.push(entry);
+  if (castDebugEvents.length > CAST_DEBUG_LIMIT) castDebugEvents.shift();
+  try { appendCastLog(JSON.stringify(entry)); } catch (e) {}
+  return entry;
+}
+
+global.__biliCastDebug = {
+  push: pushCastDebugEvent,
+};
 
 // Cookie storage
 var COOKIE_FILE = path.join('/media/internal', 'bili_cookies.json');
@@ -161,6 +186,28 @@ var castProfile = deviceProfile.createDeviceProfile({
 castConfig.uuid = castProfile.uuid;
 saveCastConfig();
 
+function traceCastFrame(session, frame, intent) {
+  try {
+    var line = '[Cast][RX] ' + JSON.stringify({
+      sessionId: session && session.id,
+      type: frame && frame.type,
+      command: frame && frame.command,
+      action: frame && frame.action,
+      body: frame && frame.body,
+      intent: intent || null,
+    });
+    console.log(line);
+    pushCastDebugEvent('frame', {
+      sessionId: session && session.id,
+      type: frame && frame.type,
+      command: frame && frame.command,
+      action: frame && frame.action,
+      body: frame && frame.body,
+      intent: intent || null,
+    });
+  } catch (e) {}
+}
+
 function notifyCastSubscribers(event) {
   pendingCastEvent = event;
   castSubscribers = castSubscribers.filter(function (message) {
@@ -204,14 +251,41 @@ var castLanServer = new CastLanServer({
   controller: castController,
   onFrame: function (session, frame) {
     if (frame.action === 'GetVolume') {
+      traceCastFrame(session, frame, { type: 'volume' });
       session.sendReply({ volume: 30 });
+      return;
+    }
+    if (frame.action === 'GetTVInfo') {
+      var status = castController.getStatus();
+      traceCastFrame(session, frame, { type: 'tvInfo' });
+      session.sendReply({
+        curQn: status.curQn || 0,
+        userDesireQn: status.userDesireQn || 0,
+        supportQnList: status.supportQnList || [],
+        danmakuOpen: status.danmakuOpen,
+        speed: status.speed || 1,
+        qnDesc: status.qnDesc || [],
+      });
       return;
     }
     if (frame.type !== 'command') return;
 
     var intent = castController.handleCommand(session.id, frame.action, frame.body);
+    traceCastFrame(session, frame, intent);
     if (frame.action === 'PlayUrl' && !intent) {
       session.sendReply({ accepted: false, reason: 'unsupported-playurl' });
+      return;
+    }
+    if (frame.action === 'SwitchQn' || frame.action === 'SwitchDanmaku' || frame.action === 'SetQuality' || frame.action === 'SetDanmaku' || frame.action === 'ToggleDanmaku' || frame.action === 'ChangeQuality' || frame.action === 'SelectQuality' || frame.action === 'Quality' || frame.action === 'SetQn' || frame.action === 'Danmaku') {
+      var switchStatus = castController.getStatus();
+      session.sendReply({
+        curQn: switchStatus.curQn || 0,
+        userDesireQn: switchStatus.userDesireQn || 0,
+        supportQnList: switchStatus.supportQnList || [],
+        danmakuOpen: switchStatus.danmakuOpen,
+        speed: switchStatus.speed || 1,
+        qnDesc: switchStatus.qnDesc || [],
+      });
       return;
     }
     session.sendEmpty();
@@ -314,13 +388,47 @@ service.register('castReportState', function (message) {
   message.respond({ returnValue: true });
 });
 
+service.register('castReportQuality', function (message) {
+  castController.reportQuality(message.payload || {});
+  notifyCastSubscribers({ kind: 'quality', payload: message.payload || {} });
+  message.respond({ returnValue: true, status: castController.getStatus() });
+});
+
+service.register('castReportDanmaku', function (message) {
+  castController.reportDanmaku(message.payload || {});
+  notifyCastSubscribers({ kind: 'danmaku', payload: message.payload || {} });
+  message.respond({ returnValue: true, status: castController.getStatus() });
+});
+
+service.register('castReportSpeed', function (message) {
+  castController.reportSpeed(message.payload || {});
+  notifyCastSubscribers({ kind: 'speed', payload: message.payload || {} });
+  message.respond({ returnValue: true, status: castController.getStatus() });
+});
+
 service.register('castReportProgress', function (message) {
   castController.reportProgress(message.payload || {});
   message.respond({ returnValue: true });
 });
 
 service.register('castGetStatus', function (message) {
-  message.respond({ returnValue: true, status: castController.getStatus() });
+  var status = castController.getStatus();
+  status.recentEvents = castDebugEvents.slice();
+  message.respond({ returnValue: true, status: status });
+});
+
+service.register('castGetTvInfo', function (message) {
+  var status = castController.getStatus();
+  message.respond({
+    returnValue: true,
+    info: {
+      curQn: status.curQn || 0,
+      userDesireQn: status.userDesireQn || 0,
+      supportQnList: status.supportQnList || [],
+      danmakuOpen: status.danmakuOpen,
+      speed: status.speed || 1,
+    }
+  });
 });
 
 service.register('castSetConfig', function (message) {

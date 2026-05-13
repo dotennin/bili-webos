@@ -171,6 +171,18 @@ export async function castReportState(payload) {
   return lunaRequest('castReportState', payload || {}, false, { allowMissing: true });
 }
 
+export async function castReportQuality(payload) {
+  return lunaRequest('castReportQuality', payload || {}, false, { allowMissing: true });
+}
+
+export async function castReportDanmaku(payload) {
+  return lunaRequest('castReportDanmaku', payload || {}, false, { allowMissing: true });
+}
+
+export async function castReportSpeed(payload) {
+  return lunaRequest('castReportSpeed', payload || {}, false, { allowMissing: true });
+}
+
 export async function castReportProgress(payload) {
   return lunaRequest('castReportProgress', payload || {}, false, { allowMissing: true });
 }
@@ -258,18 +270,18 @@ export async function getLiveList(page, pageSize) {
   return { data: { list: items || [] } };
 }
 
-export async function getLiveStreamUrl(roomId) {
+export async function getLiveStreamUrl(roomId, qn) {
   var res = await smartFetch('api.live.bilibili.com',
-    '/xlive/web-room/v2/index/getRoomPlayInfo?room_id=' + roomId + '&protocol=0,1&format=0,1,2&codec=0,1,2&platform=web&ptype=8');
+    '/xlive/web-room/v2/index/getRoomPlayInfo?room_id=' + roomId + '&qn=' + (qn || '') + '&protocol=0,1&format=0,1,2&codec=0,1,2&platform=web&ptype=8');
   var streams = res && res.data && res.data.playurl_info && res.data.playurl_info.playurl && res.data.playurl_info.playurl.stream;
-  return selectLiveStreamUrl(streams);
+  return selectLiveStreamUrl(streams, qn);
 }
 
-export async function getLiveStreamSource(roomId) {
+export async function getLiveStreamSource(roomId, qn) {
   var res = await smartFetch('api.live.bilibili.com',
-    '/xlive/web-room/v2/index/getRoomPlayInfo?room_id=' + roomId + '&protocol=0,1&format=0,1,2&codec=0,1,2&platform=web&ptype=8');
+    '/xlive/web-room/v2/index/getRoomPlayInfo?room_id=' + roomId + '&qn=' + (qn || '') + '&protocol=0,1&format=0,1,2&codec=0,1,2&platform=web&ptype=8');
   var streams = res && res.data && res.data.playurl_info && res.data.playurl_info.playurl && res.data.playurl_info.playurl.stream;
-  return selectLiveStreamSource(streams);
+  return selectLiveStreamSource(streams, qn);
 }
 
 // ============ Search ============

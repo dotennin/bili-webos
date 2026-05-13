@@ -76,6 +76,20 @@ function renderDescriptionXml(profile) {
     '<SCPDURL>dlna/AVTransport.xml</SCPDURL>',
     '</service>',
     '<service>',
+    '<serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>',
+    '<serviceId>urn:upnp-org:serviceId:RenderingControl</serviceId>',
+    '<controlURL>RenderingControl/action</controlURL>',
+    '<eventSubURL>RenderingControl/event</eventSubURL>',
+    '<SCPDURL>dlna/RenderingControl.xml</SCPDURL>',
+    '</service>',
+    '<service>',
+    '<serviceType>urn:schemas-upnp-org:service:ConnectionManager:1</serviceType>',
+    '<serviceId>urn:upnp-org:serviceId:ConnectionManager</serviceId>',
+    '<controlURL>ConnectionManager/action</controlURL>',
+    '<eventSubURL>ConnectionManager/event</eventSubURL>',
+    '<SCPDURL>dlna/ConnectionManager.xml</SCPDURL>',
+    '</service>',
+    '<service>',
     '<serviceType>urn:app-bilibili-com:service:NirvanaControl:3</serviceType>',
     '<serviceId>urn:app-bilibili-com:serviceId:NirvanaControl</serviceId>',
     '<controlURL>NirvanaControl/action</controlURL>',
@@ -98,13 +112,34 @@ function renderAvTransportScpd() {
     '<action><name>Pause</name></action>',
     '<action><name>Stop</name></action>',
     '<action><name>Seek</name></action>',
+    '<action><name>SetVolume</name></action>',
     '</actionList>',
     '</scpd>'
   ].join('');
 }
 
 function renderNirvanaScpd() {
-  return '<actionList><action><name>GetAppInfo</name><argumentList></argumentList></action></actionList>';
+  return [
+    '<?xml version="1.0"?>',
+    '<scpd xmlns="urn:schemas-upnp-org:service-1-0">',
+    '<specVersion><major>1</major><minor>0</minor></specVersion>',
+    '<actionList>',
+    '<action><name>GetTVInfo</name></action>',
+    '<action><name>GetVolume</name></action>',
+    '<action><name>SetVolume</name></action>',
+    '<action><name>Pause</name></action>',
+    '<action><name>Resume</name></action>',
+    '<action><name>SendDanmaku</name></action>',
+    '<action><name>SwitchDanmaku</name></action>',
+    '<action><name>SwitchSpeed</name></action>',
+    '<action><name>SwitchQn</name></action>',
+    '<action><name>Stop</name></action>',
+    '<action><name>Seek</name></action>',
+    '<action><name>Play</name></action>',
+    '<action><name>PlayUrl</name></action>',
+    '</actionList>',
+    '</scpd>'
+  ].join('');
 }
 
 function buildNotify(profile, nt, usn) {

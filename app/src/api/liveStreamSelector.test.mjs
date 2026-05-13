@@ -21,6 +21,8 @@ test('prefers avc flv live stream over hls variants when available', () => {
   assert.deepEqual(source, {
     type: 'flv',
     url: 'https://stream.example.com/a.flv',
+    currentQuality: 0,
+    availableQualities: [],
   });
 });
 
@@ -38,6 +40,8 @@ test('prefers avc fmp4 hls when flv is unavailable', () => {
   assert.deepEqual(source, {
     type: 'hls',
     url: 'https://fmp4.example.com/c/index.m3u8',
+    currentQuality: 0,
+    availableQualities: [],
   });
 });
 
@@ -54,6 +58,8 @@ test('falls back to avc ts hls when fmp4 is unavailable', () => {
   assert.deepEqual(source, {
     type: 'hls',
     url: 'https://ts.example.com/b.m3u8',
+    currentQuality: 0,
+    availableQualities: [],
   });
 });
 
@@ -79,4 +85,25 @@ test('returns null when no supported live source exists', () => {
   ]);
 
   assert.equal(source, null);
+});
+
+test('prefers matching quality when codecs expose qn metadata', () => {
+  const source = selectLiveStreamSource([
+    {
+      protocol_name: 'http_stream',
+      format: [
+        { format_name: 'flv', codec: [
+          { codec_name: 'avc', current_qn: 64, base_url: '/low.flv', url_info: [{ host: 'https://stream.example.com' }] },
+          { codec_name: 'avc', current_qn: 112, base_url: '/high.flv', url_info: [{ host: 'https://stream.example.com' }] },
+        ] }
+      ]
+    }
+  ], 112);
+
+  assert.deepEqual(source, {
+    type: 'flv',
+    url: 'https://stream.example.com/high.flv',
+    currentQuality: 112,
+    availableQualities: [112, 64],
+  });
 });

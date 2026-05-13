@@ -29,6 +29,10 @@ function normalizePlayPayload(payload) {
       contentType: 'live',
       roomId: roomId,
       title: payload.title || '',
+      currentQn: toNumber(payload.current_qn || payload.currentQn || payload.desire_qn || payload.desireQn),
+      desireQn: toNumber(payload.desire_qn || payload.desireQn || payload.current_qn || payload.currentQn),
+      danmakuSwitchSave: payload.danmakuSwitchSave !== false,
+      speed: toNumber(payload.userDesireSpeed || payload.speed || 1) || 1,
     };
   }
 
@@ -46,6 +50,10 @@ function normalizePlayPayload(payload) {
     epid: epid || undefined,
     bvid: bvid || undefined,
     title: payload.title || '',
+    currentQn: toNumber(payload.current_qn || payload.currentQn || payload.desire_qn || payload.desireQn),
+    desireQn: toNumber(payload.desire_qn || payload.desireQn || payload.current_qn || payload.currentQn),
+    danmakuSwitchSave: payload.danmakuSwitchSave !== false,
+    speed: toNumber(payload.userDesireSpeed || payload.speed || 1) || 1,
   };
 }
 
@@ -73,8 +81,36 @@ function CastController() {
     playState: 'idle',
     progress: 0,
     duration: 0,
+    currentQuality: 0,
+    availableQualities: [],
+    danmakuEnabled: true,
+    speed: 1,
     lastCommandAt: 0,
     lastError: null,
+  };
+}
+
+function buildSupportQnList(qualities) {
+  return (qualities || []).map(function (qn) {
+    return {
+      description: '',
+      displayDesc: '',
+      needLogin: false,
+      needVip: false,
+      quality: qn,
+      superscript: '',
+    };
+  });
+}
+
+function buildPlayItem(content) {
+  content = content || {};
+  return {
+    aid: content.aid || 0,
+    cid: content.cid || 0,
+    contentType: content.contentType === 'live' ? 2 : 1,
+    epId: content.epid || content.epId || 0,
+    seasonId: content.season_id || content.seasonId || 0,
   };
 }
 
@@ -106,7 +142,12 @@ CastController.prototype.handleCommand = function (sessionId, action, rawBody) {
 
   if (action === 'Play') {
     intent = normalizePlayPayload(payload);
-    if (intent) this.status.activeContent = intent;
+    if (intent) {
+      this.status.activeContent = intent;
+      if (intent.currentQn) this.status.currentQuality = intent.currentQn;
+      if (typeof intent.danmakuSwitchSave === 'boolean') this.status.danmakuEnabled = !!intent.danmakuSwitchSave;
+      if (intent.speed) this.status.speed = intent.speed;
+    }
   } else if (action === 'PlayUrl') {
     intent = parsePlayUrlPayload(payload);
     if (intent) this.status.activeContent = intent;
@@ -119,8 +160,30 @@ CastController.prototype.handleCommand = function (sessionId, action, rawBody) {
     this.status.playState = 'stop';
   } else if (action === 'Seek') {
     intent = { type: 'seek', positionSec: toNumber(payload.seekTs || payload.position || payload.positionSec) };
-  } else if (action === 'SwitchDanmaku') {
+  } else if (action === 'GetTVInfo') {
+    intent = { type: 'getTVInfo' };
+  } else if (action === 'SwitchDanmaku' || action === 'SetDanmaku' || action === 'ToggleDanmaku' || action === 'Danmaku') {
     intent = { type: 'switchDanmaku', open: !!payload.open };
+    this.status.danmakuEnabled = !!payload.open;
+  } else if (action === 'SwitchQn' || action === 'SetQuality' || action === 'ChangeQuality' || action === 'SelectQuality' || action === 'Quality' || action === 'SetQn') {
+    intent = { type: 'switchQn', qn: toNumber(payload.qn || payload.quality || payload.current_qn || payload.desire_qn) };
+    if (intent.qn) this.status.currentQuality = intent.qn;
+  } else if (action === 'SwitchSpeed' || action === 'SetSpeed') {
+    intent = { type: 'switchSpeed', speed: toNumber(payload.speed || payload.currSpeed || payload.currentSpeed) || 1 };
+    this.status.speed = intent.speed;
+  } else if (action === 'GetVolume') {
+    intent = { type: 'getVolume' };
+  } else if (action === 'SetVolume') {
+    intent = { type: 'setVolume', volume: toNumber(payload.volume) };
+  } else if (action === 'SendDanmaku') {
+    intent = {
+      type: 'sendDanmaku',
+      content: payload.content || '',
+      size: toNumber(payload.size),
+      color: toNumber(payload.color),
+      danmakuType: toNumber(payload.type),
+      remoteDmId: payload.mRemoteDmId,
+    };
   }
 
   if (intent) this.emitIntent(intent);
@@ -138,6 +201,58 @@ CastController.prototype.reportState = function (payload) {
       session.sendCommand('OnPlayState', { playState: numericState });
     });
   }
+};
+
+CastController.prototype.reportQuality = function (payload) {
+  payload = payload || {};
+  if (typeof payload.currentQuality !== 'undefined') {
+    this.status.currentQuality = toNumber(payload.currentQuality);
+  } else if (typeof payload.qn !== 'undefined') {
+    this.status.currentQuality = toNumber(payload.qn);
+  }
+  if (Array.isArray(payload.availableQualities)) {
+    this.status.availableQualities = payload.availableQualities.map(function (item) {
+      if (typeof item === 'number') return item;
+      return toNumber(item && (item.qn || item.quality || item.current_qn));
+    }).filter(function (n) { return !!n; });
+  }
+
+  var currentQn = toNumber(this.status.currentQuality);
+  var supportQnList = buildSupportQnList(this.status.availableQualities);
+
+  this.sessions.forEach(function (session) {
+    session.sendCommand('OnQnSwitch', {
+      curQn: currentQn,
+      supportQnList: supportQnList,
+      userDesireQn: currentQn,
+    });
+  });
+};
+
+CastController.prototype.reportDanmaku = function (payload) {
+  payload = payload || {};
+  if (typeof payload.open !== 'undefined') {
+    this.status.danmakuEnabled = !!payload.open;
+  }
+
+  this.sessions.forEach(function (session) {
+    session.sendCommand('OnDanmakuSwitch', {
+      open: !!payload.open,
+    });
+  });
+};
+
+CastController.prototype.reportSpeed = function (payload) {
+  payload = payload || {};
+  if (typeof payload.speed !== 'undefined') {
+    this.status.speed = toNumber(payload.speed) || 1;
+  }
+  this.sessions.forEach(function (session) {
+    session.sendCommand('SpeedChanged', {
+      currSpeed: this.status.speed,
+      supportSpeedList: [0.5, 0.75, 1, 1.25, 1.5, 2],
+    });
+  }, this);
 };
 
 CastController.prototype.reportProgress = function (payload) {
@@ -165,7 +280,17 @@ CastController.prototype.setNetworkInfo = function (ip, httpPort) {
 };
 
 CastController.prototype.getStatus = function () {
-  return JSON.parse(JSON.stringify(this.status));
+  var currentQn = toNumber(this.status.currentQuality);
+  var supportQnList = buildSupportQnList(this.status.availableQualities);
+  return JSON.parse(JSON.stringify(Object.assign({}, this.status, {
+    curQn: currentQn,
+    userDesireQn: currentQn,
+    supportQnList: supportQnList,
+    danmakuOpen: !!this.status.danmakuEnabled,
+    qnDesc: supportQnList.map(function (item) {
+      return item.quality;
+    }),
+  })));
 };
 
 module.exports = {
