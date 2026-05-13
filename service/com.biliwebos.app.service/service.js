@@ -15,6 +15,7 @@ var childProcess = require('child_process');
 var deviceProfile = require('./cast/deviceProfile');
 var CastController = require('./cast/castController').CastController;
 var CastLanServer = require('./cast/ssdpServer').CastLanServer;
+var rewriteHlsPlaylist = require('./cast/hlsPlaylist').rewriteHlsPlaylist;
 
 var service = new Service('com.biliwebos.app.service');
 
@@ -382,8 +383,22 @@ var localServer = http.createServer(function (req, res) {
     if (proxyRes.headers['content-length']) responseHeaders['Content-Length'] = proxyRes.headers['content-length'];
     if (proxyRes.headers['accept-ranges']) responseHeaders['Accept-Ranges'] = proxyRes.headers['accept-ranges'];
 
-    res.writeHead(proxyRes.statusCode, responseHeaders);
-    proxyRes.pipe(res);
+    var contentType = proxyRes.headers['content-type'] || '';
+    var isHlsPlaylist = contentType.indexOf('mpegurl') >= 0 || parsed.pathname.endsWith('.m3u8');
+
+    if (!isHlsPlaylist) {
+      res.writeHead(proxyRes.statusCode, responseHeaders);
+      proxyRes.pipe(res);
+      return;
+    }
+
+    decompressResponse(proxyRes, function (data) {
+      var playlist = rewriteHlsPlaylist(data.toString('utf-8'), parsed.toString(), 'http://127.0.0.1:' + LOCAL_PROXY_PORT);
+      responseHeaders['Content-Length'] = Buffer.byteLength(playlist);
+      delete responseHeaders['Content-Range'];
+      res.writeHead(proxyRes.statusCode, responseHeaders);
+      res.end(playlist);
+    });
   });
 });
 
