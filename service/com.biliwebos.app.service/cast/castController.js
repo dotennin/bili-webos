@@ -119,6 +119,12 @@ CastController.prototype.handleCommand = function (sessionId, action, rawBody) {
     this.status.playState = 'stop';
   } else if (action === 'Seek') {
     intent = { type: 'seek', positionSec: toNumber(payload.seekTs || payload.position || payload.positionSec) };
+  } else if (action === 'FastForward') {
+    intent = { type: 'seekBy', deltaSec: Math.max(1, toNumber(payload.step || payload.offset || payload.delta || 15)) };
+  } else if (action === 'Rewind') {
+    intent = { type: 'seekBy', deltaSec: -Math.max(1, toNumber(payload.step || payload.offset || payload.delta || 15)) };
+  } else if (action === 'SwitchQn') {
+    intent = { type: 'switchQuality', qn: toNumber(payload.qn || payload.quality || payload.desire_qn || payload.current_qn) };
   } else if (action === 'SwitchDanmaku') {
     intent = { type: 'switchDanmaku', open: !!payload.open };
   }

@@ -316,6 +316,19 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         }).catch(() => {});
         return;
       }
+      if (command.type === 'seekBy') {
+        videoRef.current.currentTime = Math.max(0, (videoRef.current.currentTime || 0) + (command.deltaSec || 0));
+        castReportProgress({
+          duration: Math.floor(videoRef.current.duration || 0),
+          position: Math.floor(videoRef.current.currentTime || 0),
+        }).catch(() => {});
+        return;
+      }
+      if (command.type === 'switchQuality') {
+        const targetQn = Number(command.qn);
+        if (targetQn > 0) changeQuality(targetQn);
+        return;
+      }
       if (command.type === 'switchDanmaku') {
         setDanmakuEnabled(!!command.open);
         return;
@@ -328,7 +341,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
     window.addEventListener('bili-cast-command', handleCastCommand);
     return () => window.removeEventListener('bili-cast-command', handleCastCommand);
-  }, [onBack]);
+  }, [changeQuality, onBack]);
 
   // ========== Keyboard handler ==========
   useEffect(() => {

@@ -92,3 +92,17 @@ test('reporting state and progress produces outbound NVA events', () => {
     { action: 'OnProgress', content: { duration: 100, position: 45 } },
   ]);
 });
+
+test('parse extra cast controls for seek delta / quality / danmaku', () => {
+  const controller = new CastController();
+
+  const ff = controller.handleCommand('session-1', 'FastForward', JSON.stringify({ step: 20 }));
+  const rw = controller.handleCommand('session-1', 'Rewind', JSON.stringify({ offset: 5 }));
+  const quality = controller.handleCommand('session-1', 'SwitchQn', JSON.stringify({ qn: 120 }));
+  const danmaku = controller.handleCommand('session-1', 'SwitchDanmaku', JSON.stringify({ open: true }));
+
+  assert.deepEqual(ff, { type: 'seekBy', deltaSec: 20 });
+  assert.deepEqual(rw, { type: 'seekBy', deltaSec: -5 });
+  assert.deepEqual(quality, { type: 'switchQuality', qn: 120 });
+  assert.deepEqual(danmaku, { type: 'switchDanmaku', open: true });
+});
