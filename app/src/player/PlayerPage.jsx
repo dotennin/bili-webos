@@ -5,6 +5,25 @@ import { storage } from '../utils/storage';
 import { setCustomKeyHandler } from '../hooks/useFocus';
 import DanmakuLayer from './DanmakuLayer';
 
+function configureShakaForVod(player) {
+  player.configure({
+    abr: {
+      enabled: true,
+      defaultBandwidthEstimate: 1_800_000,
+      switchInterval: 1.5,
+    },
+    streaming: {
+      bufferingGoal: 4,
+      rebufferingGoal: 0.6,
+      bufferBehind: 20,
+      lowLatencyMode: true,
+      inaccurateManifestTolerance: 0,
+      stallEnabled: true,
+      stallThreshold: 0.5,
+    },
+  });
+}
+
 export default function PlayerPage({ video, onBack, onPlayNext }) {
   const videoRef = useRef(null);
   const shakaRef = useRef(null);
@@ -63,6 +82,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
       shaka.polyfill.installAll();
       if (!shaka.Player.isBrowserSupported()) return;
       const player = new shaka.Player();
+      configureShakaForVod(player);
       await player.attach(videoRef.current);
       shakaRef.current = player;
       player.addEventListener('error', (e) => console.error('Shaka error:', e.detail));
