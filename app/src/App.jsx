@@ -120,6 +120,7 @@ export default function App() {
             title: command.title || '投屏视频',
             owner: { name: '' },
             fromCast: true,
+            progress: Math.max(0, Number(command.seekTs || 0)),
           });
         }
         return;
