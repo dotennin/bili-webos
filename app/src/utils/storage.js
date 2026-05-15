@@ -1,6 +1,24 @@
 // Persistent storage for auth tokens and settings
 const PREFIX = 'bili_';
 
+function getDefaultProxyUrl() {
+  if (typeof window === 'undefined') {
+    return 'http://127.0.0.1:9527';
+  }
+
+  const envProxy = import.meta?.env?.VITE_BILI_PROXY_URL;
+  if (envProxy) {
+    return envProxy;
+  }
+
+  const hostname = window.location?.hostname;
+  if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://127.0.0.1:9527';
+  }
+
+  return `http://${hostname}:9527`;
+}
+
 export const storage = {
   get(key) {
     try {
@@ -37,7 +55,7 @@ export const storage = {
   },
 
   getProxyUrl() {
-    return this.get('proxyUrl') || 'http://192.168.50.242:9527';
+    return this.get('proxyUrl') || getDefaultProxyUrl();
   },
 
   setProxyUrl(url) {
