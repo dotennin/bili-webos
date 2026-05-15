@@ -378,7 +378,46 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   // ========== Keyboard handler ==========
   useEffect(() => {
     const handler = (e) => {
-      if (e.keyCode === 461 || e.key === 'Backspace' || e.key === 'GoBack' || e.key === 'Escape') {
+      const keyCode = Number(e.keyCode || e.which || 0);
+      const key = e.key || '';
+      const isMediaPlay = key === 'MediaPlay' || keyCode === 415;
+      const isMediaPause = key === 'MediaPause' || keyCode === 19;
+      const isMediaPlayPause = key === 'MediaPlayPause';
+      const isMediaRewind = key === 'MediaRewind' || keyCode === 412;
+      const isMediaFastForward = key === 'MediaFastForward' || keyCode === 417;
+
+
+      if (isMediaRewind || isMediaFastForward || isMediaPlayPause || isMediaPlay || isMediaPause) {
+        e.preventDefault();
+        if (!videoRef.current) return true;
+
+        if (isMediaRewind) {
+          videoRef.current.currentTime = Math.max(0, (videoRef.current.currentTime || 0) - 10);
+        } else if (isMediaFastForward) {
+          const durationSafe = Number.isFinite(videoRef.current.duration) ? videoRef.current.duration : Infinity;
+          videoRef.current.currentTime = Math.min(durationSafe, (videoRef.current.currentTime || 0) + 10);
+        } else if (isMediaPause) {
+          videoRef.current.pause();
+          setPlaying(false);
+          castReportState({ playState: 'paused' }).catch(() => {});
+        } else if (isMediaPlay) {
+          videoRef.current.play();
+          setPlaying(true);
+          castReportState({ playState: 'playing' }).catch(() => {});
+        } else if (videoRef.current.paused) {
+          videoRef.current.play();
+          setPlaying(true);
+          castReportState({ playState: 'playing' }).catch(() => {});
+        } else {
+          videoRef.current.pause();
+          setPlaying(false);
+          castReportState({ playState: 'paused' }).catch(() => {});
+        }
+        hideControlsLater();
+        return true;
+      }
+
+      if (keyCode === 461 || key === 'Backspace' || key === 'GoBack' || key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
 
@@ -401,26 +440,37 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
       // === No controls visible (focusArea === 'none') ===
       if (focusArea === 'none') {
-        if (e.key === 'ArrowLeft') {
+        if (key === 'ArrowLeft') {
           e.preventDefault();
           if (videoRef.current) videoRef.current.currentTime -= 10;
           return true;
         }
-        if (e.key === 'ArrowRight') {
+        if (key === 'ArrowRight') {
           e.preventDefault();
           if (videoRef.current) videoRef.current.currentTime += 10;
           return true;
         }
-        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        if (key === 'ArrowUp' || key === 'ArrowDown') {
           e.preventDefault();
           openControls();
           return true;
         }
-        if (e.key === 'Enter') {
+        if (key === 'Enter') {
           e.preventDefault();
           // Toggle play/pause
-          if (videoRef.current.paused) { videoRef.current.play(); setPlaying(true); }
-          else { videoRef.current.pause(); setPlaying(false); }
+          if (isMediaPause) {
+            videoRef.current.pause();
+            setPlaying(false);
+          } else if (isMediaPlay) {
+            videoRef.current.play();
+            setPlaying(true);
+          } else if (videoRef.current.paused) {
+            videoRef.current.play();
+            setPlaying(true);
+          } else {
+            videoRef.current.pause();
+            setPlaying(false);
+          }
           return true;
         }
         return false;
@@ -428,13 +478,13 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
       // === Controls visible ===
       if (focusArea === 'controls') {
-        if (e.key === 'ArrowLeft') {
+        if (key === 'ArrowLeft') {
           e.preventDefault();
           setFocusIdx(prev => Math.max(0, prev - 1));
           hideControlsLater();
           return true;
         }
-        if (e.key === 'ArrowRight') {
+        if (key === 'ArrowRight') {
           e.preventDefault();
           setFocusIdx(prev => Math.min(CONTROLS.length - 1, prev + 1));
           hideControlsLater();
@@ -460,11 +510,17 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           if (controlsTimer.current) clearTimeout(controlsTimer.current);
           return true;
         }
-        if (e.key === 'Enter') {
+        if (key === 'Enter') {
           e.preventDefault();
           const btn = CONTROLS[focusIdx];
           if (btn === 'play') {
-            if (videoRef.current.paused) {
+            if (isMediaPause) {
+              videoRef.current.pause(); setPlaying(false);
+              castReportState({ playState: 'paused' }).catch(() => {});
+            } else if (isMediaPlay) {
+              videoRef.current.play(); setPlaying(true);
+              castReportState({ playState: 'playing' }).catch(() => {});
+            } else if (videoRef.current.paused) {
               videoRef.current.play(); setPlaying(true);
               castReportState({ playState: 'playing' }).catch(() => {});
             } else {
@@ -496,7 +552,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           setFocusIdx(prev => Math.min(qualities.length - 1, prev + 1));
           return true;
         }
-        if (e.key === 'Enter') {
+        if (key === 'Enter') {
           e.preventDefault();
           const q = qualities[focusIdx];
           if (q) { changeQuality(q.qn); setShowQuality(false); setFocusArea('controls'); setFocusIdx(2); }
@@ -518,7 +574,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
       // === Related videos panel (4-column grid) ===
       if (focusArea === 'related') {
         const RCOLS = 4;
-        if (e.key === 'ArrowLeft') {
+        if (key === 'ArrowLeft') {
           e.preventDefault();
           if (focusIdx % RCOLS > 0) {
             setFocusIdx(prev => prev - 1);
@@ -526,7 +582,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           }
           return true;
         }
-        if (e.key === 'ArrowRight') {
+        if (key === 'ArrowRight') {
           e.preventDefault();
           if (focusIdx % RCOLS < RCOLS - 1 && focusIdx < relatedVideos.length - 1) {
             setFocusIdx(prev => prev + 1);
@@ -557,7 +613,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           }
           return true;
         }
-        if (e.key === 'Enter') {
+        if (key === 'Enter') {
           e.preventDefault();
           const rv = relatedVideos[focusIdx];
           if (rv && onPlayNext) onPlayNext(rv);
@@ -568,9 +624,9 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
       // === End screen ===
       if (focusArea === 'endscreen') {
-        if (e.key === 'ArrowLeft') { e.preventDefault(); setFocusIdx(prev => Math.max(0, prev - 1)); return true; }
-        if (e.key === 'ArrowRight') { e.preventDefault(); setFocusIdx(prev => Math.min(relatedVideos.length - 1, prev + 1)); return true; }
-        if (e.key === 'Enter') {
+        if (key === 'ArrowLeft') { e.preventDefault(); setFocusIdx(prev => Math.max(0, prev - 1)); return true; }
+        if (key === 'ArrowRight') { e.preventDefault(); setFocusIdx(prev => Math.min(relatedVideos.length - 1, prev + 1)); return true; }
+        if (key === 'Enter') {
           e.preventDefault();
           const rv = relatedVideos[focusIdx];
           if (rv && onPlayNext) onPlayNext(rv);
