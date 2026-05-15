@@ -1,3 +1,4 @@
+![Coverage](https://raw.githubusercontent.com/dotennin/bili-webos/document/docs/coverage.svg)
 # BiliTV for webOS
 
 LG webOS 智能电视的第三方哔哩哔哩客户端。

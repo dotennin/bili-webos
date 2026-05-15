@@ -1,30 +1,62 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests on Node.js 24
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
-
 name: Node.js CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  build:
+  build-test-coverage:
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
         node-version: [24.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build --if-present
+
+      - name: Run tests with coverage
+        run: npx --yes c8 --reporter=text-summary --reporter=json-summary npm test
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: coverage/coverage-summary.json
+
+      - name: Coverage report on PR
+        if: github.event_name == 'pull_request'
+        uses: greatwizard/coverage-diff-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          base-summary-filename: coverage-base-summary.json
+          head-summary-filename: coverage/coverage-summary.json
+          generate-compare-comment: true
+          generate-compare-badge: false
+          path-prefix: app/
+
+      - name: Update coverage badge data on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: we-cli/coverage-badge-action@main
+        with:
+          output: docs/coverage.svg
+          report: coverage/coverage-summary.json
+          badge-branch: document
