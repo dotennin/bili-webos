@@ -97,3 +97,54 @@ test('NvaSession parses chunked frames and sends replies/commands/pings', () => 
   assert.equal(socket.destroyed, true);
   assert.equal(closed, 1);
 });
+
+test('NvaSession handles reply frames, ping timer, and socket lifecycle events', () => {
+  const { EventEmitter } = require('node:events');
+  const { NvaSession } = require('../cast/nvaSession');
+
+  class FakeSocket extends EventEmitter {
+    constructor() { super(); this.written = []; this.destroyed = false; }
+    write(buf) { this.written.push(buf); }
+    destroy() { this.destroyed = true; }
+  }
+
+  const socket = new FakeSocket();
+  const seen = [];
+  let closed = 0;
+  const session = new NvaSession('s2', socket, (s, frame) => seen.push({ s, frame }), () => { closed += 1; });
+
+  const body = Buffer.from('{"ok":1}');
+  const reply = Buffer.concat([
+    Buffer.from([0xc0, 0x01, 0x00, 0x00, 0x00, 0x03]),
+    Buffer.from([0x00, 0x00, 0x00, body.length]),
+    body,
+  ]);
+  socket.emit('data', reply);
+  assert.equal(seen[0].frame.type, 'reply');
+  assert.equal(seen[0].frame.version, 3);
+
+  const unknownReply = Buffer.from([0xc0, 0x02, 0x00, 0x00, 0x00, 0x04]);
+  socket.emit('data', unknownReply);
+  assert.equal(seen.length, 2);
+
+  const originalSetInterval = global.setInterval;
+  const originalClearInterval = global.clearInterval;
+  let timerFn;
+  global.setInterval = (fn) => {
+    timerFn = fn;
+    return { id: 'timer' };
+  };
+  global.clearInterval = () => {};
+
+  session.startPing();
+  timerFn();
+  assert.equal(socket.written.at(-1)[0], 0xe4);
+
+  socket.emit('end');
+  socket.emit('close');
+  socket.emit('error', new Error('x'));
+  assert.equal(closed, 1);
+
+  global.setInterval = originalSetInterval;
+  global.clearInterval = originalClearInterval;
+});
