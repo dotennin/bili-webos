@@ -7,3 +7,5 @@ proxy/cookies.json
 .claude/
 .DS_Store
 .env
+
+coverage/
