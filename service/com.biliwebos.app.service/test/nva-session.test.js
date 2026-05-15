@@ -41,3 +41,59 @@ test('encode empty reply frame', () => {
 
   assert.deepEqual(Array.from(reply.subarray(0, 6)), [0xc0, 0x00, 0x00, 0x00, 0x00, 0x07]);
 });
+
+test('decode ping frame and command without action/body', () => {
+  const ping = Buffer.from([0xe4, 0x00, 0x00, 0x00, 0x00, 0x09]);
+  const decodedPing = decodeFrame(ping);
+  assert.equal(decodedPing.type, 'ping');
+  assert.equal(decodedPing.version, 9);
+
+  const cmd = Buffer.concat([
+    Buffer.from([0xe0, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x07]),
+    Buffer.from('Command'),
+  ]);
+  const decodedCmd = decodeFrame(cmd);
+  assert.equal(decodedCmd.command, 'Command');
+  assert.equal(decodedCmd.action, '');
+});
+
+test('NvaSession parses chunked frames and sends replies/commands/pings', () => {
+  const { EventEmitter } = require('node:events');
+  const { NvaSession } = require('../cast/nvaSession');
+
+  class FakeSocket extends EventEmitter {
+    constructor() { super(); this.written = []; this.destroyed = false; }
+    write(buf) { this.written.push(buf); }
+    destroy() { this.destroyed = true; }
+  }
+
+  const socket = new FakeSocket();
+  const frames = [];
+  let closed = 0;
+  const session = new NvaSession('s1', socket, (s, frame) => frames.push({ s, frame }), () => { closed += 1; });
+
+  const frame = Buffer.concat([
+    Buffer.from([0xe0, 0x03, 0x00, 0x00, 0x00, 0x02, 0x01, 0x07]),
+    Buffer.from('Command'),
+    Buffer.from([0x05]),
+    Buffer.from('Pause'),
+    Buffer.from([0x00, 0x00, 0x00, 0x02]),
+    Buffer.from('{}'),
+  ]);
+
+  socket.emit('data', frame.subarray(0, 5));
+  socket.emit('data', frame.subarray(5));
+  assert.equal(frames.length, 1);
+  assert.equal(frames[0].frame.action, 'Pause');
+
+  session.sendEmpty();
+  session.sendReply({ ok: true });
+  session.sendCommand('OnPlayState', { playState: 4 });
+  session.sendPing();
+  assert.equal(socket.written.length, 4);
+
+  session.close();
+  session.close();
+  assert.equal(socket.destroyed, true);
+  assert.equal(closed, 1);
+});
