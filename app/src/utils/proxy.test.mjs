@@ -1,19 +1,18 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { test, expect } from 'bun:test';
 import { getProxyBase, buildProxyUrl, LOCAL_PROXY_BASE, shouldUseExternalProxy } from './proxy.js';
 
 test('shouldUseExternalProxy only depends on VITE_USE_PROXY', () => {
-  assert.equal(shouldUseExternalProxy({ VITE_USE_PROXY: 'true' }), true);
-  assert.equal(shouldUseExternalProxy({ VITE_USE_PROXY: 'false' }), false);
-  assert.equal(shouldUseExternalProxy({}), false);
+  expect(shouldUseExternalProxy({ VITE_USE_PROXY: 'true' })).toBe(true);
+  expect(shouldUseExternalProxy({ VITE_USE_PROXY: 'false' })).toBe(false);
+  expect(shouldUseExternalProxy({})).toBe(false);
 });
 
 test('getProxyBase returns local proxy when VITE_USE_PROXY not true', () => {
-  assert.equal(getProxyBase({ env: { VITE_USE_PROXY: 'false' }, proxyUrl: 'http://localhost:9527' }), LOCAL_PROXY_BASE);
+  expect(getProxyBase({ env: { VITE_USE_PROXY: 'false' }, proxyUrl: 'http://localhost:9527' })).toBe(LOCAL_PROXY_BASE);
 });
 
 test('getProxyBase returns external proxy when VITE_USE_PROXY is true', () => {
-  assert.equal(getProxyBase({ env: { VITE_USE_PROXY: 'true' }, proxyUrl: 'http://localhost:9527' }), 'http://localhost:9527');
+  expect(getProxyBase({ env: { VITE_USE_PROXY: 'true' }, proxyUrl: 'http://localhost:9527' })).toBe('http://localhost:9527');
 });
 
 test('buildProxyUrl rewrites target url through selected proxy', () => {
@@ -21,5 +20,5 @@ test('buildProxyUrl rewrites target url through selected proxy', () => {
     env: { VITE_USE_PROXY: 'true' },
     proxyUrl: 'http://localhost:9527',
   });
-  assert.equal(rewritten, 'http://localhost:9527/proxy/i0.hdslb.com/bfs/archive/a.png?x=1');
+  expect(rewritten).toBe('http://localhost:9527/proxy/i0.hdslb.com/bfs/archive/a.png?x=1');
 });
