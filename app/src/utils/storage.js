@@ -37,7 +37,7 @@ export const storage = {
   },
 
   getProxyUrl() {
-    return this.get('proxyUrl') || 'http://192.168.50.242:9527';
+    return this.get('proxyUrl') || 'http://127.0.0.1:9527';
   },
 
   setProxyUrl(url) {
