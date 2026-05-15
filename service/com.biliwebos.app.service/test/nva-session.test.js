@@ -167,3 +167,33 @@ test('sendBuffer is a no-op after session is closed', () => {
 
   assert.equal(socket.written.length, 0);
 });
+
+
+test('startPing replaces existing timer and uses clearInterval on prior timer', () => {
+  const { EventEmitter } = require('node:events');
+  const { NvaSession } = require('../cast/nvaSession');
+
+  class FakeSocket extends EventEmitter {
+    write() {}
+    destroy() {}
+  }
+
+  const socket = new FakeSocket();
+  const session = new NvaSession('s4', socket);
+  session.pingTimer = { id: 'old' };
+
+  const originalSetInterval = global.setInterval;
+  const originalClearInterval = global.clearInterval;
+  const cleared = [];
+
+  global.setInterval = () => ({ id: 'new' });
+  global.clearInterval = (id) => { cleared.push(id); };
+
+  session.startPing();
+  assert.equal(cleared.length, 1);
+  assert.deepEqual(cleared[0], { id: 'old' });
+
+  global.setInterval = originalSetInterval;
+  global.clearInterval = originalClearInterval;
+  session.close();
+});

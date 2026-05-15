@@ -77,3 +77,25 @@ test('getProxyUrl falls back to default in non-browser or localhost environments
     else globalThis.window = originalWindow;
   });
 });
+
+
+test('getProxyUrl prefers VITE_BILI_PROXY_URL when present', () => {
+  withMockLocalStorage((map) => {
+    map.delete('bili_proxyUrl');
+
+    const originalWindow = globalThis.window;
+    globalThis.window = { location: { hostname: '192.168.1.8' } };
+
+    const env = import.meta.env;
+    const originalProxy = env.VITE_BILI_PROXY_URL;
+    env.VITE_BILI_PROXY_URL = 'http://proxy.example:7777';
+
+    expect(storage.getProxyUrl()).toBe('http://proxy.example:7777');
+
+    if (typeof originalProxy === 'undefined') delete env.VITE_BILI_PROXY_URL;
+    else env.VITE_BILI_PROXY_URL = originalProxy;
+
+    if (typeof originalWindow === 'undefined') delete globalThis.window;
+    else globalThis.window = originalWindow;
+  });
+});
