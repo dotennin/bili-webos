@@ -167,3 +167,34 @@ test('sendBuffer is a no-op after session is closed', () => {
 
   assert.equal(socket.written.length, 0);
 });
+
+
+test('NvaSession buffers partial command metadata until complete', () => {
+  const { EventEmitter } = require('node:events');
+  const { NvaSession } = require('../cast/nvaSession');
+
+  class FakeSocket extends EventEmitter {
+    constructor() { super(); this.written = []; this.destroyed = false; }
+    write(buf) { this.written.push(buf); }
+    destroy() { this.destroyed = true; }
+  }
+
+  const socket = new FakeSocket();
+  const seen = [];
+  const session = new NvaSession('s4', socket, (s, frame) => seen.push(frame));
+
+  const frame = Buffer.concat([
+    Buffer.from([0xe0, 0x02, 0x00, 0x00, 0x00, 0x02, 0x01, 0x07]),
+    Buffer.from('Command'),
+    Buffer.from([0x05]),
+    Buffer.from('Pause'),
+  ]);
+
+  socket.emit('data', frame.subarray(0, 15));
+  assert.equal(seen.length, 0);
+  socket.emit('data', frame.subarray(15));
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].action, 'Pause');
+
+  session.close();
+});
