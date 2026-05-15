@@ -144,7 +144,7 @@ const WBI_KEYS_TTL = 600000; // 10 min
 
 export async function getWbiKeys(apiFetch) {
   const now = Date.now();
-  if (cachedWbiKeys && (now - wbiKeysFetchedAt < WBI_KEYS_TTL)) {
+  if (cachedWbiKeys && now >= wbiKeysFetchedAt && (now - wbiKeysFetchedAt < WBI_KEYS_TTL)) {
     return cachedWbiKeys;
   }
 
