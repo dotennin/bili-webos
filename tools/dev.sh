@@ -14,13 +14,13 @@ trap cleanup EXIT INT TERM
 
 (
   cd app
-  npm run dev
+  bun run dev
 ) &
 APP_PID=$!
 
 (
   cd proxy
-  node server.js
+  bun server.js
 ) &
 PROXY_PID=$!
 

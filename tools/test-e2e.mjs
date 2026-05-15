@@ -1,6 +1,6 @@
 // End-to-end test script for Bilibili webOS TV app
 // Tests all API endpoints through the proxy server
-// Run: node test-e2e.mjs
+// Run: bun tools/test-e2e.mjs
 
 import crypto from 'node:crypto';
 
@@ -55,7 +55,7 @@ async function run() {
     else fail('Health check', JSON.stringify(ping));
   } catch (e) {
     fail('Health check', e.message + ' -- is proxy running?');
-    console.log('\nProxy not running. Start with: cd proxy && node server.js\n');
+    console.log('\nProxy not running. Start with: cd proxy && bun server.js\n');
     process.exit(1);
   }
 

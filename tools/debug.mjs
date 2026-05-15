@@ -64,7 +64,7 @@ async function main() {
   const { WebSocket } = await import('ws').catch(() => {
     console.log('\nInstalling ws...');
     return import('child_process').then(cp => {
-      cp.execSync('npm install ws', { cwd: process.cwd(), stdio: 'pipe' });
+      cp.execSync('bun add ws', { cwd: process.cwd(), stdio: 'pipe' });
       return import('ws');
     });
   });
