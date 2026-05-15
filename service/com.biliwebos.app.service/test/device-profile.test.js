@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const {
   createDeviceProfile,
   renderDescriptionXml,
+  renderAvTransportScpd,
+  renderNirvanaScpd,
   getSsdpNotifyPackets,
   getSsdpSearchResponse,
 } = require('../cast/deviceProfile');
@@ -47,4 +49,13 @@ test('ssdp search response points to description xml', () => {
   assert.match(response, /LOCATION: http:\/\/192\.168\.1\.2:9958\/description\.xml/);
   assert.match(response, /USN: uuid:atvbilibili&/);
   assert.match(response, /ST: upnp:rootdevice/);
+});
+
+test('scpd renderers expose expected actions', () => {
+  const avTransport = renderAvTransportScpd();
+  const nirvana = renderNirvanaScpd();
+
+  assert.match(avTransport, /<action><name>Play<\/name><\/action>/);
+  assert.match(avTransport, /<action><name>Seek<\/name><\/action>/);
+  assert.match(nirvana, /GetAppInfo/);
 });

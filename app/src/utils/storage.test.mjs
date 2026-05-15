@@ -56,3 +56,24 @@ test('get returns null for invalid json and set tolerates quota errors', () => {
     expect(() => storage.set('x', { a: 1 })).not.toThrow();
   });
 });
+
+test('getProxyUrl falls back to default in non-browser or localhost environments', () => {
+  withMockLocalStorage((map) => {
+    map.delete('bili_proxyUrl');
+
+    const originalWindow = globalThis.window;
+    try {
+      delete globalThis.window;
+    } catch {}
+    expect(storage.getProxyUrl()).toBe('http://127.0.0.1:9527');
+
+    globalThis.window = { location: { hostname: 'localhost' } };
+    expect(storage.getProxyUrl()).toBe('http://127.0.0.1:9527');
+
+    globalThis.window = { location: { hostname: '192.168.10.2' } };
+    expect(storage.getProxyUrl()).toBe('http://192.168.10.2:9527');
+
+    if (typeof originalWindow === 'undefined') delete globalThis.window;
+    else globalThis.window = originalWindow;
+  });
+});
