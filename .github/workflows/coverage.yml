@@ -26,7 +26,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run tests with coverage
-        run: bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage service/com.biliwebos.app.service/test/*.test.js app/src/**/*.test.mjs
+        run: bun test:coverage
 
       - name: Convert lcov to json summary
         run: node tools/coverage-summary.mjs coverage
