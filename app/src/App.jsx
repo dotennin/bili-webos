@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { initKeyboardNav, setFocus, onFocusChange } from './hooks/useFocus';
+import { initKeyboardNav, setFocus } from './hooks/useFocus';
 import { castAck, castSubscribe, getNavInfo } from './api/client';
 import { storage } from './utils/storage';
 import SidebarItem from './components/SidebarItem';
@@ -22,20 +22,6 @@ const NAV_ITEMS = [
 ];
 
 function Sidebar({ activePage, onPageChange, user }) {
-  // Listen for sidebar focus changes to auto-switch page
-  useEffect(() => {
-    return onFocusChange((fid) => {
-      if (!fid?.startsWith('sidebar-')) return;
-      const match = fid.match(/^sidebar-(\d+)-/);
-      if (!match) return;
-      const idx = parseInt(match[1]);
-      if (idx < NAV_ITEMS.length) {
-        const item = NAV_ITEMS[idx];
-        onPageChange(item.key);
-      }
-    });
-  }, [onPageChange]);
-
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
@@ -207,7 +193,7 @@ export default function App() {
     setPlayerVideo(video);
   }, []);
 
-  // Sidebar hover = switch page, click same page = refresh
+  // Sidebar select (Enter/click) = switch page, select same page = refresh
   const handlePageChange = useCallback((key) => {
     if ((key === 'follow') && !loggedIn) {
       setShowLogin(true);
