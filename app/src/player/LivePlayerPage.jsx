@@ -238,13 +238,40 @@ export default function LivePlayerPage({ room, onBack }) {
 
   useEffect(() => {
     const handler = (e) => {
-      if (e.keyCode === 461 || e.key === 'Backspace' || e.key === 'GoBack' || e.key === 'Escape') {
+      const keyCode = Number(e.keyCode || e.which || 0);
+      const key = e.key || '';
+      const isMediaPlay = key === 'MediaPlay' || keyCode === 415;
+      const isMediaPause = key === 'MediaPause' || keyCode === 19;
+      const isMediaPlayPause = key === 'MediaPlayPause';
+      const isMediaRewind = key === 'MediaRewind' || keyCode === 412;
+      const isMediaFastForward = key === 'MediaFastForward' || keyCode === 417;
+
+      if (keyCode === 461 || key === 'Backspace' || key === 'GoBack' || key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
         onBack();
         return true;
       }
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter') {
+
+      if (isMediaPause || isMediaPlay || isMediaPlayPause || isMediaRewind || isMediaFastForward) {
+        e.preventDefault();
+        setShowInfo(true);
+        if (infoTimer.current) clearTimeout(infoTimer.current);
+        infoTimer.current = setTimeout(() => setShowInfo(false), 3000);
+
+        if (videoRef.current) {
+          if (isMediaPause) {
+            videoRef.current.pause();
+            castReportState({ playState: 'paused' }).catch(() => {});
+          } else {
+            videoRef.current.play();
+            castReportState({ playState: 'playing' }).catch(() => {});
+          }
+        }
+        return true;
+      }
+
+      if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'Enter') {
         e.preventDefault();
         setShowInfo(true);
         if (infoTimer.current) clearTimeout(infoTimer.current);
