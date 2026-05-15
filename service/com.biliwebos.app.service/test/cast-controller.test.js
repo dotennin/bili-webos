@@ -101,3 +101,43 @@ test('parse seek command with seekTs field', () => {
   const intent = controller.handleCommand('session-1', 'Seek', JSON.stringify({ seekTs: 88 }));
   assert.deepEqual(intent, { type: 'seek', positionSec: 88 });
 });
+
+test('handles pause/resume/stop/switchDanmaku actions and detach', () => {
+  const controller = new CastController();
+  const intents = [];
+  controller.onIntent((i) => intents.push(i));
+
+  assert.deepEqual(controller.handleCommand('s1', 'Pause', '{}'), { type: 'pause' });
+  assert.deepEqual(controller.handleCommand('s1', 'Resume', '{}'), { type: 'resume' });
+  assert.deepEqual(controller.handleCommand('s1', 'SwitchDanmaku', JSON.stringify({ open: 1 })), { type: 'switchDanmaku', open: true });
+  assert.deepEqual(controller.handleCommand('s1', 'Stop', '{}'), { type: 'stop' });
+
+  controller.attachSession({ id: 's1', sendCommand() {} });
+  controller.detachSession('s1');
+
+  const status = controller.getStatus();
+  assert.equal(status.playState, 'stop');
+  assert.equal(status.sessionId, null);
+  assert.equal(intents.length, 4);
+});
+
+test('ack/network/status are tracked and invalid state does not emit playstate', () => {
+  const controller = new CastController();
+  const sent = [];
+  controller.attachSession({ id: 's1', sendCommand(action, content) { sent.push({ action, content }); } });
+
+  controller.reportState({ playState: 'not-mapped', error: 'e' });
+  controller.reportProgress({ duration: '11', position: '3' });
+  controller.ack({ ok: true });
+  controller.setNetworkInfo('192.168.1.2', 7654);
+
+  const status = controller.getStatus();
+  assert.equal(status.deviceIp, '192.168.1.2');
+  assert.equal(status.httpPort, 7654);
+  assert.equal(status.duration, 11);
+  assert.equal(status.progress, 3);
+  assert.equal(status.lastError, 'e');
+  assert.equal(status.lastAck.ok, true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].action, 'OnProgress');
+});
