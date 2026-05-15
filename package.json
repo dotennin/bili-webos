@@ -4,11 +4,13 @@
     "ws": "^8.20.0"
   },
   "scripts": {
-    "dev": "bash -lc 'npm run dev:proxy & npm run dev:app & wait'",
-    "dev:app": "VITE_USE_PROXY=true npm --prefix app run dev",
-    "dev:proxy": "npm --prefix proxy run dev",
-    "test": "node --test service/com.biliwebos.app.service/test/*.test.js app/src/**/*.test.mjs",
-    "analyze:tv": "node --env-file=.env tools/debug.mjs",
-    "screenshot:tv": "node --env-file=.env tools/screenshot.mjs"
-  }
+    "dev": "bash -lc 'bun run dev:proxy & bun run dev:app & wait'",
+    "dev:app": "VITE_USE_PROXY=true bun --cwd app run dev",
+    "dev:proxy": "bun --cwd proxy run dev",
+    "build": "bun --cwd app run build",
+    "test": "bun test service/com.biliwebos.app.service/test/*.test.js app/src/**/*.test.mjs",
+    "analyze:tv": "bun --env-file=.env tools/debug.mjs",
+    "screenshot:tv": "bun --env-file=.env tools/screenshot.mjs"
+  },
+  "packageManager": "bun@1.2.14"
 }

@@ -5,8 +5,8 @@
   "description": "Local proxy server for Bilibili API (runs on Mac, TV app connects to this)",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "bun server.js",
+    "dev": "bun server.js"
   },
   "dependencies": {}
 }

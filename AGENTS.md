@@ -6,19 +6,19 @@
 bash build.sh
 
 # Dev mode (browser preview, needs proxy)
-cd app && npm run dev
+cd app && bun run dev
 
 # Start Mac proxy (only for browser dev, not needed on TV)
 cd proxy && node server.js
 
 # Remote debug TV app
-node tools/debug.mjs
+bun --env-file=.env tools/debug.mjs
 
 # Take screenshot from TV
-node tools/screenshot.mjs
+bun --env-file=.env tools/screenshot.mjs
 
 # Run API tests (proxy must be running)
-node tools/test-e2e.mjs
+bun tools/test-e2e.mjs
 ```
 
 ## Required skills when applicable:

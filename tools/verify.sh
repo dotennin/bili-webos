@@ -7,15 +7,15 @@ cd "$(dirname "$0")/.."
 PASS="${1:-4E7082}"
 
 echo "=== [1/4] Build ==="
-cd tv-app
-npx vite build 2>&1 | tail -3
+cd app
+bun run build 2>&1 | tail -3
 cp webos-meta/* dist/
 cd dist && ares-package --no-minify . 2>&1 | grep -E "Success|ERR"
 cd ../..
 
 echo ""
 echo "=== [2/4] Deploy ==="
-node deploy.mjs "$PASS" 2>&1 | grep -E "Done|Error|Connected"
+bun tools/deploy.mjs 2>&1 | grep -E "Done|Error|Connected"
 
 echo ""
 echo "=== [3/4] Wait for app to load ==="
@@ -23,7 +23,7 @@ sleep 5
 
 echo ""
 echo "=== [4/4] Verify via CDP ==="
-node -e "
+bun -e "
 const { Client } = require('ssh2');
 const { readFileSync, writeFileSync } = require('fs');
 const http = require('http');
