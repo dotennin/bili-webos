@@ -5,6 +5,19 @@ import { storage } from '../utils/storage';
 import { setCustomKeyHandler } from '../hooks/useFocus';
 import DanmakuLayer from './DanmakuLayer';
 
+function isLunaBridgeReady() {
+  if (typeof window === 'undefined') return false;
+  const hasWebOS = !!window.webOS;
+  const hasServiceMethod = typeof window.webOS?.service === 'function';
+  const hasPalmServiceBridge = typeof window.PalmServiceBridge === 'function';
+  const hasPalmSystemBridge = !!window.PalmSystem?.serviceBridge;
+  return hasWebOS && hasServiceMethod && (hasPalmServiceBridge || hasPalmSystemBridge);
+}
+
+function getProxyBase() {
+  return isLunaBridgeReady() ? 'http://127.0.0.1:7654' : storage.getProxyUrl();
+}
+
 export default function PlayerPage({ video, onBack, onPlayNext }) {
   const videoRef = useRef(null);
   const shakaRef = useRef(null);
@@ -112,9 +125,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         if (request.uris[0].startsWith('http')) {
           const originalUrl = new URL(request.uris[0]);
           // Use local proxy on TV (JS Service), fallback to Mac proxy
-          const proxyBase = (typeof window !== 'undefined' && window.webOS)
-            ? 'http://127.0.0.1:7654'
-            : storage.getProxyUrl();
+          const proxyBase = getProxyBase();
           request.uris[0] = `${proxyBase}/proxy/${originalUrl.host}${originalUrl.pathname}${originalUrl.search}`;
         }
       });
