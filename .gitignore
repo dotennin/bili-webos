@@ -6,3 +6,4 @@ verify-screenshot.png
 proxy/cookies.json
 .claude/
 .DS_Store
+.env

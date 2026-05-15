@@ -7,6 +7,8 @@
     "dev": "bash -lc 'npm run dev:proxy & npm run dev:app & wait'",
     "dev:app": "VITE_USE_PROXY=true npm --prefix app run dev",
     "dev:proxy": "npm --prefix proxy run dev",
-    "test": "node --test service/com.biliwebos.app.service/test/*.test.js app/src/**/*.test.mjs"
+    "test": "node --test service/com.biliwebos.app.service/test/*.test.js app/src/**/*.test.mjs",
+    "analyze:tv": "node --env-file=.env tools/debug.mjs",
+    "screenshot:tv": "node --env-file=.env tools/screenshot.mjs"
   }
 }

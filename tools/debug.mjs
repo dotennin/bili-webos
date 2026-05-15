@@ -4,9 +4,13 @@ import { readFileSync } from 'fs';
 import http from 'http';
 import net from 'net';
 
-const TV = { host: '192.168.50.94', port: 9922, user: 'prisoner' };
-const KEY = process.env.HOME + '/.ssh/tv_webos';
-const PASSPHRASE = process.argv[2] || '4E7082';
+const TV_HOST = process.env.TV_HOST;
+const TV_PORT = process.env.TV_PORT;
+const TV_USER = process.env.TV_USER;
+const TV_PASS = process.env.TV_PASS;
+const SSH_KEY_PATH = process.env.SSH_KEY_PATH;
+
+const TV = { host: TV_HOST, port: TV_PORT, user: TV_USER };
 const REMOTE_DEBUG_PORT = 9998;
 const LOCAL_PORT = 19998;
 
@@ -19,7 +23,7 @@ async function main() {
     conn.on('error', reject);
     conn.connect({
       host: TV.host, port: TV.port, username: TV.user,
-      privateKey: readFileSync(KEY), passphrase: PASSPHRASE,
+      privateKey: readFileSync(SSH_KEY_PATH), passphrase: TV_PASS,
       algorithms: { serverHostKey: ['ssh-rsa'] },
     });
   });
@@ -127,8 +131,8 @@ async function main() {
   });
 
   // Run for 15 seconds
-  console.log('Listening for 15 seconds...\n');
-  await new Promise(r => setTimeout(r, 15000));
+  console.log('Listening for 60 seconds...\n');
+  await new Promise(r => setTimeout(r, 60000));
 
   ws.close();
   await cleanup();
