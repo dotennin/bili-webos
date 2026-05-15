@@ -2,21 +2,21 @@
   "total": {
     "lines": {
       "total": 714,
-      "covered": 504,
+      "covered": 544,
       "skipped": 0,
-      "pct": 70.59
+      "pct": 76.19
     },
     "statements": {
       "total": 714,
-      "covered": 504,
+      "covered": 544,
       "skipped": 0,
-      "pct": 70.59
+      "pct": 76.19
     },
     "functions": {
-      "total": 76,
-      "covered": 69,
+      "total": 77,
+      "covered": 77,
       "skipped": 0,
-      "pct": 90.79
+      "pct": 100
     },
     "branches": {
       "total": 0,
