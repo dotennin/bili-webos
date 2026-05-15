@@ -9,6 +9,23 @@ import {
   getLiveStreamSource,
   getDanmaku,
   getVideoInfo,
+  getPlayUrl,
+  getRegionDynamic,
+  getFollowFeed,
+  searchVideo,
+  getHistory,
+  getFavFolders,
+  getFavList,
+  castReportState,
+  castReportProgress,
+  castGetStatus,
+  qrCodeGenerate,
+  qrCodePoll,
+  getNavInfo,
+  getPopular,
+  getRecommend,
+  getRanking,
+  getRelated,
   reportHeartbeat,
 } from './client.js';
 
@@ -174,5 +191,78 @@ describe('api client integration paths', () => {
 
   it('throws when getVideoInfo is called without aid/bvid', async () => {
     await expect(getVideoInfo({})).rejects.toThrow('Missing video identifier');
+  });
+
+  it('covers wrapper APIs and luna fallback/error branches', async () => {
+    const requests = [];
+    globalThis.window = {
+      PalmServiceBridge: function() {},
+      PalmSystem: { serviceBridge: () => {} },
+      webOS: {
+        service: {
+          request: (_uri, options) => {
+            requests.push({ method: options.method, parameters: options.parameters });
+            if (options.method === 'fetch') {
+              if (options.parameters.url.includes('/x/v1/dm/list.so')) {
+                options.onSuccess({ returnValue: true });
+                return;
+              }
+              options.onSuccess({ returnValue: true, body: '{"code":0,"data":{}}', newCookies: { SESSDATA: 'abc' } });
+              return;
+            }
+            if (options.method === 'castReportProgress') {
+              options.onFailure({ errorText: 'bad progress' });
+              return;
+            }
+            options.onSuccess({ returnValue: true });
+          },
+        },
+      },
+      location: { hostname: 'tv' },
+    };
+
+    globalThis.fetch = mock((url) => {
+      if (String(url).includes('/x/web-interface/nav')) {
+        return Promise.resolve({
+          headers: { get: () => 'application/json' },
+          json: async () => ({ data: { wbi_img: { img_url: 'https://i/a12345678901234567890123456789012.png', sub_url: 'https://i/b12345678901234567890123456789012.png' } } }),
+        });
+      }
+      return Promise.resolve({
+        headers: { get: () => 'application/json' },
+        json: async () => ({ code: 0, data: {} }),
+      });
+    });
+
+    await expect(castReportProgress({ t: 1 })).rejects.toThrow('bad progress');
+    await castReportState({ mode: 'play' });
+    await castGetStatus();
+
+    await qrCodeGenerate();
+    await qrCodePoll('key/with space');
+    await getNavInfo();
+    await getPopular();
+    await getRecommend();
+    await getRanking();
+    await getVideoInfo('BV1xx');
+    await getVideoInfo({ bvid: 'BV2xx' });
+    await getVideoInfo({ aid: 123 });
+    await getPlayUrl('BV3xx', 11, 80);
+    await getPlayUrl({ bvid: 'BV4xx' }, 12, 64);
+    await getPlayUrl({ aid: 999 }, 13, 32);
+    await getRegionDynamic();
+    await getFollowFeed();
+    await searchVideo('test');
+    await getHistory();
+    await getFavFolders(1);
+    await getFavList(2);
+    await getRelated('BV5xx');
+
+    const danmaku = await getDanmaku(1234);
+    expect(Array.isArray(danmaku)).toBe(true);
+    expect(danmaku.length).toBe(0);
+    const auth = JSON.parse(localStorage.getItem('bili_auth'));
+    expect(auth.SESSDATA).toBe('abc');
+    expect(requests.some((r) => r.method === 'castReportState')).toBe(true);
   });
 });
