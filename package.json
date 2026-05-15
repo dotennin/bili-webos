@@ -7,6 +7,7 @@
     "dev": "bash -lc 'bun run dev:proxy & bun run dev:app & wait'",
     "dev:app": "VITE_USE_PROXY=true bun --cwd app run dev",
     "dev:proxy": "bun --cwd proxy run dev",
+    "build": "bun --cwd app run build",
     "test": "bun test service/com.biliwebos.app.service/test/*.test.js app/src/**/*.test.mjs",
     "analyze:tv": "bun --env-file=.env tools/debug.mjs",
     "screenshot:tv": "bun --env-file=.env tools/screenshot.mjs"
