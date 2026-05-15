@@ -1,0 +1,119 @@
+name: Coverage CI
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npx --yes c8 --reporter=text-summary --reporter=json-summary npm test
+
+      - name: Verify coverage summary exists
+        run: test -f coverage/coverage-summary.json
+
+      - name: Read line coverage
+        id: line_cov
+        run: |
+          LINES=$(node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')); process.stdout.write(String(s.total.lines.pct));")
+          echo "lines=$LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8')).total;
+            const body = [
+              '## Coverage Report',
+              '',
+              '| Metric | Coverage |',
+              '| --- | ---: |',
+              `| Lines | ${summary.lines.pct}% |`,
+              `| Statements | ${summary.statements.pct}% |`,
+              `| Functions | ${summary.functions.pct}% |`,
+              `| Branches | ${summary.branches.pct}% |`,
+            ].join('\n');
+
+            const marker = '<!-- coverage-report -->';
+            const issue_number = context.issue.number;
+            const { owner, repo } = context.repo;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find(c => c.user.type === 'Bot' && c.body.includes(marker));
+            const finalBody = `${marker}\n${body}`;
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: finalBody });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: finalBody });
+            }
+
+      - name: Update badge json in document branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          LINE_PCT: ${{ steps.line_cov.outputs.lines }}
+        run: |
+          mkdir -p /tmp/document-branch
+          git clone --depth 1 --branch document "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" /tmp/document-branch || {
+            git clone --depth 1 "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" /tmp/document-branch
+            cd /tmp/document-branch
+            git checkout --orphan document
+            git rm -rf .
+          }
+
+          cd /tmp/document-branch
+          mkdir -p badges coverage
+
+          node -e "
+          const fs=require('fs');
+          const value=Number(process.env.LINE_PCT || 0);
+          let color='red';
+          if (value>=90) color='brightgreen';
+          else if (value>=80) color='green';
+          else if (value>=70) color='yellow';
+          else if (value>=60) color='orange';
+          const badge={schemaVersion:1,label:'coverage',message:`${value}%`,color};
+          fs.writeFileSync('badges/coverage.json', JSON.stringify(badge, null, 2)+'\\n');
+          "
+
+          cp "${GITHUB_WORKSPACE}/coverage/coverage-summary.json" coverage/coverage-summary.json
+
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add badges/coverage.json coverage/coverage-summary.json
+          git commit -m "chore: update coverage badge data [skip ci]" || exit 0
+          git push origin HEAD:document
