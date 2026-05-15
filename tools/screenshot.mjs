@@ -1,12 +1,16 @@
 // Take a screenshot from the TV app via CDP over SSH tunnel
 import { Client } from 'ssh2';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync,writeFileSync } from 'fs';
 import http from 'http';
 import net from 'net';
 import { WebSocket } from 'ws';
 
-const TV = { host: '192.168.50.94', port: 9922 };
-const PASS = process.argv[2] || '4E7082';
+const TV_HOST = process.env.TV_HOST;
+const TV_PORT = process.env.TV_PORT;
+const TV_USER = process.env.TV_USER;
+const TV_PASS = process.env.TV_PASS;
+const SSH_KEY_PATH = process.env.SSH_KEY_PATH;
+
 const OUT = process.argv[3] || 'screenshot.png';
 
 const conn = new Client();
@@ -43,9 +47,9 @@ conn.on('ready', () => {
   });
 });
 conn.connect({
-  host: TV.host, port: TV.port, username: 'prisoner',
-  privateKey: readFileSync(process.env.HOME + '/.ssh/tv_webos'),
-  passphrase: PASS,
+  host: TV_HOST, port: TV_PORT, username: TV_USER,
+  privateKey: readFileSync(SSH_KEY_PATH),
+  passphrase: TV_PASS,
   algorithms: { serverHostKey: ['ssh-rsa'] },
 });
 setTimeout(() => process.exit(0), 10000);

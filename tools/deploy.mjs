@@ -4,10 +4,11 @@ import { Client } from 'ssh2';
 import { readFileSync, readdirSync } from 'fs';
 import { basename } from 'path';
 
-const TV_HOST = '192.168.50.94';
-const TV_PORT = 9922;
-const TV_USER = 'prisoner';
-const KEY_PATH = process.env.HOME + '/.ssh/tv_webos';
+const TV_HOST = process.env.TV_HOST;
+const TV_PORT = process.env.TV_PORT;
+const TV_USER = process.env.TV_USER;
+const TV_PASS = process.env.TV_PASS;
+const SSH_KEY_PATH = process.env.SSH_KEY_PATH;
 // Find latest ipk in app/dist
 const distFiles = readdirSync('app/dist').filter(f => f.endsWith('.ipk')).sort();
 const IPK_PATH = 'app/dist/' + (distFiles[distFiles.length - 1] || 'com.biliwebos.app_1.0.0_all.ipk');
@@ -50,7 +51,7 @@ function upload(sftpConn, localPath, remotePath) {
 }
 
 async function main() {
-  const privateKey = readFileSync(KEY_PATH);
+  const privateKey = readFileSync(SSH_KEY_PATH);
   const ipkFile = basename(IPK_PATH);
 
   console.log(`\n  Deploying ${APP_ID} to ${TV_HOST}...\n`);
@@ -62,7 +63,7 @@ async function main() {
     port: TV_PORT,
     username: TV_USER,
     privateKey,
-    passphrase: process.argv[2] || '',
+    passphrase: TV_PASS,
     algorithms: {
       serverHostKey: ['ssh-rsa'],
     },

@@ -1,8 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build, package (app + service), and deploy to TV
+
+set -a
+source .env
+set +a
+
+echo "=== .env variables ==="
+echo "TV_HOST: $TV_HOST"
+echo "TV_PORT: $TV_PORT"
+echo "TV_USER: $TV_USER"
+echo "TV_PASS: $TV_PASS"
+echo "SSH_KEY_PATH: $SSH_KEY_PATH"
+echo "====================="
 set -e
 cd "$(dirname "$0")"
-PASS="${1:-4E7082}"
 
 echo "=== [1/3] Build & Package ==="
 cd app
@@ -14,7 +25,7 @@ cd ../..
 
 echo ""
 echo "=== [2/3] Deploy ==="
-node tools/deploy.mjs "$PASS" 2>&1 | grep -E "Done|Error|Connected"
+node tools/deploy.mjs 2>&1 | grep -E "Done|Error|Connected"
 
 echo ""
 echo "=== [3/3] Done ==="
