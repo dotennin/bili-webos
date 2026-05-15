@@ -5,6 +5,7 @@ const PROJECT_ROOT = path.resolve(import.meta.dir, "..");
 const INCLUDE_PATTERNS = [
   "app/src/**/*.js",
   "app/src/**/*.mjs",
+  "app/src/**/*.jsx",
   "service/com.biliwebos.app.service/**/*.js",
   "service/com.biliwebos.app.service/**/*.mjs",
 ];
