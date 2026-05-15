@@ -106,7 +106,7 @@ jobs:
           else if (value>=80) color='green';
           else if (value>=70) color='yellow';
           else if (value>=60) color='orange';
-          const badge={schemaVersion:1,label:'coverage',message:`${value}%`,color};
+          const badge={schemaVersion:1,label:'coverage',message:String(value)+'%',color};
           fs.writeFileSync('badges/coverage.json', JSON.stringify(badge, null, 2)+'\\n');
           "
 
