@@ -88,11 +88,8 @@ bash build.sh
 ### 开发模式
 
 ```bash
-# 启动 Mac 代理（浏览器预览用）
-cd proxy && node server.js &
-
-# 启动开发服务器
-cd app && npm run dev
+# 一键启动开发模式（同时启动 proxy + app dev server）
+npm run dev
 # 浏览器打开 http://localhost:5173
 ```
 
