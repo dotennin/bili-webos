@@ -1,13 +1,14 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests on Node.js 24
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
-
 name: Node.js CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   build:
@@ -16,15 +17,31 @@ jobs:
     strategy:
       matrix:
         node-version: [24.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build --if-present
+
+      - name: Run tests with coverage
+        run: |
+          npx c8 \
+            --reporter=text-summary \
+            --reporter=json-summary \
+            npm test
+
+      - name: Coverage Diff (PR comment + badge data)
+        uses: greatwizard/coverage-diff-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          coverage-filename: coverage/coverage-summary.json
+          allowed-to-fail: false
+          badge-enabled: true
+          badge-filename: coverage-diff-badge.json
