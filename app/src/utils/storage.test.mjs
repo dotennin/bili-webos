@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { test, expect } from 'bun:test';
 
 import { storage } from './storage.js';
 
@@ -9,9 +8,9 @@ test('storage.remove does not throw when localStorage is unavailable', () => {
     delete globalThis.localStorage;
   } catch {}
 
-  assert.doesNotThrow(() => {
+  expect(() => {
     storage.remove('auth');
-  });
+  }).not.toThrow();
 
   if (typeof originalLocalStorage !== 'undefined') {
     globalThis.localStorage = originalLocalStorage;

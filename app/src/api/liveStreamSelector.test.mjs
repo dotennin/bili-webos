@@ -1,5 +1,4 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { test, expect } from 'bun:test';
 
 import { selectLiveStreamSource, selectLiveStreamUrl } from './liveStreamSelector.js';
 
@@ -18,7 +17,7 @@ test('prefers avc flv live stream over hls variants when available', () => {
     }
   ]);
 
-  assert.deepEqual(source, {
+  expect(source).toEqual({
     type: 'flv',
     url: 'https://stream.example.com/a.flv',
   });
@@ -35,7 +34,7 @@ test('prefers avc fmp4 hls when flv is unavailable', () => {
     }
   ]);
 
-  assert.deepEqual(source, {
+  expect(source).toEqual({
     type: 'hls',
     url: 'https://fmp4.example.com/c/index.m3u8',
   });
@@ -51,7 +50,7 @@ test('falls back to avc ts hls when fmp4 is unavailable', () => {
     }
   ]);
 
-  assert.deepEqual(source, {
+  expect(source).toEqual({
     type: 'hls',
     url: 'https://ts.example.com/b.m3u8',
   });
@@ -65,7 +64,7 @@ test('selectLiveStreamUrl preserves existing url-only API', () => {
     }
   ]);
 
-  assert.equal(url, 'https://stream.example.com/fast.flv');
+  expect(url).toBe('https://stream.example.com/fast.flv');
 });
 
 test('returns null when no supported live source exists', () => {
@@ -78,5 +77,5 @@ test('returns null when no supported live source exists', () => {
     }
   ]);
 
-  assert.equal(source, null);
+  expect(source).toBeNull();
 });
