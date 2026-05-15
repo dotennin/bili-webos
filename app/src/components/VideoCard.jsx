@@ -4,9 +4,15 @@ import { formatCount, formatDuration, formatTime } from '../utils/format';
 import { storage } from '../utils/storage';
 
 function getProxyBase() {
-  return (typeof window !== 'undefined' && window.webOS)
-    ? 'http://127.0.0.1:7654'
-    : storage.getProxyUrl();
+  if (typeof window === 'undefined') return storage.getProxyUrl();
+
+  const hasPalmServiceBridge = typeof window.PalmServiceBridge !== 'undefined'
+    || !!(window.PalmSystem && typeof window.PalmSystem.serviceBridge === 'function');
+  const hasLunaService = typeof window.webOS !== 'undefined'
+    && !!window.webOS.service
+    && hasPalmServiceBridge;
+
+  return hasLunaService ? 'http://127.0.0.1:7654' : storage.getProxyUrl();
 }
 
 function proxyImg(url) {
