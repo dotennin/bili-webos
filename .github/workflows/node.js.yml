@@ -1,30 +1,75 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests on Node.js 24
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
-
 name: Node.js CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         node-version: [24.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build --if-present
+      - run: npm test
+
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 24.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - name: Run coverage
+        run: npm run test:coverage
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+
+      - name: Generate coverage badge
+        uses: tj-actions/coverage-badge-js@v2
+        with:
+          output: coverage/badge.svg
+          report_path: coverage/lcov.info
+
+      - name: Add coverage summary to PR
+        if: github.event_name == 'pull_request'
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: coverage/lcov.info
+          badge: true
+          format: markdown
+          output: both
+
+      - name: Publish dynamic badge and report links in README
+        if: github.ref == 'refs/heads/main'
+        run: |
+          node -e "const fs=require('fs');const p='README.md';let r=fs.readFileSync(p,'utf8');const badge='![Coverage](https://github.com/${{ github.repository }}/actions/workflows/node.js.yml/badge.svg?branch=main&event=push)';if(!r.includes('![Coverage](')){r=r.replace('![License](https://img.shields.io/badge/license-MIT-green)',`![License](https://img.shields.io/badge/license-MIT-green)\\n${badge}`);}else{r=r.replace(/!\\[Coverage\\]\([^\n]+\)/,badge);}fs.writeFileSync(p,r);"
+
+      - name: Auto commit README updates (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'docs: refresh coverage badge link'
+          file_pattern: README.md
