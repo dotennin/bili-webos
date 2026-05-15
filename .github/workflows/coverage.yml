@@ -26,8 +26,49 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests with coverage
-        run: npx --yes c8 --reporter=text-summary --reporter=json-summary npm test
+      - name: Run tests with Node built-in coverage
+        run: |
+          mkdir -p coverage
+          node --test --experimental-test-coverage             --test-reporter=spec             --test-reporter=lcov             --test-reporter-destination=stdout             --test-reporter-destination=coverage/lcov.info             service/com.biliwebos.app.service/test/*.test.js app/src/**/*.test.mjs
+
+      - name: Generate coverage summary json from lcov
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const input = fs.readFileSync('coverage/lcov.info', 'utf8');
+          let linesFound = 0, linesHit = 0;
+          let branchesFound = 0, branchesHit = 0;
+          let functionsFound = 0, functionsHit = 0;
+
+          for (const rawLine of input.split(/
+?
+/)) {
+            if (rawLine.startsWith('DA:')) {
+              linesFound += 1;
+              const [, hits] = rawLine.split(',');
+              if (Number(hits) > 0) linesHit += 1;
+            } else if (rawLine.startsWith('FNDA:')) {
+              functionsFound += 1;
+              const hits = rawLine.slice(5).split(',')[0];
+              if (Number(hits) > 0) functionsHit += 1;
+            } else if (rawLine.startsWith('BRDA:')) {
+              branchesFound += 1;
+              const parts = rawLine.split(',');
+              const taken = parts[3];
+              if (taken !== '-' && Number(taken) > 0) branchesHit += 1;
+            }
+          }
+
+          const pct = (hit, found) => found === 0 ? 100 : Math.round((hit / found) * 10000) / 100;
+          const total = {
+            lines: { total: linesFound, covered: linesHit, skipped: 0, pct: pct(linesHit, linesFound) },
+            statements: { total: linesFound, covered: linesHit, skipped: 0, pct: pct(linesHit, linesFound) },
+            functions: { total: functionsFound, covered: functionsHit, skipped: 0, pct: pct(functionsHit, functionsFound) },
+            branches: { total: branchesFound, covered: branchesHit, skipped: 0, pct: pct(branchesHit, branchesFound) },
+          };
+
+          fs.writeFileSync('coverage/coverage-summary.json', JSON.stringify({ total }, null, 2) + '\n');
+          NODE
 
       - name: Verify coverage summary exists
         run: test -f coverage/coverage-summary.json
