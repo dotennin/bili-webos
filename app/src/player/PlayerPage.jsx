@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import shaka from 'shaka-player';
 import { getPlayUrl, getDanmaku, getVideoInfo, reportHeartbeat, getRelated, castReportProgress, castReportState } from '../api/client';
 import { formatDuration, QUALITY_MAP } from '../utils/format';
 import { storage } from '../utils/storage';
@@ -29,6 +30,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   const timeUpdateRef = useRef(null);
   const cidRef = useRef(null);
   const startTimeRef = useRef(Date.now());
+  const requestFilterRegisteredRef = useRef(false);
 
   const pendingSeekRef = useRef(null);
 
@@ -58,19 +60,39 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   // Initialize Shaka Player
   useEffect(() => {
     let mounted = true;
-    async function init() {
-      const shaka = await import('shaka-player');
+    function init() {
       shaka.polyfill.installAll();
       if (!shaka.Player.isBrowserSupported()) return;
       const player = new shaka.Player();
-      await player.attach(videoRef.current);
-      shakaRef.current = player;
-      player.addEventListener('error', (e) => console.error('Shaka error:', e.detail));
-      if (mounted) loadVideo(player);
+      configureShakaForVod(player);
+      player.attach(videoRef.current).then(() => {
+        shakaRef.current = player;
+        player.addEventListener('error', (e) => console.error('Shaka error:', e.detail));
+        if (mounted) loadVideo(player);
+      });
     }
     init();
     return () => { mounted = false; shakaRef.current?.destroy(); };
   }, []);
+
+  function configureShakaForVod(player) {
+    player.configure({
+      abr: {
+        defaultBandwidthEstimate: 2_500_000,
+        switchInterval: 1,
+        bandwidthDowngradeTarget: 0.9,
+      },
+      streaming: {
+        bufferingGoal: 3,
+        rebufferingGoal: 0.4,
+        bufferBehind: 15,
+        lowLatencyMode: true,
+        segmentPrefetchLimit: 2,
+        stallEnabled: true,
+        stallThreshold: 0.15,
+      },
+    });
+  }
 
   const loadVideo = useCallback(async (player) => {
     if (!video?.bvid && !video?.aid) return;
@@ -99,16 +121,19 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
       const blob = new Blob([mpd], { type: 'application/dash+xml' });
       const mpdUrl = URL.createObjectURL(blob);
 
-      player.getNetworkingEngine().registerRequestFilter((type, request) => {
-        if (request.uris[0].startsWith('http')) {
-          const originalUrl = new URL(request.uris[0]);
-          // Use local proxy on TV (JS Service), fallback to Mac proxy
-          const proxyBase = (typeof window !== 'undefined' && window.webOS)
-            ? 'http://127.0.0.1:7654'
-            : storage.getProxyUrl();
-          request.uris[0] = `${proxyBase}/proxy/${originalUrl.host}${originalUrl.pathname}${originalUrl.search}`;
-        }
-      });
+      if (!requestFilterRegisteredRef.current) {
+        player.getNetworkingEngine().registerRequestFilter((type, request) => {
+          if (request.uris[0].startsWith('http')) {
+            const originalUrl = new URL(request.uris[0]);
+            // Use local proxy on TV (JS Service), fallback to Mac proxy
+            const proxyBase = (typeof window !== 'undefined' && window.webOS)
+              ? 'http://127.0.0.1:7654'
+              : storage.getProxyUrl();
+            request.uris[0] = `${proxyBase}/proxy/${originalUrl.host}${originalUrl.pathname}${originalUrl.search}`;
+          }
+        });
+        requestFilterRegisteredRef.current = true;
+      }
 
       await player.load(mpdUrl);
       URL.revokeObjectURL(mpdUrl);
