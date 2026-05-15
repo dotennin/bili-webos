@@ -4,6 +4,7 @@ LG webOS 智能电视的第三方哔哩哔哩客户端。
 
 ![Platform](https://img.shields.io/badge/platform-LG%20webOS%20TV-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+![Coverage](./coverage/badge.svg)
 
 ## 项目简介
 
