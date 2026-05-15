@@ -7,7 +7,7 @@ import VideoGrid from '../components/VideoGrid';
 export default function SettingsPage({ onLogout, user, onPlayVideo }) {
   const [proxyUrl] = useState(storage.getProxyUrl());
   const [history, setHistory] = useState([]);
-  const settings = storage.getSettings();
+  const [settings, setSettings] = useState(storage.getSettings());
 
   React.useEffect(() => {
     if (!user) return;
@@ -29,8 +29,9 @@ export default function SettingsPage({ onLogout, user, onPlayVideo }) {
   const { props: danmakuProps } = useFocusable({
     id: 'content-0-0', row: 0, col: 0, group: 'content',
     onSelect: () => {
-      const s = storage.getSettings();
-      storage.setSettings({ ...s, danmaku: !s.danmaku });
+      const nextSettings = { ...settings, danmaku: !settings.danmaku };
+      storage.setSettings(nextSettings);
+      setSettings(nextSettings);
     },
   });
 
