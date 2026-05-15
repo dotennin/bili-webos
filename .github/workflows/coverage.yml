@@ -1,0 +1,101 @@
+name: Coverage CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npx --yes c8 --reporter=text-summary --reporter=json-summary npm test
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: coverage/coverage-summary.json
+
+      - name: Build coverage markdown
+        id: coverage
+        run: |
+          LINES=$(node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')); process.stdout.write(String(s.total.lines.pct));")
+          STATEMENTS=$(node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')); process.stdout.write(String(s.total.statements.pct));")
+          FUNCTIONS=$(node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')); process.stdout.write(String(s.total.functions.pct));")
+          BRANCHES=$(node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')); process.stdout.write(String(s.total.branches.pct));")
+          {
+            echo "body<<'EOF'"
+            echo "## Coverage Report"
+            echo ""
+            echo "| Metric | Coverage |"
+            echo "|---|---:|"
+            echo "| Lines | ${LINES}% |"
+            echo "| Statements | ${STATEMENTS}% |"
+            echo "| Functions | ${FUNCTIONS}% |"
+            echo "| Branches | ${BRANCHES}% |"
+            echo ""
+            echo "Coverage summary artifact: \\`coverage/coverage-summary.json\\`"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Comment PR coverage
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          recreate: true
+          message: ${{ steps.coverage.outputs.body }}
+
+      - name: Checkout document branch
+        if: github.ref == 'refs/heads/main'
+        uses: actions/checkout@v4
+        with:
+          ref: document
+          path: document-branch
+
+      - name: Write coverage files to document branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p document-branch/coverage
+          cp coverage/coverage-summary.json document-branch/coverage/coverage-summary.json
+          node <<'NODE'
+          const fs = require('fs');
+          const summary = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
+          const pct = Number(summary.total.lines.pct || 0);
+          const color = pct >= 90 ? 'brightgreen' : pct >= 80 ? 'green' : pct >= 70 ? 'yellowgreen' : pct >= 60 ? 'yellow' : pct >= 50 ? 'orange' : 'red';
+          const badge = { schemaVersion: 1, label: 'coverage', message: `${pct}%`, color };
+          fs.mkdirSync('document-branch/badges', { recursive: true });
+          fs.writeFileSync('document-branch/badges/coverage.json', JSON.stringify(badge, null, 2) + '\n');
+          NODE
+
+      - name: Commit and push document branch updates
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd document-branch
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add coverage/coverage-summary.json badges/coverage.json
+          if git diff --cached --quiet; then
+            echo "No coverage changes to commit"
+            exit 0
+          fi
+          git commit -m "chore(ci): update coverage artifacts"
+          git push origin document
