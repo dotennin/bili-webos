@@ -10,8 +10,14 @@ const PASSPORT_HOST = 'passport.bilibili.com';
 const SERVICE_URI = 'luna://com.biliwebos.app.service/';
 
 // Detect if running on webOS with Luna service available
+function hasPalmServiceBridge() {
+  if (typeof window === 'undefined') return false;
+  if (typeof window.PalmServiceBridge !== 'undefined') return true;
+  return !!(window.PalmSystem && typeof window.PalmSystem.serviceBridge === 'function');
+}
+
 function hasLunaService() {
-  return typeof window !== 'undefined' && typeof window.webOS !== 'undefined' && window.webOS.service;
+  return typeof window !== 'undefined' && typeof window.webOS !== 'undefined' && window.webOS.service && hasPalmServiceBridge();
 }
 
 // Luna service fetch (on TV)
@@ -80,13 +86,20 @@ async function smartFetch(host, path, options) {
   var opts = options || {};
 
   if (hasLunaService()) {
-    var res = await lunaFetch(url, opts);
-    if (!res.returnValue) throw new Error(res.error);
-    // Parse JSON body if applicable
-    if (res.body) {
-      try { return JSON.parse(res.body); } catch(e) { return res; }
+    try {
+      var res = await lunaFetch(url, opts);
+      if (!res.returnValue) throw new Error(res.error);
+      // Parse JSON body if applicable
+      if (res.body) {
+        try { return JSON.parse(res.body); } catch(e) { return res; }
+      }
+      return res;
+    } catch (err) {
+      // Browser dev may expose webOS.service but lack PalmServiceBridge; fallback to proxy.
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[api] Luna fetch failed, fallback to proxy:', err && err.message ? err.message : err);
+      }
     }
-    return res;
   }
 
   // Fallback to proxy
