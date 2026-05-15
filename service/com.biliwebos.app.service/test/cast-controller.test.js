@@ -141,3 +141,19 @@ test('ack/network/status are tracked and invalid state does not emit playstate',
   assert.equal(sent.length, 1);
   assert.equal(sent[0].action, 'OnProgress');
 });
+
+
+test('gracefully handles invalid json and malformed playurl', () => {
+  const controller = new CastController();
+
+  const playResult = controller.handleCommand('s1', 'Play', '{bad-json');
+  assert.equal(playResult, null);
+
+  const malformed = controller.handleCommand('s1', 'PlayUrl', JSON.stringify({
+    url: 'not-a-valid-url',
+  }));
+  assert.equal(malformed, null);
+
+  const status = controller.getStatus();
+  assert.equal(status.sessionId, 's1');
+});

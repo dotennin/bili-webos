@@ -148,3 +148,22 @@ test('NvaSession handles reply frames, ping timer, and socket lifecycle events',
   global.setInterval = originalSetInterval;
   global.clearInterval = originalClearInterval;
 });
+
+
+test('sendBuffer is a no-op after session is closed', () => {
+  const { EventEmitter } = require('node:events');
+  const { NvaSession } = require('../cast/nvaSession');
+
+  class FakeSocket extends EventEmitter {
+    constructor() { super(); this.written = []; this.destroyed = false; }
+    write(buf) { this.written.push(buf); }
+    destroy() { this.destroyed = true; }
+  }
+
+  const socket = new FakeSocket();
+  const session = new NvaSession('s3', socket);
+  session.close();
+  session.sendBuffer(Buffer.from([0x01]));
+
+  assert.equal(socket.written.length, 0);
+});
