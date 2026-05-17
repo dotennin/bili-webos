@@ -11,12 +11,21 @@ export default defineConfig({
     assetsInlineLimit: 4096,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'shaka': ['shaka-player'],
-          'react-vendor': ['react', 'react-dom'],
-        }
-      }
-    }
+        manualChunks(id) {
+          if (id.includes('node_modules/shaka-player')) {
+            return 'shaka';
+          }
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/scheduler/')
+          ) {
+            return 'react-vendor';
+          }
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     host: '0.0.0.0',

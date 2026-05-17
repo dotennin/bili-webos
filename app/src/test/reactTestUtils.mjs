@@ -1,7 +1,9 @@
-import React from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
+import React, { act } from 'react';
+import TestRenderer from 'react-test-renderer';
 
 export { React, TestRenderer, act };
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 export async function render(element, options) {
   let renderer;
