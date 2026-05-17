@@ -41,6 +41,7 @@ React 19 is not the source of the local development server in this architecture.
 - Preserve the existing route shape `/proxy/:host/:path*` so the app-side fallback does not need a broad API rewrite.
 - Prefer Vite's proxy stack and its underlying `http-proxy` streaming behavior for request forwarding, large responses, and Range support.
 - Keep custom logic limited to request parsing and response hooks such as cookie bridging, rather than reimplementing byte streaming with manual buffering for normal proxy traffic.
+- The current Vite proxy surface in this repo exposes `rewrite`, `configure`, and `bypass`, but not a first-class dynamic `router` field. Plan around regex matching plus explicit path parsing, or use a small `configureServer` plugin that still delegates transport to `http-proxy`.
 - If route parsing for the dynamic `:host` segment cannot be expressed cleanly through the Vite proxy configuration alone, use a small Vite plugin or middleware that still delegates transport to `http-proxy` instead of hand-rolled `https.request` response piping.
 
 ### App Fetch Flow
@@ -60,11 +61,13 @@ The Vite-hosted proxy must preserve the development behaviors the app relies on 
 - Forward request method, body, and relevant headers.
 - Surface upstream `Set-Cookie` information through the existing `X-Set-Cookie` bridge expected by the client.
 - Preserve cookie capture behavior even on non-200 responses where upstream auth flows may still set cookies.
+- Mark proxied auth-sensitive responses as non-cacheable so browser development does not reuse stale `X-Set-Cookie` bridge values.
 - Return JSON and text responses without changing the client contract.
 - Pass through binary and media responses.
 - Preserve relevant range and streaming-related headers such as `Content-Range`, `Content-Length`, and `Accept-Ranges` where present.
 - Preserve the CDN-specific request-header behavior from the current proxy, including avoiding problematic `Origin` forwarding for video/CDN hosts.
 - Preserve playlist rewriting behavior for HLS responses if browser development still relies on it.
+- If HLS playlist rewriting is needed, preserve the current sequence from `proxy/server.js`: decompress textual playlist responses when necessary, rewrite playlist body contents, then return corrected headers and body. Do not treat `.m3u8` responses as opaque pass-through if the client depends on rewritten segment URLs.
 
 ## Code Changes
 
@@ -72,6 +75,7 @@ The Vite-hosted proxy must preserve the development behaviors the app relies on 
 
 - Modify `app/vite.config.js` to register a development-only proxy handler.
 - Keep existing build output behavior unchanged.
+- Ensure proxied development responses that participate in auth state bridging return `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate` or an equivalent no-cache policy.
 
 ### API Client
 
@@ -100,7 +104,9 @@ The Vite-hosted proxy must preserve the development behaviors the app relies on 
 - The current frontend tests use `react-test-renderer` heavily through `app/src/test/reactTestUtils.mjs`.
 - React 19 deprecates `react-test-renderer`, so the upgrade plan must include an explicit compatibility checkpoint for the current Bun test environment and these renderer-based tests.
 - If the existing tests continue to run acceptably under React 19, document the deprecation and defer migration.
+- Treat hard runtime failures in `react-test-renderer` as a realistic outcome, not just warning noise.
 - If the suite becomes noisy or unstable, add a bounded migration task for the affected tests rather than attempting an unplanned whole-suite rewrite in the same change.
+- Be prepared to adjust `app/src/test/reactTestUtils.mjs` or migrate the most fragile renderer-based tests first if React 19 and Bun expose renderer-internal incompatibilities.
 
 ## Testing Strategy
 
@@ -120,6 +126,8 @@ Before implementation changes, add or adjust tests around the browser fallback p
 - Cookie propagation from upstream responses to local auth storage.
 - Binary and media response handling during browser development.
 - Large video or segment responses hanging due to incorrect buffering or incomplete Range forwarding.
+- HLS playlist breakage if decompression and body rewriting are not faithfully preserved.
+- Stale auth state in browser development if proxied cookie bridge responses are cached.
 - React 19 compatibility with the current test and build tooling.
 - Accidental removal of memoization that is behaviorally significant.
 - Compiler-specific regressions if React Compiler is introduced in the same change set.
