@@ -43,6 +43,7 @@ afterEach(() => {
 describe('rendered components', () => {
   test('FocusableTab wires active state and onSelect', async () => {
     const { default: FocusableTab } = await importComponent('./FocusableTab.jsx');
+    const onSelect = () => focusCalls.push('selected');
     const renderer = await render(
       React.createElement(FocusableTab, {
         id: 'tab-1',
@@ -51,13 +52,14 @@ describe('rendered components', () => {
         group: 'content',
         label: '推荐',
         active: true,
-        onSelect: () => focusCalls.push('selected'),
+        onSelect,
       }),
     );
 
     const tab = renderer.root.findByType('div');
     expect(tab.props.className).toBe('tab active');
     expect(textOf(tab)).toBe('推荐');
+    expect(focusConfigs.at(-1).onSelect).toBe(onSelect);
     tab.props.onClick({ preventDefault() {} });
     expect(focusCalls).toEqual(['selected']);
     expect(focusConfigs[0]).toMatchObject({ id: 'tab-1', row: 1, col: 2, group: 'content' });
@@ -65,6 +67,7 @@ describe('rendered components', () => {
 
   test('OSKey applies wide class for action keys and calls onPress', async () => {
     const { default: OSKey } = await importComponent('./OSKey.jsx');
+    const onPress = () => focusCalls.push('press');
     const renderer = await render(
       React.createElement(OSKey, {
         id: 'osk-3-8',
@@ -73,18 +76,20 @@ describe('rendered components', () => {
         group: 'content',
         label: '搜索',
         isAction: true,
-        onPress: () => focusCalls.push('press'),
+        onPress,
       }),
     );
 
     const key = renderer.root.findByType('div');
     expect(key.props.className).toBe('osk-key wide');
+    expect(focusConfigs.at(-1).onSelect).toBe(onPress);
     key.props.onClick({ preventDefault() {} });
     expect(focusCalls).toEqual(['press']);
   });
 
   test('SidebarItem renders icon/label and active state', async () => {
     const { default: SidebarItem } = await importComponent('./SidebarItem.jsx');
+    const onSelect = () => focusCalls.push('sidebar');
     const renderer = await render(
       React.createElement(SidebarItem, {
         id: 'sidebar-1-0',
@@ -92,13 +97,14 @@ describe('rendered components', () => {
         icon: '🔥',
         label: '热门',
         active: true,
-        onSelect: () => focusCalls.push('sidebar'),
+        onSelect,
       }),
     );
 
     const item = renderer.root.findByProps({ className: 'sidebar-item active' });
     expect(textOf(item)).toContain('🔥');
     expect(textOf(item)).toContain('热门');
+    expect(focusConfigs.at(-1).onSelect).toBe(onSelect);
     item.props.onClick({ preventDefault() {} });
     expect(focusCalls).toEqual(['sidebar']);
   });

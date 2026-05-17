@@ -1,13 +1,9 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import { useFocusable } from '../hooks/useFocus';
 
 export default React.memo(function SidebarItem({ id, row, label, icon, active, onSelect }) {
-  const handleSelect = useCallback(() => {
-    onSelect?.();
-  }, [onSelect]);
-
   const { props } = useFocusable({
-    id, row, col: 0, group: 'sidebar', onSelect: handleSelect,
+    id, row, col: 0, group: 'sidebar', onSelect,
   });
 
   return (
