@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import { useFocusable } from '../hooks/useFocus';
 import { formatCount, formatDuration, formatTime } from '../utils/format';
 import { buildProxyUrl } from '../utils/proxy';
@@ -17,12 +17,8 @@ function proxyImg(url) {
 }
 
 export default React.memo(function VideoCard({ video, focusId, row, col, group, onSelect }) {
-  const handleSelect = useCallback(() => {
-    onSelect?.(video);
-  }, [video, onSelect]);
-
   const { props } = useFocusable({
-    id: focusId, row, col, group, onSelect: handleSelect,
+    id: focusId, row, col, group, onSelect: () => onSelect?.(video),
   });
 
   const thumbUrl = proxyImg(video.pic || video.cover || '');

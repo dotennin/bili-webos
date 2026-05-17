@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 
 // Danmaku rendering layer over video
 export default function DanmakuLayer({ danmakus, currentTime, enabled }) {

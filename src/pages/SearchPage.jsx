@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { searchVideo } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
 import OSKey from '../components/OSKey';
@@ -16,7 +16,7 @@ export default function SearchPage({ onPlayVideo }) {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const doSearch = useCallback(async () => {
+  async function doSearch() {
     if (!keyword.trim()) return;
     setLoading(true);
     setSearched(true);
@@ -36,7 +36,7 @@ export default function SearchPage({ onPlayVideo }) {
       console.error('Search error:', err);
     }
     setLoading(false);
-  }, [keyword]);
+  }
 
   return (
     <div className="search-container">

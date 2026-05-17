@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import VideoCard from './VideoCard';
 
 // Use transform:translateY for scrolling instead of overflow:scroll
