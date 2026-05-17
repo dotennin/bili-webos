@@ -624,7 +624,7 @@ describe('LivePlayerPage', () => {
     await interact(() => customKeyHandler(event('MediaPlayPause')));
     await interact(() => customKeyHandler(event('MediaFastForward', 417)));
     await interact(() => customKeyHandler(event('ArrowDown')));
-    timers.at(-1).fn();
+    await interact(() => timers.at(-1).fn());
     expect(JSON.stringify(renderer.toJSON())).not.toContain('HLS 直播间');
 
     await act(async () => {
