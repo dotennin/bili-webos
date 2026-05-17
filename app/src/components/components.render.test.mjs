@@ -3,11 +3,9 @@ import { React, render, textOf } from '../test/reactTestUtils.mjs';
 
 let focusCalls;
 let focusConfigs;
-let proxyImpl;
+let originalURL;
 const hooksPath = new URL('../hooks/useFocus.js', import.meta.url).pathname;
-const proxyPath = new URL('../utils/proxy.js', import.meta.url).pathname;
 const realHooks = await import(hooksPath);
-const realProxy = await import(proxyPath);
 
 async function importComponent(pathname) {
   return import(`${pathname}?t=${Date.now()}-${Math.random()}`);
@@ -16,7 +14,7 @@ async function importComponent(pathname) {
 beforeEach(() => {
   focusCalls = [];
   focusConfigs = [];
-  proxyImpl = (url) => `proxy:${url}`;
+  originalURL = globalThis.URL;
 
   mock.module(hooksPath, () => ({
     ...realHooks,
@@ -35,17 +33,11 @@ beforeEach(() => {
       };
     },
   }));
-
-  mock.module(proxyPath, () => ({
-    ...realProxy,
-    buildProxyUrl(url) {
-      return proxyImpl(url);
-    },
-  }));
 });
 
 afterEach(() => {
   mock.restore();
+  globalThis.URL = originalURL;
 });
 
 describe('rendered components', () => {
@@ -134,7 +126,7 @@ describe('rendered components', () => {
     );
 
     const img = renderer.root.findByType('img');
-    expect(img.props.src).toContain('proxy:https://i0.hdslb.com/test.jpg@672w_420h_1c.webp');
+    expect(img.props.src).toBe('http://127.0.0.1:7654/proxy/i0.hdslb.com/test.jpg@672w_420h_1c.webp');
     expect(textOf(renderer.toJSON())).toContain('测试视频');
     expect(textOf(renderer.toJSON())).toContain('UP 主');
     expect(textOf(renderer.toJSON())).toContain('播放');
@@ -145,8 +137,10 @@ describe('rendered components', () => {
   });
 
   test('VideoCard falls back to original url when proxy rewrite throws', async () => {
-    proxyImpl = () => {
-      throw new Error('bad proxy');
+    globalThis.URL = class BrokenURL {
+      constructor() {
+        throw new Error('bad proxy');
+      }
     };
     const { default: VideoCard } = await importComponent('./VideoCard.jsx');
     const renderer = await render(
