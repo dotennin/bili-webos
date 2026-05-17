@@ -3,7 +3,12 @@
 // Also starts a local HTTP proxy for video segments and images
 // Node.js v16.19.1 on webOS TV 24
 
-var Service = require('webos-service');
+var Service;
+try {
+  Service = require('webos-service');
+} catch (e) {
+  Service = require('./webos-service-stub');
+}
 var https = require('https');
 var http = require('http');
 var zlib = require('zlib');
@@ -426,3 +431,22 @@ var keepAlive;
 service.activityManager.create('keepAlive', function (activity) {
   keepAlive = activity;
 });
+
+module.exports = {
+  service: service,
+  localServer: localServer,
+  castLanServer: castLanServer,
+  castController: castController,
+  castProfile: castProfile,
+  __testing: {
+    getStoredCookies: function () { return storedCookies; },
+    getCastConfig: function () { return castConfig; },
+    getPendingCastEvent: function () { return pendingCastEvent; },
+    getCastSubscribers: function () { return castSubscribers.slice(); },
+    getLocalProxyPort: function () { return LOCAL_PROXY_PORT; },
+    notifyCastSubscribers: notifyCastSubscribers,
+    launchAppForCast: launchAppForCast,
+    saveCookies: saveCookies,
+    saveCastConfig: saveCastConfig,
+  },
+};
