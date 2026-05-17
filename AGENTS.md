@@ -5,11 +5,8 @@
 # Build + deploy (one command)
 bash build.sh
 
-# Dev mode (browser preview, needs proxy)
+# Dev mode (browser preview, Vite dev server includes /proxy)
 cd app && bun run dev
-
-# Start Mac proxy (only for browser dev, not needed on TV)
-cd proxy && node server.js
 
 # Remote debug TV app
 bun --env-file=.env tools/debug.mjs
@@ -17,7 +14,7 @@ bun --env-file=.env tools/debug.mjs
 # Take screenshot from TV
 bun --env-file=.env tools/screenshot.mjs
 
-# Run API tests (proxy must be running)
+# Run API tests (Vite dev server must be running)
 bun tools/test-e2e.mjs
 
 # Run unit tests
@@ -51,16 +48,13 @@ bili_webos/
 │   │   └── utils/                # storage.js, format.js
 │   ├── public/webOSTVjs-1.2.13/  # webOS Luna bus library
 │   ├── webos-meta/               # appinfo.json, icons
-│   └── vite.config.js            # target: chrome108
+│   └── vite.config.js            # target: chrome108, dev /proxy handler
 │
 ├── service/                      # TV Background Service (Node.js v16)
 │   └── com.biliwebos.app.service/
 │       ├── service.js            # Luna methods + local HTTP proxy (:7654)
 │       ├── services.json
 │       └── package.json
-│
-├── proxy/                        # Mac proxy (dev only, optional)
-│   └── server.js
 │
 ├── tools/                        # Dev tools
 │   ├── deploy.mjs                # SSH deploy via ssh2
@@ -81,5 +75,5 @@ On TV:  Web App ──Luna bus──▶ JS Service (Node.js) ──HTTPS──�
                   ◀─────────
         Video/Img ──HTTP────▶ Local Proxy (:7654) ──HTTPS──▶ B站 CDN
 
-In Dev: Web App ──HTTP──────▶ Mac Proxy (:9527) ──HTTPS──▶ B站 API/CDN
+In Dev: Web App ──HTTP──────▶ Vite Dev Server (/proxy) ──HTTPS──▶ B站 API/CDN
 ```

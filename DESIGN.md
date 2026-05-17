@@ -35,6 +35,14 @@
 | 图片（封面缩略图） | `<img>` → HTTP → Local Proxy(:7654) → HTTPS → B站图片 CDN | 需要 Referer 头 |
 | 直播流（HLS） | `<video>` → HTTP → Local Proxy(:7654) → HTTPS → 直播 CDN | 同上 |
 
+### 浏览器开发模式
+
+浏览器开发不再依赖单独的 `proxy/` 进程。当前流程是：
+
+| 请求类型 | 通信路径 | 原因 |
+|---------|---------|------|
+| 本地浏览器开发 API / 图片 / 流媒体请求 | Web App → Vite Dev Server `/proxy/*` → HTTPS → B站 API/CDN | 保持单进程开发，并复用与 TV 代理相同的头部与 HLS 重写策略 |
+
 ### 为什么需要两种通信
 
 - **Luna bus**：适合 JSON 数据交换，支持异步回调，但无法直接给 `<video>` 或 `<img>` 标签提供数据

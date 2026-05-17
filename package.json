@@ -9,9 +9,7 @@
     "react-test-renderer": "18.3.1"
   },
   "scripts": {
-    "dev": "bash -lc 'bun run dev:proxy & bun run dev:app & wait'",
-    "dev:app": "VITE_USE_PROXY=true bun --cwd app run dev",
-    "dev:proxy": "bun --cwd proxy run dev",
+    "dev": "bun --cwd app run dev",
     "build": "bun --cwd app run build",
     "test": "bun test service/com.biliwebos.app.service/test/*.test.js app/src/**/*.test.mjs",
     "test:coverage": "bun test --preload ./tools/coverage-preload.mjs --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage",

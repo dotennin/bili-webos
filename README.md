@@ -89,7 +89,7 @@ bash build.sh
 ### 开发模式
 
 ```bash
-# 一键启动开发模式（同时启动 proxy + app dev server）
+# 一键启动开发模式（Vite dev server 内置 /proxy）
 bun run dev
 # 浏览器打开 http://localhost:5173
 ```
@@ -100,7 +100,7 @@ bun run dev
 # 运行单元测试（直播流选择 + HLS 播放列表重写）
 bun test
 
-# 运行代理联调测试（需要先启动 proxy）
+# 运行代理联调测试（需要先启动 Vite dev server）
 bun tools/test-e2e.mjs
 ```
 
@@ -125,7 +125,6 @@ bili-webos/
 │       ├── cast/hlsPlaylist.js   # HLS 播放列表重写，保持分片继续走本地代理
 │       └── test/                 # service 侧单元测试
 │
-├── proxy/                        # 开发用备用代理（含 m3u8 重写）
 ├── tools/                        # 部署/调试/测试工具
 ├── build.sh                      # 一键构建部署
 ├── CLAUDE.md                     # 开发指南
