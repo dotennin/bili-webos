@@ -3,7 +3,7 @@ import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { rewriteHlsPlaylist } = require('../../service/com.biliwebos.app.service/cast/hlsPlaylist.js');
+const { rewriteHlsPlaylist } = require('../../webos/service/com.biliwebos.app.service/cast/hlsPlaylist.js');
 
 const ALLOWED_HOSTS = [
   'api.bilibili.com',

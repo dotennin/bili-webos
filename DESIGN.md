@@ -157,6 +157,6 @@ content-1-0   content-1-1
 | src/api/client.js | 所有 API 封装，Luna/Proxy 双模式 |
 | src/api/wbi.js | WBI 签名算法 + MD5 实现 |
 | src/hooks/useFocus.js | 焦点管理（零渲染，纯 DOM） |
-| service/.../service.js | Luna 方法 + 本地 HTTP 代理 |
+| webos/service/.../service.js | Luna 方法 + 本地 HTTP 代理 |
 | tools/deploy.mjs | SSH 部署（绕过 ares-cli 兼容问题） |
 | tools/debug.mjs | CDP 远程调试（SSH 隧道） |

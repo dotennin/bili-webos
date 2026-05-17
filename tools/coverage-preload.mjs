@@ -6,8 +6,8 @@ const INCLUDE_PATTERNS = [
   "src/**/*.js",
   "src/**/*.mjs",
   "src/**/*.jsx",
-  "service/com.biliwebos.app.service/**/*.js",
-  "service/com.biliwebos.app.service/**/*.mjs",
+  "webos/service/com.biliwebos.app.service/**/*.js",
+  "webos/service/com.biliwebos.app.service/**/*.mjs",
 ];
 const EXCLUDE_PATTERNS = [
   /\.test\.[cm]?js$/,

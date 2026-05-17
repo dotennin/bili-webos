@@ -115,10 +115,11 @@ bili-webos/
 │   ├── player/                   # 视频/直播播放器 + 弹幕
 │   └── utils/                    # 工具函数
 ├── public/webOSTVjs-1.2.13/      # webOS Luna bus 通信库
-├── webos-meta/                   # appinfo.json + 图标
 ├── vite.config.js                # Vite + browser-dev /proxy
-├── service/                      # TV 后台服务
-│   └── com.biliwebos.app.service/
+├── webos/
+│   ├── meta/                     # appinfo.json + 图标
+│   └── service/
+│       └── com.biliwebos.app.service/
 │       ├── service.js            # API 代理 + 本地 HTTP 服务
 │       ├── cast/hlsPlaylist.js   # HLS 播放列表重写，保持分片继续走本地代理
 │       └── test/                 # service 侧单元测试

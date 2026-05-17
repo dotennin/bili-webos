@@ -46,10 +46,11 @@ bili_webos/
 │   ├── player/                   # PlayerPage (DASH), LivePlayerPage (HLS), DanmakuLayer
 │   └── utils/                    # storage.js, format.js
 ├── public/webOSTVjs-1.2.13/      # webOS Luna bus library
-├── webos-meta/                   # appinfo.json, icons
 ├── vite.config.js                # target: chrome108, dev /proxy handler
-├── service/                      # TV Background Service (Node.js v16)
-│   └── com.biliwebos.app.service/
+├── webos/
+│   ├── meta/                     # appinfo.json, icons
+│   └── service/                  # TV Background Service (Node.js v16)
+│       └── com.biliwebos.app.service/
 │       ├── service.js            # Luna methods + local HTTP proxy (:7654)
 │       ├── services.json
 │       └── package.json

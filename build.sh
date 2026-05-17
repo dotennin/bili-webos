@@ -17,9 +17,9 @@ cd "$(dirname "$0")"
 
 echo "=== [1/3] Build & Package ==="
 bun run build 2>&1 | tail -2
-cp webos-meta/* dist/
+cp webos/meta/* dist/
 cd dist
-ares-package --no-minify . ../service/com.biliwebos.app.service 2>&1 | grep -E "Success|ERR|Create"
+ares-package --no-minify . ../webos/service/com.biliwebos.app.service 2>&1 | grep -E "Success|ERR|Create"
 cd ..
 
 echo ""

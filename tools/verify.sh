@@ -8,8 +8,8 @@ PASS="${1:-4E7082}"
 
 echo "=== [1/4] Build ==="
 bun run build 2>&1 | tail -3
-cp webos-meta/* dist/
-cd dist && ares-package --no-minify . ../service/com.biliwebos.app.service 2>&1 | grep -E "Success|ERR"
+cp webos/meta/* dist/
+cd dist && ares-package --no-minify . ../webos/service/com.biliwebos.app.service 2>&1 | grep -E "Success|ERR"
 cd ..
 
 echo ""

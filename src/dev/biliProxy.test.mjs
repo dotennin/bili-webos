@@ -8,7 +8,7 @@ import {
 } from './biliProxy.js';
 
 const require = createRequire(import.meta.url);
-const { rewriteHlsPlaylist } = require('../../service/com.biliwebos.app.service/cast/hlsPlaylist.js');
+const { rewriteHlsPlaylist } = require('../../webos/service/com.biliwebos.app.service/cast/hlsPlaylist.js');
 
 afterEach(() => {
   mock.restore();
