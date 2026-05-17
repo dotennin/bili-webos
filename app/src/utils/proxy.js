@@ -1,14 +1,20 @@
-import { storage } from './storage.js';
-
 const LOCAL_PROXY_BASE = 'http://127.0.0.1:7654';
 
-export function shouldUseExternalProxy(env = import.meta.env) {
-  return env?.VITE_USE_PROXY === 'true';
+function isLocalDevLocation(location) {
+  const hostname = location?.hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1';
 }
 
 export function getProxyBase(options = {}) {
-  const { env = import.meta.env, proxyUrl = storage.getProxyUrl() } = options;
-  return shouldUseExternalProxy(env) ? proxyUrl : LOCAL_PROXY_BASE;
+  const {
+    location = typeof window !== 'undefined' ? window.location : undefined,
+  } = options;
+
+  if (isLocalDevLocation(location) && location?.origin) {
+    return location.origin.replace(/\/$/, '');
+  }
+
+  return LOCAL_PROXY_BASE;
 }
 
 export function buildProxyUrl(url, options = {}) {

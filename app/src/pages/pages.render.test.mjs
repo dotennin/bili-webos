@@ -32,7 +32,6 @@ beforeEach(() => {
   storageState = {
     auth: {},
     settings: { danmaku: true, quality: 80 },
-    proxyUrl: 'http://127.0.0.1:9527',
   };
   focusConfigs = [];
   oskKeys = [];
@@ -80,7 +79,6 @@ beforeEach(() => {
       clearAuth: () => {
         storageState.auth = null;
       },
-      getProxyUrl: () => storageState.proxyUrl,
       getSettings: () => storageState.settings,
       setSettings: (value) => {
         storageState.settings = value;
@@ -243,7 +241,7 @@ describe('page rendering', () => {
     await flush();
 
     expect(textOf(renderer.toJSON())).toContain('测试用户 的空间');
-    expect(textOf(renderer.toJSON())).toContain('代理: http://127.0.0.1:9527');
+    expect(textOf(renderer.toJSON())).not.toContain('代理:');
     expect(videoGridCalls.at(-1).videos[0]).toMatchObject({ bvid: 'BV4', progress: 20 });
 
     await interact(() => focusConfigs[0].onSelect());

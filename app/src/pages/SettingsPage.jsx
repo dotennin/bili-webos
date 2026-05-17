@@ -5,7 +5,6 @@ import { getHistory } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
 
 export default function SettingsPage({ onLogout, user, onPlayVideo }) {
-  const [proxyUrl] = useState(storage.getProxyUrl());
   const [history, setHistory] = useState([]);
   const [settings, setSettings] = useState(storage.getSettings());
 
@@ -54,11 +53,6 @@ export default function SettingsPage({ onLogout, user, onPlayVideo }) {
           退出登录
         </div>
       </div>
-
-      <div style={{ fontSize: 14, color: '#555', marginBottom: 20 }}>
-        代理: {proxyUrl}
-      </div>
-
       {user && history.length > 0 && (
         <>
           <div style={{ fontSize: 20, color: '#aaa', marginBottom: 14 }}>最近观看</div>

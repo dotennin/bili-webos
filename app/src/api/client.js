@@ -2,6 +2,7 @@
 // On webOS TV: uses Luna JS Service (no external proxy needed)
 // Fallback: uses HTTP proxy on Mac
 import { storage } from '../utils/storage';
+import { buildProxyUrl } from '../utils/proxy';
 import { getWbiKeys, signWbi } from './wbi';
 import { selectLiveStreamSource, selectLiveStreamUrl } from './liveStreamSelector';
 
@@ -52,9 +53,7 @@ function lunaFetch(url, options) {
 
 // Proxy fetch (fallback for browser dev)
 function proxyFetchRaw(url, options) {
-  var base = storage.getProxyUrl();
-  var parsed = new URL(url);
-  var proxyUrl = base + '/proxy/' + parsed.host + parsed.pathname + parsed.search;
+  var proxyUrl = buildProxyUrl(url);
 
   var headers = Object.assign({}, options.headers || {});
   if (options.contentType) {
@@ -349,8 +348,7 @@ export async function getDanmaku(cid) {
   }
 
   // Proxy fallback
-  var base = storage.getProxyUrl();
-  var proxyRes = await fetch(base + '/proxy/api.bilibili.com/x/v1/dm/list.so?oid=' + cid);
+  var proxyRes = await fetch(buildProxyUrl('https://api.bilibili.com/x/v1/dm/list.so?oid=' + cid));
   var text = await proxyRes.text();
   return parseDanmakuXml(text);
 }

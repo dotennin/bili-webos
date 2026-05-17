@@ -31,16 +31,13 @@ test('storage.remove does not throw when localStorage is unavailable', () => {
   }
 });
 
-test('auth/settings/proxy helpers roundtrip values', () => {
+test('auth/settings helpers roundtrip values', () => {
   withMockLocalStorage(() => {
     storage.setAuth({ token: 'abc' });
     expect(storage.getAuth()).toEqual({ token: 'abc' });
 
     storage.setSettings({ danmaku: false, quality: 64 });
     expect(storage.getSettings()).toEqual({ danmaku: false, quality: 64 });
-
-    storage.setProxyUrl('http://10.0.0.1:9527');
-    expect(storage.getProxyUrl()).toBe('http://10.0.0.1:9527');
 
     storage.clearAuth();
     expect(storage.getAuth()).toBeNull();
@@ -57,64 +54,16 @@ test('get returns null for invalid json and set tolerates quota errors', () => {
   });
 });
 
-test('getProxyUrl falls back to default in non-browser or localhost environments', () => {
-  withMockLocalStorage((map) => {
-    map.delete('bili_proxyUrl');
-
-    const originalWindow = globalThis.window;
-    try {
-      delete globalThis.window;
-    } catch {}
-    expect(storage.getProxyUrl()).toBe('http://127.0.0.1:9527');
-
-    globalThis.window = { location: { hostname: 'localhost' } };
-    expect(storage.getProxyUrl()).toBe('http://127.0.0.1:9527');
-
-    globalThis.window = { location: { hostname: '192.168.10.2' } };
-    expect(storage.getProxyUrl()).toBe('http://192.168.10.2:9527');
-
-    if (typeof originalWindow === 'undefined') delete globalThis.window;
-    else globalThis.window = originalWindow;
-  });
-});
-
-test('getSettings returns defaults and getProxyUrl supports env/127 localhost fallback', () => {
+test('getSettings returns defaults when missing', () => {
   withMockLocalStorage((map) => {
     map.delete('bili_settings');
-    map.delete('bili_proxyUrl');
-
     expect(storage.getSettings()).toEqual({ danmaku: true, quality: 80 });
-
-    const originalWindow = globalThis.window;
-    globalThis.window = { location: { hostname: '127.0.0.1' } };
-    expect(storage.getProxyUrl()).toBe('http://127.0.0.1:9527');
-
-    globalThis.window = { location: { hostname: '' } };
-    expect(storage.getProxyUrl()).toBe('http://127.0.0.1:9527');
-
-    if (typeof originalWindow === 'undefined') delete globalThis.window;
-    else globalThis.window = originalWindow;
   });
 });
 
-
-test('getProxyUrl prefers VITE_BILI_PROXY_URL when provided', () => {
+test('getSettings tolerates invalid stored payloads', () => {
   withMockLocalStorage((map) => {
-    map.delete('bili_proxyUrl');
-
-    const env = import.meta.env || (import.meta.env = {});
-    const originalProxy = env.VITE_BILI_PROXY_URL;
-    env.VITE_BILI_PROXY_URL = 'http://env-proxy.example:9527';
-
-    const originalWindow = globalThis.window;
-    globalThis.window = { location: { hostname: '192.168.1.7' } };
-
-    expect(storage.getProxyUrl()).toBe('http://env-proxy.example:9527');
-
-    if (typeof originalProxy === 'undefined') delete env.VITE_BILI_PROXY_URL;
-    else env.VITE_BILI_PROXY_URL = originalProxy;
-
-    if (typeof originalWindow === 'undefined') delete globalThis.window;
-    else globalThis.window = originalWindow;
+    map.set('bili_settings', '{oops');
+    expect(storage.getSettings()).toEqual({ danmaku: true, quality: 80 });
   });
 });

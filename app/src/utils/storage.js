@@ -1,23 +1,4 @@
-// Persistent storage for auth tokens and settings
 const PREFIX = 'bili_';
-
-function getDefaultProxyUrl() {
-  if (typeof window === 'undefined') {
-    return 'http://127.0.0.1:9527';
-  }
-
-  const envProxy = import.meta?.env?.VITE_BILI_PROXY_URL;
-  if (envProxy) {
-    return envProxy;
-  }
-
-  const hostname = window.location?.hostname;
-  if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://127.0.0.1:9527';
-  }
-
-  return `http://${hostname}:9527`;
-}
 
 export const storage = {
   get(key) {
@@ -52,14 +33,6 @@ export const storage = {
 
   clearAuth() {
     this.remove('auth');
-  },
-
-  getProxyUrl() {
-    return this.get('proxyUrl') || getDefaultProxyUrl();
-  },
-
-  setProxyUrl(url) {
-    this.set('proxyUrl', url);
   },
 
   getSettings() {

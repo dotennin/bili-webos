@@ -46,8 +46,7 @@ function makeStorage() {
 describe('api client integration paths', () => {
   beforeEach(() => {
     globalThis.localStorage = makeStorage();
-    localStorage.setItem('bili_proxy', 'http://127.0.0.1:9527');
-    globalThis.window = { location: { hostname: 'localhost' } };
+    globalThis.window = { location: { hostname: 'localhost', origin: 'http://localhost:5173' } };
   });
 
   afterEach(() => {
@@ -76,7 +75,7 @@ describe('api client integration paths', () => {
 
     const res = await apiFetch('/x/test', { q: 'k' });
     expect(res.data.ok).toBe(true);
-    expect(calls[0]).toContain('/proxy/api.bilibili.com/x/test?q=k');
+    expect(calls[0]).toBe('http://localhost:5173/proxy/api.bilibili.com/x/test?q=k');
 
     const auth = JSON.parse(localStorage.getItem('bili_auth'));
     expect(auth.DedeUserID).toBe('100');
