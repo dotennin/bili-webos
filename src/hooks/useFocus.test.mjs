@@ -174,7 +174,7 @@ test('initKeyboardNav handles enter, arrows, sidebar/content transitions, and ba
 test('useFocusable hook registers, focuses on hover, and selects on click', async () => {
   const mod = await loadModule();
   const { useFocusable, getCurrentFocusId } = mod;
-  const { React, render } = await import('../test/reactTestUtils.mjs');
+  const { React, render, interact } = await import('../test/reactTestUtils.mjs');
 
   const calls = [];
   function Harness() {
@@ -190,13 +190,19 @@ test('useFocusable hook registers, focuses on hover, and selects on click', asyn
 
   elements.set('content-2-1', makeElement('content-2-1'));
   const renderer = await render(React.createElement(Harness));
-  const button = renderer.root.findByType('button');
+  const button = renderer.container.querySelector('button');
 
-  button.props.onMouseEnter();
+  await interact(() => {
+    button.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: null }));
+  });
   expect(getCurrentFocusId()).toBe('content-2-1');
 
-  button.props.onClick({ preventDefault() {} });
+  await interact(() => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
   expect(calls).toEqual(['select']);
+
+  renderer.unmount();
 });
 
 test('keyboard navigation falls back across sparse grids and missing groups', async () => {

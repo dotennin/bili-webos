@@ -32,6 +32,41 @@ async function importFresh(pathname) {
   return import(`${pathname}?fixture=player-render`);
 }
 
+function applyNodeMock(element, mockNode) {
+  const descriptors = Object.getOwnPropertyDescriptors(mockNode);
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (key === '__attachElement') continue;
+    Object.defineProperty(element, key, descriptor);
+  }
+  mockNode.__attachElement?.(element);
+  return element;
+}
+
+async function renderWithNodeMock(element, createNodeMock) {
+  const doc = globalThis.__TEST_DOCUMENT__;
+  const originalCreateElement = doc.createElement.bind(doc);
+  const originalCreateElementNS = doc.createElementNS.bind(doc);
+
+  const decorate = (node, type) => {
+    const mockNode = createNodeMock?.({ type });
+    return mockNode ? applyNodeMock(node, mockNode) : node;
+  };
+
+  doc.createElement = function patchedCreateElement(tagName, options) {
+    return decorate(originalCreateElement(tagName, options), tagName);
+  };
+  doc.createElementNS = function patchedCreateElementNS(namespaceURI, qualifiedName, options) {
+    return decorate(originalCreateElementNS(namespaceURI, qualifiedName, options), qualifiedName);
+  };
+
+  try {
+    return await render(element);
+  } finally {
+    doc.createElement = originalCreateElement;
+    doc.createElementNS = originalCreateElementNS;
+  }
+}
+
 function event(key, keyCode = 0) {
   return {
     key,
@@ -88,25 +123,20 @@ beforeEach(() => {
   mpegtsPlayers = [];
 
   globalThis.window = Object.assign(eventTarget, {});
+  const domDocument = globalThis.__TEST_DOCUMENT__;
   globalThis.document = {
     querySelectorAll(selector) {
       return selector === '.related-card' ? queryCards : [];
     },
     createElement(tag) {
-      return {
-        tag,
-        className: '',
-        textContent: '',
-        style: {},
-        removed: false,
-        listeners: {},
-        addEventListener(type, handler) {
-          this.listeners[type] = handler;
-        },
-        remove() {
-          this.removed = true;
-        },
+      const element = domDocument.createElement(tag);
+      const originalRemove = element.remove.bind(element);
+      element.removed = false;
+      element.remove = () => {
+        element.removed = true;
+        originalRemove();
       };
+      return element;
     },
   };
   globalThis.setTimeout = (fn, delay) => {
@@ -246,13 +276,6 @@ afterEach(() => {
 describe('DanmakuLayer', () => {
   test('renders visible danmaku items and resets on source change', async () => {
     const { default: DanmakuLayer } = await importFresh('./DanmakuLayer.jsx');
-    const container = {
-      innerHTML: 'old',
-      appended: [],
-      appendChild(node) {
-        this.appended.push(node);
-      },
-    };
 
     const renderer = await render(
       React.createElement(DanmakuLayer, {
@@ -263,16 +286,14 @@ describe('DanmakuLayer', () => {
         currentTime: 1.1,
         enabled: true,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'div' ? container : null),
-      },
     );
+    const container = renderer.container.querySelector('.danmaku-container');
 
-    expect(container.innerHTML).toBe('');
-    expect(container.appended).toHaveLength(1);
-    expect(container.appended[0].textContent).toBe('弹幕1');
-    container.appended[0].listeners.animationend();
-    expect(container.appended[0].removed).toBe(true);
+    expect(container.children).toHaveLength(1);
+    const danmaku = container.children[0];
+    expect(danmaku.textContent).toBe('弹幕1');
+    danmaku.dispatchEvent(new Event('animationend'));
+    expect(danmaku.isConnected).toBe(false);
 
     await update(
       renderer,
@@ -294,15 +315,13 @@ describe('PlayerPage', () => {
     const onBack = mock(() => {});
     const onPlayNext = mock(() => {});
 
-    const renderer = await render(
+    const renderer = await renderWithNodeMock(
       React.createElement(PlayerPage, {
         video: { bvid: 'BV1', title: '初始标题', owner: { name: '作者' }, progress: 25, pubdate: 1710000000 },
         onBack,
         onPlayNext,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? video : null),
-      },
+      (element) => (element.type === 'video' ? video : null),
     );
     await act(async () => {
       await flush();
@@ -434,14 +453,12 @@ describe('PlayerPage', () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.jsx');
     const onBack = mock(() => {});
 
-    const noSourceRenderer = await render(
+    const noSourceRenderer = await renderWithNodeMock(
       React.createElement(PlayerPage, {
         video: { title: '无源视频' },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? createVideoMock() : null),
-      },
+      (element) => (element.type === 'video' ? createVideoMock() : null),
     );
     await act(async () => {
       await flush();
@@ -453,14 +470,12 @@ describe('PlayerPage', () => {
     });
 
     api.getVideoInfo.mockResolvedValueOnce({ data: { title: '无 CID' } });
-    const noCidRenderer = await render(
+    const noCidRenderer = await renderWithNodeMock(
       React.createElement(PlayerPage, {
         video: { bvid: 'BV-NOCID', title: '缺少 cid' },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? createVideoMock() : null),
-      },
+      (element) => (element.type === 'video' ? createVideoMock() : null),
     );
     await act(async () => {
       await flush();
@@ -473,14 +488,12 @@ describe('PlayerPage', () => {
 
     api.getPlayUrl.mockResolvedValueOnce({ data: {} });
     const noDashVideo = createVideoMock();
-    const noDashRenderer = await render(
+    const noDashRenderer = await renderWithNodeMock(
       React.createElement(PlayerPage, {
         video: { bvid: 'BV-NODASH', cid: 9, title: '无 dash' },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? noDashVideo : null),
-      },
+      (element) => (element.type === 'video' ? noDashVideo : null),
     );
     await act(async () => {
       await flush();
@@ -493,14 +506,12 @@ describe('PlayerPage', () => {
 
     shakaLoadError = new Error('boom');
     const errorVideo = createVideoMock();
-    const errorRenderer = await render(
+    const errorRenderer = await renderWithNodeMock(
       React.createElement(PlayerPage, {
         video: { bvid: 'BV-ERR', cid: 10, title: '错误视频' },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? errorVideo : null),
-      },
+      (element) => (element.type === 'video' ? errorVideo : null),
     );
     await act(async () => {
       await flush();
@@ -513,14 +524,12 @@ describe('PlayerPage', () => {
     });
 
     shakaSupported = false;
-    const unsupportedRenderer = await render(
+    const unsupportedRenderer = await renderWithNodeMock(
       React.createElement(PlayerPage, {
         video: { bvid: 'BV-UNSUPPORTED', cid: 11, title: '不支持' },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? createVideoMock() : null),
-      },
+      (element) => (element.type === 'video' ? createVideoMock() : null),
     );
     await act(async () => {
       await flush();
@@ -539,14 +548,12 @@ describe('LivePlayerPage', () => {
     const video = createVideoMock();
     const onBack = mock(() => {});
 
-    const renderer = await render(
+    const renderer = await renderWithNodeMock(
       React.createElement(LivePlayerPage, {
         room: { roomid: 9, title: '直播间', owner: { name: '主播' } },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? video : null),
-      },
+      (element) => (element.type === 'video' ? video : null),
     );
     await act(async () => {
       await flush();
@@ -585,14 +592,12 @@ describe('LivePlayerPage', () => {
     const onBack = mock(() => {});
 
     api.getLiveStreamSource.mockResolvedValueOnce({ type: 'hls', url: 'https://live.test/master.m3u8?token=1' });
-    const renderer = await render(
+    const renderer = await renderWithNodeMock(
       React.createElement(LivePlayerPage, {
         room: { roomid: 10, title: 'HLS 直播间', owner: { name: 'HLS 主播' } },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? video : null),
-      },
+      (element) => (element.type === 'video' ? video : null),
     );
     await act(async () => {
       await flush();
@@ -632,14 +637,12 @@ describe('LivePlayerPage', () => {
     });
 
     api.getLiveStreamSource.mockResolvedValueOnce(null);
-    const missingRenderer = await render(
+    const missingRenderer = await renderWithNodeMock(
       React.createElement(LivePlayerPage, {
         room: { roomid: 11, title: '缺失直播源', owner: { name: '主播' } },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? createVideoMock() : null),
-      },
+      (element) => (element.type === 'video' ? createVideoMock() : null),
     );
     await act(async () => {
       await flush();
@@ -652,14 +655,12 @@ describe('LivePlayerPage', () => {
 
     mpegtsSupported = false;
     api.getLiveStreamSource.mockResolvedValueOnce({ type: 'flv', url: 'https://live.test/fallback.flv' });
-    const unsupportedRenderer = await render(
+    const unsupportedRenderer = await renderWithNodeMock(
       React.createElement(LivePlayerPage, {
         room: { roomid: 12, title: 'FLV 不支持', owner: { name: '主播' } },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? createVideoMock() : null),
-      },
+      (element) => (element.type === 'video' ? createVideoMock() : null),
     );
     await act(async () => {
       await flush();
@@ -672,14 +673,12 @@ describe('LivePlayerPage', () => {
 
     shakaSupported = false;
     api.getLiveStreamSource.mockResolvedValueOnce({ type: 'hls', url: 'https://live.test/fail.m3u8' });
-    const shakaUnsupportedRenderer = await render(
+    const shakaUnsupportedRenderer = await renderWithNodeMock(
       React.createElement(LivePlayerPage, {
         room: { roomid: 13, title: 'HLS 不支持', owner: { name: '主播' } },
         onBack,
       }),
-      {
-        createNodeMock: (element) => (element.type === 'video' ? createVideoMock() : null),
-      },
+      (element) => (element.type === 'video' ? createVideoMock() : null),
     );
     await act(async () => {
       await flush();

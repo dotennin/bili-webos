@@ -56,13 +56,14 @@ describe('rendered components', () => {
       }),
     );
 
-    const tab = renderer.root.findByType('div');
-    expect(tab.props.className).toBe('tab active');
+    const tab = renderer.container.querySelector('div');
+    expect(tab.className).toBe('tab active');
     expect(textOf(tab)).toBe('推荐');
     expect(focusConfigs.at(-1).onSelect).toBe(onSelect);
-    tab.props.onClick({ preventDefault() {} });
+    tab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(focusCalls).toEqual(['selected']);
     expect(focusConfigs[0]).toMatchObject({ id: 'tab-1', row: 1, col: 2, group: 'content' });
+    renderer.unmount();
   });
 
   test('OSKey applies wide class for action keys and calls onPress', async () => {
@@ -80,11 +81,12 @@ describe('rendered components', () => {
       }),
     );
 
-    const key = renderer.root.findByType('div');
-    expect(key.props.className).toBe('osk-key wide');
+    const key = renderer.container.querySelector('div');
+    expect(key.className).toBe('osk-key wide');
     expect(focusConfigs.at(-1).onSelect).toBe(onPress);
-    key.props.onClick({ preventDefault() {} });
+    key.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(focusCalls).toEqual(['press']);
+    renderer.unmount();
   });
 
   test('SidebarItem renders icon/label and active state', async () => {
@@ -101,12 +103,13 @@ describe('rendered components', () => {
       }),
     );
 
-    const item = renderer.root.findByProps({ className: 'sidebar-item active' });
+    const item = renderer.container.querySelector('.sidebar-item.active');
     expect(textOf(item)).toContain('🔥');
     expect(textOf(item)).toContain('热门');
     expect(focusConfigs.at(-1).onSelect).toBe(onSelect);
-    item.props.onClick({ preventDefault() {} });
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(focusCalls).toEqual(['sidebar']);
+    renderer.unmount();
   });
 
   test('VideoCard formats metadata, proxies thumbnails, and shows progress', async () => {
@@ -131,15 +134,16 @@ describe('rendered components', () => {
       }),
     );
 
-    const img = renderer.root.findByType('img');
-    expect(img.props.src).toBe('http://127.0.0.1:7654/proxy/i0.hdslb.com/test.jpg@672w_420h_1c.webp');
+    const img = renderer.container.querySelector('img');
+    expect(img.getAttribute('src')).toMatch(/\/proxy\/i0\.hdslb\.com\/test\.jpg@672w_420h_1c\.webp$/);
     expect(textOf(renderer.toJSON())).toContain('测试视频');
     expect(textOf(renderer.toJSON())).toContain('UP 主');
     expect(textOf(renderer.toJSON())).toContain('播放');
 
-    const card = renderer.root.findByProps({ className: 'video-card' });
-    card.props.onClick({ preventDefault() {} });
+    const card = renderer.container.querySelector('.video-card');
+    card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(focusCalls).toEqual(['BV1']);
+    renderer.unmount();
   });
 
   test('VideoCard falls back to original url when proxy rewrite throws', async () => {
@@ -159,7 +163,8 @@ describe('rendered components', () => {
       }),
     );
 
-    expect(renderer.root.findByType('img').props.src).toBe('https://example.com/cover.jpg');
+    expect(renderer.container.querySelector('img').getAttribute('src')).toBe('https://example.com/cover.jpg');
+    renderer.unmount();
   });
 
   test('VideoCard supports play count metadata and empty thumbnail state', async () => {
@@ -174,15 +179,17 @@ describe('rendered components', () => {
       }),
     );
 
-    expect(renderer.root.findAllByType('img')).toHaveLength(0);
+    expect(renderer.container.querySelectorAll('img')).toHaveLength(0);
     expect(textOf(renderer.toJSON())).toContain('仅播放数');
     expect(textOf(renderer.toJSON())).toContain('播放');
+    renderer.unmount();
   });
 
   test('VideoGrid renders empty state and mapped VideoCard props', async () => {
     const { default: VideoGrid } = await importComponent('./VideoGrid.jsx');
     const emptyRenderer = await render(React.createElement(VideoGrid, { videos: [] }));
     expect(textOf(emptyRenderer.toJSON())).toContain('暂无内容');
+    emptyRenderer.unmount();
 
     const selectCalls = [];
     const gridRenderer = await render(
@@ -200,12 +207,13 @@ describe('rendered components', () => {
       }),
     );
 
-    const cards = gridRenderer.root.findAllByProps({ className: 'video-card' });
+    const cards = Array.from(gridRenderer.container.querySelectorAll('.video-card'));
     expect(cards).toHaveLength(3);
-    expect(cards[0].props['data-focus-id']).toBe('results-4-0');
-    expect(cards[1].props['data-focus-id']).toBe('results-4-1');
-    expect(cards[2].props['data-focus-id']).toBe('results-5-0');
-    cards[2].props.onClick({ preventDefault() {} });
+    expect(cards[0].getAttribute('data-focus-id')).toBe('results-4-0');
+    expect(cards[1].getAttribute('data-focus-id')).toBe('results-4-1');
+    expect(cards[2].getAttribute('data-focus-id')).toBe('results-5-0');
+    cards[2].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(selectCalls).toEqual(['三']);
+    gridRenderer.unmount();
   });
 });

@@ -15,8 +15,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "6.0.2",
+    "happy-dom": "^20.9.0",
     "http-proxy": "1.18.1",
-    "react-test-renderer": "19.2.6",
     "vite": "8.0.13"
   },
   "scripts": {

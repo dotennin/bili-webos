@@ -11,4 +11,6 @@ test('reactTestUtils render/update smoke test', async () => {
 
   await update(renderer, React.createElement(Counter, { count: 2 }));
   expect(textOf(renderer.toJSON())).toBe('count:2');
+
+  renderer.unmount();
 });
