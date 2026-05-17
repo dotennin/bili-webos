@@ -118,8 +118,8 @@ content-1-0   content-1-1
 
 | 层 | 技术 | 版本 |
 |---|------|------|
-| 前端框架 | React | 18.3 |
-| 构建工具 | Vite | 6.x |
+| 前端框架 | React | 19.2 |
+| 构建工具 | Vite | 8.x |
 | 视频播放 | Shaka Player | 4.12 |
 | QR码 | qrcode | 1.5 |
 | TV Service | webos-service (Node.js) | v16.20.2 |
@@ -154,9 +154,9 @@ content-1-0   content-1-1
 
 | 文件 | 职责 |
 |------|------|
-| app/src/api/client.js | 所有 API 封装，Luna/Proxy 双模式 |
-| app/src/api/wbi.js | WBI 签名算法 + MD5 实现 |
-| app/src/hooks/useFocus.js | 焦点管理（零渲染，纯 DOM） |
+| src/api/client.js | 所有 API 封装，Luna/Proxy 双模式 |
+| src/api/wbi.js | WBI 签名算法 + MD5 实现 |
+| src/hooks/useFocus.js | 焦点管理（零渲染，纯 DOM） |
 | service/.../service.js | Luna 方法 + 本地 HTTP 代理 |
 | tools/deploy.mjs | SSH 部署（绕过 ares-cli 兼容问题） |
 | tools/debug.mjs | CDP 远程调试（SSH 隧道） |

@@ -3,9 +3,9 @@ import { pathToFileURL } from "node:url";
 
 const PROJECT_ROOT = path.resolve(import.meta.dir, "..");
 const INCLUDE_PATTERNS = [
-  "app/src/**/*.js",
-  "app/src/**/*.mjs",
-  "app/src/**/*.jsx",
+  "src/**/*.js",
+  "src/**/*.mjs",
+  "src/**/*.jsx",
   "service/com.biliwebos.app.service/**/*.js",
   "service/com.biliwebos.app.service/**/*.mjs",
 ];
@@ -34,4 +34,3 @@ for (const file of coverageImports) {
     console.warn(`[coverage-preload] skip ${file}: ${error.message}`);
   }
 }
-

@@ -75,7 +75,6 @@ cd bili-webos
 
 # 2. 安装依赖
 bun install
-cd app && bun install && cd ..
 
 # 3. 安装 webOS CLI（如果没有）
 bun add -g @webos-tools/cli
@@ -108,17 +107,16 @@ bun tools/test-e2e.mjs
 
 ```
 bili-webos/
-├── app/                          # 前端 React 应用
-│   ├── src/
-│   │   ├── api/                  # B站 API 封装、WBI 签名、直播流选择
-│   │   ├── hooks/useFocus.js     # 电视遥控器焦点导航
-│   │   ├── components/           # 视频卡片、侧边栏、键盘
-│   │   ├── pages/                # 各页面
-│   │   ├── player/               # 视频/直播播放器 + 弹幕
-│   │   └── utils/                # 工具函数
-│   ├── public/webOSTVjs-1.2.13/  # webOS Luna bus 通信库
-│   └── webos-meta/               # appinfo.json + 图标
-│
+├── src/
+│   ├── api/                      # B站 API 封装、WBI 签名、直播流选择
+│   ├── hooks/useFocus.js         # 电视遥控器焦点导航
+│   ├── components/               # 视频卡片、侧边栏、键盘
+│   ├── pages/                    # 各页面
+│   ├── player/                   # 视频/直播播放器 + 弹幕
+│   └── utils/                    # 工具函数
+├── public/webOSTVjs-1.2.13/      # webOS Luna bus 通信库
+├── webos-meta/                   # appinfo.json + 图标
+├── vite.config.js                # Vite + browser-dev /proxy
 ├── service/                      # TV 后台服务
 │   └── com.biliwebos.app.service/
 │       ├── service.js            # API 代理 + 本地 HTTP 服务
@@ -151,7 +149,7 @@ bili-webos/
 
 ## 技术栈
 
-- **前端**: React 18 + Vite 6
+- **前端**: React 19 + Vite 8
 - **视频**: Shaka Player (DASH)
 - **直播**: `mpegts.js` (HTTP-FLV) + HLS fallback
 - **TV Service**: Node.js v16 (webOS 内置)

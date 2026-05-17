@@ -1,6 +1,6 @@
 // Bilibili API client
 // On webOS TV: uses Luna JS Service (no external proxy needed)
-// Fallback: uses HTTP proxy on Mac
+// In browser dev: uses the Vite /proxy fallback
 import { storage } from '../utils/storage';
 import { buildProxyUrl } from '../utils/proxy';
 import { getWbiKeys, signWbi } from './wbi';

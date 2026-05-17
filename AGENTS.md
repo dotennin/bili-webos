@@ -6,7 +6,7 @@
 bash build.sh
 
 # Dev mode (browser preview, Vite dev server includes /proxy)
-cd app && bun run dev
+bun run dev
 
 # Remote debug TV app
 bun --env-file=.env tools/debug.mjs
@@ -37,19 +37,17 @@ bun test:coverage
 
 ```
 bili_webos/
-├── app/                          # Frontend (React + Vite)
-│   ├── src/
-│   │   ├── api/client.js         # B站 API (Luna service on TV, proxy fallback)
-│   │   ├── api/wbi.js            # WBI signature algorithm
-│   │   ├── hooks/useFocus.js     # Zero-render focus (direct DOM classList)
-│   │   ├── components/           # VideoCard, VideoGrid, SidebarItem, OSKey
-│   │   ├── pages/                # HomePage, SearchPage, SettingsPage, LoginPage
-│   │   ├── player/               # PlayerPage (DASH), LivePlayerPage (HLS), DanmakuLayer
-│   │   └── utils/                # storage.js, format.js
-│   ├── public/webOSTVjs-1.2.13/  # webOS Luna bus library
-│   ├── webos-meta/               # appinfo.json, icons
-│   └── vite.config.js            # target: chrome108, dev /proxy handler
-│
+├── src/                          # Frontend source (React + Vite)
+│   ├── api/client.js             # B站 API (Luna service on TV, proxy fallback)
+│   ├── api/wbi.js                # WBI signature algorithm
+│   ├── hooks/useFocus.js         # Zero-render focus (direct DOM classList)
+│   ├── components/               # VideoCard, VideoGrid, SidebarItem, OSKey
+│   ├── pages/                    # HomePage, SearchPage, SettingsPage, LoginPage
+│   ├── player/                   # PlayerPage (DASH), LivePlayerPage (HLS), DanmakuLayer
+│   └── utils/                    # storage.js, format.js
+├── public/webOSTVjs-1.2.13/      # webOS Luna bus library
+├── webos-meta/                   # appinfo.json, icons
+├── vite.config.js                # target: chrome108, dev /proxy handler
 ├── service/                      # TV Background Service (Node.js v16)
 │   └── com.biliwebos.app.service/
 │       ├── service.js            # Luna methods + local HTTP proxy (:7654)
@@ -65,7 +63,7 @@ bili_webos/
 │
 ├── build.sh                      # One-command build + deploy
 ├── AGENTS.md                     # This file
-└── package.json                  # Tool dependencies (ssh2, ws)
+└── package.json                  # Single project manifest (frontend + tools)
 ```
 
 ## Architecture
