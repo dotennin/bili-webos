@@ -255,7 +255,6 @@ export function createBiliDevProxyPlugin() {
         req.url = target.upstreamPath;
         proxy.web(req, res, {
           target: `https://${target.host}`,
-          ignorePath: true,
         });
       });
     },
