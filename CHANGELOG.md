@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.4.0...bili-webos-tv-v1.5.0) (2026-05-18)
+
+
+### Features
+
+* add Typescript, Biome, and CI build flow ([#74](https://github.com/dotennin/bili-webos/issues/74)) ([d1c32c6](https://github.com/dotennin/bili-webos/commit/d1c32c6de766117c2c9efecaf1a8790626595e45))
+
 ## [1.4.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.3.0...bili-webos-tv-v1.4.0) (2026-05-18)
 
 
