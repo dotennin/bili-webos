@@ -300,7 +300,12 @@ export function createBiliDevProxyPlugin() {
 }
 
 export const __testing = {
+  buildProxyBase,
   copyResponseHeaders,
   decompressBuffer,
+  mergeCookieBridge,
+  parseCookies,
+  readStream,
   sendProxyRequest,
+  serializeCookies,
 };

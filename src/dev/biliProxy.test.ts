@@ -229,3 +229,37 @@ test('sendProxyRequest reports upstream request errors as json', async () => {
   expect(res.body).toContain('"error":"boom"');
   https.request = originalRequest;
 });
+
+test('bili proxy testing helpers parse cookies build proxy base and read streams', async () => {
+  expect(__testing.parseCookies('SESSDATA=abc; bili_jct=xyz')).toEqual({
+    SESSDATA: 'abc',
+    bili_jct: 'xyz',
+  });
+  expect(
+    __testing.serializeCookies({
+      SESSDATA: 'abc',
+      empty: '',
+      skip: null,
+      bili_jct: 'xyz',
+    }),
+  ).toBe('SESSDATA=abc; bili_jct=xyz');
+  expect(
+    __testing.mergeCookieBridge([
+      'SESSDATA=abc; Path=/',
+      'bili_jct=xyz; Path=/',
+    ]),
+  ).toEqual({
+    SESSDATA: 'abc',
+    bili_jct: 'xyz',
+  });
+  expect(__testing.buildProxyBase({ headers: { host: 'tv.local:5173' } })).toBe(
+    'http://tv.local:5173',
+  );
+
+  const stream = new EventEmitter();
+  const streamPromise = __testing.readStream(stream);
+  stream.emit('data', Buffer.from('hello '));
+  stream.emit('data', Buffer.from('world'));
+  stream.emit('end');
+  expect((await streamPromise).toString()).toBe('hello world');
+});

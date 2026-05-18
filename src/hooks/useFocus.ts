@@ -216,3 +216,20 @@ export function useFocusable({
     },
   };
 }
+
+export const __testing = {
+  hasFocusable(id) {
+    return focusRegistry.has(id);
+  },
+  reset() {
+    focusRegistry.clear();
+    currentFocusId = null;
+    lastSidebarFocus = 'sidebar-0-0';
+    customKeyHandler = null;
+    if (keyHandler) {
+      window.removeEventListener('keydown', keyHandler);
+      keyHandler = null;
+    }
+    globalListeners.clear();
+  },
+};
