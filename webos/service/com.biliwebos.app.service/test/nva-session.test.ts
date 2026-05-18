@@ -6,7 +6,7 @@ const {
   encodeEmptyReply,
   encodeJsonReply,
   encodeCommand,
-} = require('../cast/nvaSession');
+} = require('../src/cast/nvaSession.ts');
 
 test('decode command frame with json body', () => {
   const frame = Buffer.concat([
@@ -62,7 +62,7 @@ test('decode ping frame and command without action/body', () => {
 
 test('NvaSession parses chunked frames and sends replies/commands/pings', () => {
   const { EventEmitter } = require('node:events');
-  const { NvaSession } = require('../cast/nvaSession');
+  const { NvaSession } = require('../src/cast/nvaSession.ts');
 
   class FakeSocket extends EventEmitter {
     constructor() {
@@ -118,7 +118,7 @@ test('NvaSession parses chunked frames and sends replies/commands/pings', () => 
 
 test('NvaSession handles reply frames, ping timer, and socket lifecycle events', () => {
   const { EventEmitter } = require('node:events');
-  const { NvaSession } = require('../cast/nvaSession');
+  const { NvaSession } = require('../src/cast/nvaSession.ts');
 
   class FakeSocket extends EventEmitter {
     constructor() {
@@ -184,7 +184,7 @@ test('NvaSession handles reply frames, ping timer, and socket lifecycle events',
 
 test('sendBuffer is a no-op after session is closed', () => {
   const { EventEmitter } = require('node:events');
-  const { NvaSession } = require('../cast/nvaSession');
+  const { NvaSession } = require('../src/cast/nvaSession.ts');
 
   class FakeSocket extends EventEmitter {
     constructor() {
@@ -210,7 +210,7 @@ test('sendBuffer is a no-op after session is closed', () => {
 
 test('session tolerates missing callbacks and socket destroy errors', () => {
   const { EventEmitter } = require('node:events');
-  const { NvaSession } = require('../cast/nvaSession');
+  const { NvaSession } = require('../src/cast/nvaSession.ts');
 
   class FakeSocket extends EventEmitter {
     constructor() {

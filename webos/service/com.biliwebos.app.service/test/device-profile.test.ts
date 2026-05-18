@@ -8,7 +8,7 @@ const {
   renderNirvanaScpd,
   getSsdpNotifyPackets,
   getSsdpSearchResponse,
-} = require('../cast/deviceProfile');
+} = require('../src/cast/deviceProfile.ts');
 
 test('description xml exposes AVTransport and NirvanaControl services', () => {
   const profile = createDeviceProfile({

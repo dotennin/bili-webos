@@ -4,7 +4,7 @@ const path = require('node:path');
 const dgram = require('dgram');
 const net = require('net');
 
-const serverPath = path.join(__dirname, '..', 'cast', 'ssdpServer.js');
+const serverPath = path.join(__dirname, '..', 'src', 'cast', 'ssdpServer.ts');
 
 let udpSockets;
 let tcpServers;

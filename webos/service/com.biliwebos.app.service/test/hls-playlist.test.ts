@@ -1,7 +1,10 @@
 const { test } = require('bun:test');
 const assert = require('node:assert/strict');
 
-const { rewriteHlsPlaylist, buildProxyUrl } = require('../cast/hlsPlaylist');
+const {
+  rewriteHlsPlaylist,
+  buildProxyUrl,
+} = require('../src/cast/hlsPlaylist.ts');
 
 test('rewrites relative hls segment urls to keep them on the proxy', () => {
   const sourceUrl =

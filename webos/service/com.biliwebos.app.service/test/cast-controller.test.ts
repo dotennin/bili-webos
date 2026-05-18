@@ -1,7 +1,7 @@
 const { test } = require('bun:test');
 const assert = require('node:assert/strict');
 
-const { CastController } = require('../cast/castController');
+const { CastController } = require('../src/cast/castController.ts');
 
 test('parse play command into video intent', () => {
   const controller = new CastController();

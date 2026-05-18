@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const { EventEmitter } = require('events');
 
 const serviceSource = fs.readFileSync(
-  path.join(__dirname, '..', 'service.js'),
+  path.join(__dirname, '..', 'src', 'service.ts'),
   'utf8',
 );
 

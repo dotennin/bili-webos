@@ -3,9 +3,9 @@ const { EventEmitter } = require('events');
 const fs = require('fs');
 const https = require('https');
 const childProcess = require('child_process');
-const WebOSService = require('../webos-service-stub');
+const WebOSService = require('../src/webos-service-stub.ts');
 
-const serviceModule = require('../service.js');
+const serviceModule = require('../src/service.ts');
 
 function respondOnce(invoker) {
   return new Promise((resolve) => {
