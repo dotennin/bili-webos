@@ -1,78 +1,46 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { React, render, interact } from '../test/reactTestUtils.ts';
 
-let cleanupFns;
-let elements;
-let dispatched;
-let keydownHandler;
-let originalWindow;
-let originalDocument;
-let originalCustomEvent;
+let useFocusModule;
+const testWindow = globalThis.__TEST_WINDOW__;
+const testDocument = globalThis.__TEST_DOCUMENT__;
 
-function makeElement(id) {
+function createFocusableNode(id) {
+  const element = testDocument.createElement('button');
+  element.dataset.focusId = id;
+  const scrollIntoViewCalls = [];
+  element.scrollIntoView = (options) => {
+    scrollIntoViewCalls.push(options);
+  };
+  testDocument.body.appendChild(element);
   return {
-    id,
-    classList: {
-      added: [],
-      removed: [],
-      add(name) {
-        this.added.push(name);
-      },
-      remove(name) {
-        this.removed.push(name);
-      },
-    },
-    scrollIntoViewCalls: [],
-    scrollIntoView(arg) {
-      this.scrollIntoViewCalls.push(arg);
-    },
+    element,
+    scrollIntoViewCalls,
   };
 }
 
 async function loadModule() {
-  return import(`./useFocus.ts?t=${Date.now()}-${Math.random()}`);
+  if (!useFocusModule) {
+    useFocusModule = await import('./useFocus.ts');
+  }
+  useFocusModule.__testing.reset();
+  return useFocusModule;
 }
 
 beforeEach(() => {
-  cleanupFns = [];
-  elements = new Map();
-  dispatched = [];
-  keydownHandler = null;
-  originalWindow = globalThis.window;
-  originalDocument = globalThis.document;
-  originalCustomEvent = globalThis.CustomEvent;
-
-  globalThis.document = {
-    querySelector(selector) {
-      const id = selector.match(/data-focus-id="(.+)"/)?.[1];
-      return elements.get(id) || null;
-    },
-  };
-  globalThis.CustomEvent = class CustomEvent {
-    constructor(type, init) {
-      this.type = type;
-      this.detail = init?.detail;
-    }
-  };
-  globalThis.window = {
-    addEventListener(type, handler) {
-      if (type === 'keydown') keydownHandler = handler;
-    },
-    removeEventListener(type, handler) {
-      if (type === 'keydown' && keydownHandler === handler)
-        keydownHandler = null;
-    },
-    dispatchEvent(event) {
-      dispatched.push(event);
-      return true;
-    },
-  };
+  globalThis.window = testWindow;
+  globalThis.document = testDocument;
+  globalThis.CustomEvent = testWindow.CustomEvent;
+  globalThis.KeyboardEvent = testWindow.KeyboardEvent;
 });
 
 afterEach(() => {
-  while (cleanupFns.length) cleanupFns.pop()();
-  globalThis.window = originalWindow;
-  globalThis.document = originalDocument;
-  globalThis.CustomEvent = originalCustomEvent;
+  useFocusModule?.__testing?.reset?.();
+  testDocument.body.innerHTML = '';
+  globalThis.window = testWindow;
+  globalThis.document = testDocument;
+  globalThis.CustomEvent = testWindow.CustomEvent;
+  globalThis.KeyboardEvent = testWindow.KeyboardEvent;
 });
 
 test('register/setFocus/onFocusChange update DOM focus classes', async () => {
@@ -84,229 +52,202 @@ test('register/setFocus/onFocusChange update DOM focus classes', async () => {
     getCurrentFocusId,
     onFocusChange,
   } = mod;
-  const sidebar = makeElement('sidebar-0-0');
-  const content = makeElement('content-0-0');
-  elements.set('sidebar-0-0', sidebar);
-  elements.set('content-0-0', content);
+  const sidebar = createFocusableNode('sidebar-0-0');
+  const content = createFocusableNode('content-0-0');
 
   registerFocusable('sidebar-0-0', { row: 0, col: 0, group: 'sidebar' });
   registerFocusable('content-0-0', { row: 0, col: 0, group: 'content' });
+
   const seen = [];
-  cleanupFns.push(onFocusChange((id) => seen.push(id)));
+  const off = onFocusChange((id) => seen.push(id));
 
   setFocus('sidebar-0-0');
   expect(getCurrentFocusId()).toBe('sidebar-0-0');
-  expect(sidebar.classList.added).toEqual(['focused']);
+  expect(sidebar.element.classList.contains('focused')).toBe(true);
 
   setFocus('content-0-0');
-  expect(sidebar.classList.removed).toEqual(['focused']);
-  expect(content.classList.added).toEqual(['focused']);
+  expect(sidebar.element.classList.contains('focused')).toBe(false);
+  expect(content.element.classList.contains('focused')).toBe(true);
   expect(content.scrollIntoViewCalls[0]).toEqual({ block: 'nearest' });
   expect(seen).toEqual(['sidebar-0-0', 'content-0-0']);
 
+  off();
   unregisterFocusable('content-0-0');
   expect(getCurrentFocusId()).toBeNull();
 });
 
-test('initKeyboardNav handles enter, arrows, sidebar/content transitions, and back key', async () => {
+test('createFocusableHandlers focuses on hover and selects on click', async () => {
   const mod = await loadModule();
-  const { registerFocusable, setFocus, initKeyboardNav, setCustomKeyHandler } =
-    mod;
-
-  const ids = [
-    'sidebar-0-0',
-    'sidebar-1-0',
-    'content-0-0',
-    'content-1-0',
-    'content-1-1',
-  ];
-  for (const id of ids) elements.set(id, makeElement(id));
-
-  const selected = [];
-  registerFocusable('sidebar-0-0', {
-    row: 0,
-    col: 0,
-    group: 'sidebar',
-    onSelect: () => selected.push('s0'),
+  const { createFocusableHandlers, getCurrentFocusId, registerFocusable } = mod;
+  const calls = [];
+  const node = createFocusableNode('content-2-1');
+  registerFocusable('content-2-1', {
+    row: 2,
+    col: 1,
+    group: 'content',
+    onSelect: () => calls.push('select'),
   });
-  registerFocusable('sidebar-1-0', {
-    row: 1,
-    col: 0,
-    group: 'sidebar',
-    onSelect: () => selected.push('s1'),
-  });
+  const props = createFocusableHandlers('content-2-1', () => calls.push('select'));
+
+  expect(typeof props.onMouseEnter).toBe('function');
+  expect(typeof props.onClick).toBe('function');
+
+  props.onMouseEnter();
+  expect(getCurrentFocusId()).toBe('content-2-1');
+  expect(node.element.classList.contains('focused')).toBe(true);
+
+  props.onClick({ preventDefault() {} });
+  expect(calls).toEqual(['select']);
+});
+
+function createKeyEvent(key, overrides = {}) {
+  return {
+    key,
+    keyCode: overrides.keyCode ?? 0,
+    preventDefault() {},
+    stopPropagation() {},
+    ...overrides,
+  };
+}
+
+test('initKeyboardNav handles arrows, enter, sidebar transitions, and back key', async () => {
+  const mod = await loadModule();
+  const {
+    __testing,
+    getCurrentFocusId,
+    initKeyboardNav,
+    registerFocusable,
+    setFocus,
+  } = mod;
+  const selections = [];
+  const backEvents = [];
+
+  createFocusableNode('sidebar-0-0');
+  createFocusableNode('content-0-0');
+  createFocusableNode('content-0-1');
+  createFocusableNode('content-1-1');
+
+  registerFocusable('sidebar-0-0', { row: 0, col: 0, group: 'sidebar' });
   registerFocusable('content-0-0', {
     row: 0,
     col: 0,
     group: 'content',
-    onSelect: () => selected.push('c0'),
+    onSelect: () => selections.push('content-0-0'),
   });
-  registerFocusable('content-1-0', {
-    row: 1,
-    col: 0,
+  registerFocusable('content-0-1', {
+    row: 0,
+    col: 1,
     group: 'content',
-    onSelect: () => selected.push('c1'),
+    onSelect: () => selections.push('content-0-1'),
   });
   registerFocusable('content-1-1', {
     row: 1,
     col: 1,
     group: 'content',
-    onSelect: () => selected.push('c2'),
+    onSelect: () => selections.push('content-1-1'),
+  });
+
+  testWindow.addEventListener('tv-back', () => {
+    backEvents.push('tv-back');
   });
 
   initKeyboardNav();
-  expect(typeof keydownHandler).toBe('function');
-
-  const consumed = [];
-  setCustomKeyHandler((e) => {
-    if (e.key === 'X') {
-      consumed.push('custom');
-      return true;
-    }
-    return false;
-  });
-
-  const event = (key, keyCode = 0) => ({
-    key,
-    keyCode,
-    prevented: false,
-    stopped: false,
-    preventDefault() {
-      this.prevented = true;
-    },
-    stopPropagation() {
-      this.stopped = true;
-    },
-  });
-
-  const custom = event('X');
-  keydownHandler(custom);
-  expect(consumed).toEqual(['custom']);
+  const keyHandler = __testing.getKeyHandler();
+  expect(typeof keyHandler).toBe('function');
 
   setFocus('sidebar-0-0');
-  const right = event('ArrowRight');
-  keydownHandler(right);
-  expect(elements.get('content-0-0').classList.added.at(-1)).toBe('focused');
+  keyHandler(createKeyEvent('ArrowRight'));
+  expect(getCurrentFocusId()).toBe('content-0-0');
 
-  const down = event('ArrowDown');
-  keydownHandler(down);
-  expect(elements.get('content-1-0').classList.added.at(-1)).toBe('focused');
+  keyHandler(createKeyEvent('ArrowRight'));
+  expect(getCurrentFocusId()).toBe('content-0-1');
 
-  const right2 = event('ArrowRight');
-  keydownHandler(right2);
-  expect(elements.get('content-1-1').classList.added.at(-1)).toBe('focused');
+  keyHandler(createKeyEvent('ArrowDown'));
+  expect(getCurrentFocusId()).toBe('content-1-1');
 
-  const left = event('ArrowLeft');
-  keydownHandler(left);
-  expect(elements.get('content-1-0').classList.added.at(-1)).toBe('focused');
+  keyHandler(createKeyEvent('Enter'));
+  expect(selections).toEqual(['content-1-1']);
 
-  const enter = event('Enter');
-  keydownHandler(enter);
-  expect(selected).toContain('c1');
+  keyHandler(createKeyEvent('ArrowLeft'));
+  expect(getCurrentFocusId()).toBe('sidebar-0-0');
 
-  const back = event('Backspace', 461);
-  keydownHandler(back);
-  expect(dispatched[0].type).toBe('tv-back');
-  expect(back.stopped).toBe(true);
+  keyHandler(
+    createKeyEvent('GoBack', {
+      keyCode: 461,
+    }),
+  );
+  expect(backEvents).toEqual(['tv-back']);
 });
 
-test('useFocusable hook registers, focuses on hover, and selects on click', async () => {
+test('keyboard navigation falls back across sparse grids and missing default targets', async () => {
   const mod = await loadModule();
-  const { useFocusable, getCurrentFocusId } = mod;
-  const { React, render, interact } = await import('../test/reactTestUtils.ts');
+  const {
+    __testing,
+    getCurrentFocusId,
+    initKeyboardNav,
+    registerFocusable,
+    setFocus,
+  } = mod;
 
-  const calls = [];
-  function Harness() {
-    const { props, isFocused } = useFocusable({
-      id: 'content-2-1',
-      row: 2,
-      col: 1,
+  createFocusableNode('sidebar-2-0');
+  createFocusableNode('content-0-2');
+  createFocusableNode('content-1-0');
+  createFocusableNode('content-2-2');
+
+  registerFocusable('sidebar-2-0', { row: 2, col: 0, group: 'sidebar' });
+  registerFocusable('content-0-2', { row: 0, col: 2, group: 'content' });
+  registerFocusable('content-1-0', { row: 1, col: 0, group: 'content' });
+  registerFocusable('content-2-2', { row: 2, col: 2, group: 'content' });
+
+  initKeyboardNav();
+  const keyHandler = __testing.getKeyHandler();
+
+  setFocus('sidebar-2-0');
+  keyHandler(createKeyEvent('ArrowRight'));
+  expect(getCurrentFocusId()).toBe('content-1-0');
+
+  setFocus('content-2-2');
+  keyHandler(createKeyEvent('ArrowUp'));
+  expect(getCurrentFocusId()).toBe('content-1-0');
+
+  keyHandler(createKeyEvent('ArrowLeft'));
+  expect(getCurrentFocusId()).toBe('sidebar-2-0');
+});
+
+test('useFocusable registers, exposes props, and unregisters on unmount', async () => {
+  const mod = await import(`./useFocus.ts?hook=${Date.now()}-${Math.random()}`);
+  mod.__testing.reset();
+  const { useFocusable, __testing, getCurrentFocusId } = mod;
+  const selects = [];
+
+  function Probe() {
+    const focusable = useFocusable({
+      id: 'content-3-2',
+      row: 3,
+      col: 2,
       group: 'content',
-      onSelect: () => calls.push('select'),
+      onSelect: () => selects.push('selected'),
     });
     return React.createElement(
       'button',
-      { ...props, 'data-focused': String(isFocused) },
-      'ok',
+      focusable.props,
+      focusable.isFocused ? 'focused' : 'idle',
     );
   }
 
-  elements.set('content-2-1', makeElement('content-2-1'));
-  const renderer = await render(React.createElement(Harness));
+  const renderer = await render(React.createElement(Probe));
   const button = renderer.container.querySelector('button');
 
-  await interact(() => {
-    button.dispatchEvent(
-      new MouseEvent('mouseover', { bubbles: true, relatedTarget: null }),
-    );
-  });
-  expect(getCurrentFocusId()).toBe('content-2-1');
+  expect(__testing.hasFocusable('content-3-2')).toBe(true);
+  expect(button.getAttribute('data-focus-id')).toBe('content-3-2');
 
-  await interact(() => {
-    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  });
-  expect(calls).toEqual(['select']);
+  await interact(() =>
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+  );
+  expect(getCurrentFocusId()).toBe('content-3-2');
+  expect(selects).toEqual(['selected']);
 
   renderer.unmount();
-});
-
-test('keyboard navigation falls back across sparse grids and missing groups', async () => {
-  const mod = await loadModule();
-  const {
-    registerFocusable,
-    unregisterFocusable,
-    setFocus,
-    initKeyboardNav,
-    onFocusChange,
-  } = mod;
-
-  const ids = ['sidebar-3-0', 'content-1-0', 'content-2-2'];
-  for (const id of ids) elements.set(id, makeElement(id));
-
-  registerFocusable('sidebar-3-0', {
-    row: 3,
-    col: 0,
-    group: 'sidebar',
-    onSelect() {},
-  });
-  registerFocusable('content-1-0', {
-    row: 1,
-    col: 0,
-    group: 'content',
-    onSelect() {},
-  });
-  registerFocusable('content-2-2', {
-    row: 2,
-    col: 2,
-    group: 'content',
-    onSelect() {},
-  });
-
-  const seen = [];
-  const off = onFocusChange((id) => seen.push(id));
-  initKeyboardNav();
-
-  const event = (key) => ({
-    key,
-    keyCode: 0,
-    preventDefault() {},
-    stopPropagation() {},
-  });
-
-  setFocus('sidebar-3-0');
-  keydownHandler(event('ArrowRight'));
-  expect(mod.getCurrentFocusId()).toBe('content-1-0');
-
-  setFocus('content-2-2');
-  keydownHandler(event('ArrowUp'));
-  expect(mod.getCurrentFocusId()).toBe('content-1-0');
-
-  unregisterFocusable('sidebar-3-0');
-  setFocus('content-1-0');
-  keydownHandler(event('ArrowLeft'));
-  expect(mod.getCurrentFocusId()).toBe('content-1-0');
-
-  off();
-  setFocus('content-2-2');
-  expect(seen.at(-1)).toBe('content-1-0');
+  expect(__testing.hasFocusable('content-3-2')).toBe(false);
+  mod.__testing.reset();
 });

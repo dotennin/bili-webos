@@ -34,11 +34,29 @@ jobs:
       - name: Verify coverage summary exists
         run: test -f coverage/coverage-summary.json
 
-      - name: Read line coverage
+      - name: Read weighted line coverage
         id: line_cov
         run: |
-          LINES=$(node -e "import fs from 'node:fs'; const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')); process.stdout.write(String(s.average.lines.pct));")
+          LINES=$(node -e "import fs from 'node:fs'; const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')); process.stdout.write(String(s.total.lines.pct));")
           echo "lines=$LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch main coverage baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p coverage/base
+          git fetch origin document:refs/remotes/origin/document || true
+          git show origin/document:coverage/coverage-summary.json > coverage/base/coverage-summary.json || true
+
+      - name: Build weighted coverage comparison
+        if: github.event_name == 'pull_request'
+        run: |
+          bun run coverage:compare -- \
+            --current coverage/coverage-summary.json \
+            --base coverage/base/coverage-summary.json \
+            --threshold 80 \
+            --baseline-label main \
+            --result-out coverage/compare-result.json \
+            --comment-out coverage/pr-comment.md
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
@@ -52,30 +70,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const report = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
-            const summary = report.average;
-            const weighted = report.total;
-            const body = [
-              '## Coverage Report',
-              '',
-              'Bun `All files` coverage:',
-              '',
-              '| Metric | Coverage |',
-              '| --- | ---: |',
-              `| Lines | ${summary.lines.pct}% |`,
-              `| Statements | ${summary.statements.pct}% |`,
-              `| Functions | ${summary.functions.pct}% |`,
-              `| Branches | ${summary.branches.pct}% |`,
-              '',
-              'Weighted LCOV total:',
-              '',
-              '| Metric | Coverage |',
-              '| --- | ---: |',
-              `| Lines | ${weighted.lines.pct}% |`,
-              `| Statements | ${weighted.statements.pct}% |`,
-              `| Functions | ${weighted.functions.pct}% |`,
-              `| Branches | ${weighted.branches.pct}% |`,
-            ].join('\n');
+            const body = fs.readFileSync('coverage/pr-comment.md', 'utf8').trim();
 
             const marker = '<!-- coverage-report -->';
             const issue_number = context.issue.number;
@@ -96,6 +91,11 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body: finalBody });
             }
+
+      - name: Enforce weighted coverage threshold
+        if: github.event_name == 'pull_request'
+        run: |
+          node -e "const fs=require('fs'); const report=JSON.parse(fs.readFileSync('coverage/compare-result.json','utf8')); if (report.failed) { console.error('Weighted coverage below threshold:', report.belowThreshold.join(', ')); process.exit(1); }"
 
       - name: Update badge json in document branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

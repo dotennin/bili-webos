@@ -222,6 +222,22 @@ describe('page rendering', () => {
       progress: 10,
     });
     expect(textOf(ok.toJSON())).toContain('历史视频');
+
+    api.getHistory.mockImplementationOnce(async () => ({ message: '服务异常' }));
+    const fallbackError = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {} }),
+    );
+    await flush();
+    expect(textOf(fallbackError.toJSON())).toContain('服务异常');
+
+    api.getHistory.mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+    const timeoutRenderer = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {} }),
+    );
+    await interact(() => timeouts.at(-1).fn());
+    expect(textOf(timeoutRenderer.toJSON())).toContain('加载超时');
   });
 
   test('LoginPage renders QR, handles scanned, success, expired, and error states', async () => {
@@ -270,6 +286,19 @@ describe('page rendering', () => {
     );
     await flush();
     expect(textOf(errorRenderer.toJSON())).toContain('登录失败');
+
+    api.qrCodeGenerate.mockImplementationOnce(async () => {
+      throw new Error('qr down');
+    });
+    const generateFailRenderer = await render(
+      React.createElement(LoginPage, { onLogin() {} }),
+      {
+        createNodeMock: (element) =>
+          element.type === 'canvas' ? { tag: 'canvas' } : null,
+      },
+    );
+    await flush();
+    expect(textOf(generateFailRenderer.toJSON())).toContain('登录失败');
   });
 
   test('SearchPage updates keyword, runs search, and renders empty/results states', async () => {

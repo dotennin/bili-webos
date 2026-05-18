@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 // ======================================================
 // Zero-React-render focus system
@@ -172,6 +172,19 @@ export function initKeyboardNav() {
   window.addEventListener('keydown', keyHandler);
 }
 
+export function createFocusableHandlers(id, onSelect) {
+  return {
+    onClick(e) {
+      e.preventDefault();
+      setFocus(id);
+      onSelect?.();
+    },
+    onMouseEnter() {
+      setFocus(id);
+    },
+  };
+}
+
 // Hook: registers element, NO re-renders on focus change
 export function useFocusable({
   id,
@@ -193,26 +206,39 @@ export function useFocusable({
     return () => unregisterFocusable(id);
   }, [id, row, col, group]);
 
-  const handleClick = useCallback(
-    (e) => {
-      e.preventDefault();
-      setFocus(id);
-      onSelectRef.current?.();
-    },
-    [id],
-  );
-
-  const handleMouseEnter = useCallback(() => {
-    setFocus(id);
-  }, [id]);
+  const handlers = createFocusableHandlers(id, () => onSelectRef.current?.());
 
   return {
     isFocused: currentFocusId === id, // Only accurate at render time, not reactive
     props: {
       'data-focus-id': id,
-      onClick: handleClick,
-      onMouseEnter: handleMouseEnter,
+      onClick: handlers.onClick,
+      onMouseEnter: handlers.onMouseEnter,
       style: { cursor: 'pointer' },
     },
   };
 }
+
+export const __testing = {
+  hasFocusable(id) {
+    return focusRegistry.has(id);
+  },
+  createFocusableHandlers,
+  getKeyHandler() {
+    return keyHandler;
+  },
+  invokeCustomKeyHandler(event) {
+    return customKeyHandler?.(event) ?? false;
+  },
+  reset() {
+    focusRegistry.clear();
+    currentFocusId = null;
+    lastSidebarFocus = 'sidebar-0-0';
+    customKeyHandler = null;
+    if (keyHandler) {
+      window.removeEventListener('keydown', keyHandler);
+      keyHandler = null;
+    }
+    globalListeners.clear();
+  },
+};

@@ -169,7 +169,7 @@ export default function App() {
     };
     window.addEventListener('tv-back', handleBack);
     return () => window.removeEventListener('tv-back', handleBack);
-  }, [playerVideo, showLogin, page]);
+  }, [playerVideo, liveRoom, showLogin, page]);
 
   const loadUserInfo = useCallback(async () => {
     try {
