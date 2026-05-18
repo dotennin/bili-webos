@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, expect, mock, test } from 'bun:test';
+import https from 'node:https';
 import {
   extractProxyTarget,
   isAllowedHost,
@@ -7,6 +8,7 @@ import {
   toCookieBridge,
 } from './biliProxy.ts';
 import { createRequire } from 'node:module';
+import { EventEmitter } from 'node:events';
 
 const require = createRequire(import.meta.url);
 const {
@@ -52,33 +54,23 @@ test('isHlsPlaylistResponse matches both content type and .m3u8 paths', () => {
 });
 
 test('vite proxy middleware preserves upstream path when forwarding /proxy requests', async () => {
-  const proxyEvents = {};
   const webCalls = [];
+  const originalRequest = https.request;
+  https.request = mock((options, cb) => {
+    webCalls.push(options);
+    const upstreamRes = new EventEmitter();
+    upstreamRes.headers = { 'content-type': 'application/json' };
+    upstreamRes.statusCode = 200;
+    upstreamRes.pipe = (_target) => {};
 
-  mock.module('http-proxy', () => ({
-    default: {
-      createProxyServer(options) {
-        return {
-          options,
-          on(event, handler) {
-            proxyEvents[event] = handler;
-          },
-          web(req, _res, forwardOptions) {
-            webCalls.push({
-              reqUrl: req.url,
-              forwardOptions,
-            });
-          },
-        };
-      },
-    },
-  }));
-
-  mock.module('node:module', () => ({
-    createRequire() {
-      return () => ({ rewriteHlsPlaylist });
-    },
-  }));
+    const upstreamReq = new EventEmitter();
+    upstreamReq.write = () => {};
+    upstreamReq.end = () => {
+      cb(upstreamRes);
+    };
+    upstreamReq.destroy = () => {};
+    return upstreamReq;
+  });
 
   const fresh = await import(
     `./biliProxy.ts?middleware-path-test=${Date.now()}`
@@ -94,10 +86,9 @@ test('vite proxy middleware preserves upstream path when forwarding /proxy reque
     },
   });
 
-  const req = {
-    originalUrl: '/proxy/api.bilibili.com/x/web-interface/nav?pn=1',
-    headers: { host: 'localhost:5173' },
-  };
+  const req = new EventEmitter();
+  req.originalUrl = '/proxy/api.bilibili.com/x/web-interface/nav?pn=1';
+  req.headers = { host: 'localhost:5173' };
   const res = {
     writeHead() {},
     end() {},
@@ -108,14 +99,14 @@ test('vite proxy middleware preserves upstream path when forwarding /proxy reque
   middleware(req, res, () => {
     nextCalled = true;
   });
+  req.emit('end');
 
   expect(nextCalled).toBe(false);
   expect(req.url).toBe('/x/web-interface/nav?pn=1');
   expect(webCalls).toHaveLength(1);
-  expect(webCalls[0]).toEqual({
-    reqUrl: '/x/web-interface/nav?pn=1',
-    forwardOptions: {
-      target: 'https://api.bilibili.com',
-    },
+  expect(webCalls[0]).toMatchObject({
+    hostname: 'api.bilibili.com',
+    path: '/x/web-interface/nav?pn=1',
   });
+  https.request = originalRequest;
 });

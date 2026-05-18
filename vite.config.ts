@@ -9,6 +9,7 @@ export default defineConfig({
     outDir: 'dist',
     target: 'chrome108',
     assetsInlineLimit: 4096,
+    chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
         manualChunks(id) {

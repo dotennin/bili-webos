@@ -1,8 +1,7 @@
 // @ts-nocheck
-// @ts-nocheck
-import httpProxy from 'http-proxy';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
+import https from 'node:https';
 
 const require = createRequire(import.meta.url);
 const {
@@ -125,6 +124,113 @@ function readStream(stream) {
   });
 }
 
+function sendProxyRequest(req, res, target) {
+  const isCdn =
+    target.hostname?.includes('bilivideo') ||
+    target.hostname?.includes('akamaized');
+  const clientCookies = parseCookies(req.headers['x-cookie']);
+  const cookieHeader = serializeCookies({
+    ...storedCookies,
+    ...clientCookies,
+  });
+  const headers = {
+    ...req.headers,
+    host: target.host,
+    'user-agent': USER_AGENT,
+    referer: 'https://www.bilibili.com/',
+    'accept-language': 'zh-CN,zh;q=0.9',
+    accept: isCdn ? '*/*' : 'application/json, text/plain, */*',
+    'accept-encoding': isCdn ? 'identity' : 'gzip, deflate, br',
+  };
+
+  if (!isCdn) {
+    headers.origin = 'https://www.bilibili.com';
+  } else {
+    delete headers.origin;
+  }
+
+  if (cookieHeader) {
+    headers.cookie = cookieHeader;
+  } else {
+    delete headers.cookie;
+  }
+
+  const upstreamReq = https.request(
+    {
+      protocol: 'https:',
+      hostname: target.hostname,
+      port: target.port,
+      method: req.method || 'GET',
+      path: target.upstreamPath,
+      headers,
+      rejectUnauthorized: false,
+    },
+    async (proxyRes) => {
+      const contentType = String(
+        proxyRes.headers['content-type'] || 'application/octet-stream',
+      );
+      const encoding = proxyRes.headers['content-encoding'];
+      const bridge = toCookieBridge(proxyRes.headers['set-cookie'] || []);
+      const extraHeaders = {
+        'Cache-Control':
+          'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers':
+          'X-Set-Cookie, Content-Range, Content-Length',
+        Pragma: 'no-cache',
+        Expires: '0',
+      };
+      if (bridge !== '{}') {
+        extraHeaders['X-Set-Cookie'] = bridge;
+      }
+
+      try {
+        if (isHlsPlaylistResponse(contentType, target.upstreamPath || '')) {
+          const body = await readStream(proxyRes);
+          const decoded = await decompressBuffer(body, encoding);
+          const playlist = rewriteHlsPlaylist(
+            decoded.toString('utf-8'),
+            `https://${target.host}${target.upstreamPath}`,
+            buildProxyBase(req),
+          );
+          copyResponseHeaders(proxyRes, res, {
+            ...extraHeaders,
+            'Content-Type': contentType,
+            'Content-Length': Buffer.byteLength(playlist),
+          });
+          res.writeHead(proxyRes.statusCode || 200);
+          res.end(playlist);
+          return;
+        }
+
+        copyResponseHeaders(proxyRes, res, extraHeaders);
+        res.writeHead(proxyRes.statusCode || 200);
+        proxyRes.pipe(res);
+      } catch (error) {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: error.message }));
+      }
+    },
+  );
+
+  upstreamReq.on('error', (error) => {
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+    }
+    res.end(JSON.stringify({ error: error.message }));
+  });
+
+  req.on('data', (chunk) => {
+    upstreamReq.write(chunk);
+  });
+  req.on('end', () => {
+    upstreamReq.end();
+  });
+  req.on('error', () => {
+    upstreamReq.destroy();
+  });
+}
+
 export function isAllowedHost(host) {
   return (
     ALLOWED_HOSTS.some((item) => host === item || host.endsWith('.' + item)) ||
@@ -159,102 +265,6 @@ export function isHlsPlaylistResponse(contentType = '', upstreamPath = '') {
 }
 
 export function createBiliDevProxyPlugin() {
-  const proxy = httpProxy.createProxyServer({
-    changeOrigin: true,
-    secure: false,
-    selfHandleResponse: true,
-  });
-
-  proxy.on('proxyReq', (proxyReq, req) => {
-    const { hostname } = req.__biliProxyTarget || {};
-    const isCdn =
-      hostname?.includes('bilivideo') || hostname?.includes('akamaized');
-    proxyReq.setHeader('User-Agent', USER_AGENT);
-    proxyReq.setHeader('Referer', 'https://www.bilibili.com/');
-    proxyReq.setHeader('Accept-Language', 'zh-CN,zh;q=0.9');
-    proxyReq.setHeader(
-      'Accept',
-      isCdn ? '*/*' : 'application/json, text/plain, */*',
-    );
-    proxyReq.setHeader(
-      'Accept-Encoding',
-      isCdn ? 'identity' : 'gzip, deflate, br',
-    );
-
-    if (!isCdn) {
-      proxyReq.setHeader('Origin', 'https://www.bilibili.com');
-    } else {
-      proxyReq.removeHeader('Origin');
-    }
-
-    if (req.headers.range) {
-      proxyReq.setHeader('Range', req.headers.range);
-    }
-
-    const clientCookies = parseCookies(req.headers['x-cookie']);
-    const cookieHeader = serializeCookies({
-      ...storedCookies,
-      ...clientCookies,
-    });
-    if (cookieHeader) {
-      proxyReq.setHeader('Cookie', cookieHeader);
-    }
-  });
-
-  proxy.on('proxyRes', async (proxyRes, req, res) => {
-    const target = req.__biliProxyTarget;
-    const contentType = String(
-      proxyRes.headers['content-type'] || 'application/octet-stream',
-    );
-    const encoding = proxyRes.headers['content-encoding'];
-    const bridge = toCookieBridge(proxyRes.headers['set-cookie'] || []);
-    const extraHeaders = {
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Expose-Headers':
-        'X-Set-Cookie, Content-Range, Content-Length',
-      Pragma: 'no-cache',
-      Expires: '0',
-    };
-    if (bridge !== '{}') {
-      extraHeaders['X-Set-Cookie'] = bridge;
-    }
-
-    try {
-      if (isHlsPlaylistResponse(contentType, target?.upstreamPath || '')) {
-        const body = await readStream(proxyRes);
-        const decoded = await decompressBuffer(body, encoding);
-        const playlist = rewriteHlsPlaylist(
-          decoded.toString('utf-8'),
-          `https://${target.host}${target.upstreamPath}`,
-          buildProxyBase(req),
-        );
-        copyResponseHeaders(proxyRes, res, {
-          ...extraHeaders,
-          'Content-Type': contentType,
-          'Content-Length': Buffer.byteLength(playlist),
-        });
-        res.writeHead(proxyRes.statusCode || 200);
-        res.end(playlist);
-        return;
-      }
-
-      copyResponseHeaders(proxyRes, res, extraHeaders);
-      res.writeHead(proxyRes.statusCode || 200);
-      proxyRes.pipe(res);
-    } catch (error) {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: error.message }));
-    }
-  });
-
-  proxy.on('error', (error, _req, res) => {
-    if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-    }
-    res.end(JSON.stringify({ error: error.message }));
-  });
-
   return {
     name: 'bili-dev-proxy',
     configureServer(server) {
@@ -288,9 +298,7 @@ export function createBiliDevProxyPlugin() {
 
         req.__biliProxyTarget = target;
         req.url = target.upstreamPath;
-        proxy.web(req, res, {
-          target: `https://${target.host}`,
-        });
+        sendProxyRequest(req, res, target);
       });
     },
   };
