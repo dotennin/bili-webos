@@ -65,8 +65,8 @@ function buildProxyBase(req) {
 function copyResponseHeaders(proxyRes, res, extras = {}) {
   const forwarded = { ...proxyRes.headers, ...extras };
   delete forwarded['set-cookie'];
+  delete forwarded['content-length'];
   if (extras['Content-Length'] == null) {
-    delete forwarded['content-length'];
     delete forwarded['Content-Length'];
   }
   Object.entries(forwarded).forEach(([key, value]) => {
@@ -298,3 +298,8 @@ export function createBiliDevProxyPlugin() {
     },
   };
 }
+
+export const __testing = {
+  copyResponseHeaders,
+  decompressBuffer,
+};

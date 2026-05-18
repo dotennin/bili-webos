@@ -19,10 +19,6 @@ let playerProps;
 let eventTarget;
 let timers;
 
-async function importFresh(pathname) {
-  return import(`${pathname}?t=${Date.now()}-${Math.random()}`);
-}
-
 beforeEach(() => {
   focusState = { current: null, listeners: [] };
   castSubscription = null;
@@ -131,7 +127,7 @@ afterEach(() => {
 });
 
 test('App loads user info, routes pages, handles cast commands, login, logout, and back behavior', async () => {
-  const { default: App } = await importFresh('./App.tsx');
+  const { default: App } = await import('./App.tsx');
   const renderer = await render(React.createElement(App));
   await flush();
 

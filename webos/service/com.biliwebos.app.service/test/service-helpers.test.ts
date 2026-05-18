@@ -49,4 +49,13 @@ describe('service helpers', () => {
     gz.emit('end');
     expect((await gzPromise).toString()).toBe('world');
   });
+
+  it('decompressResponse falls back to inflateRaw for raw deflate payloads', async () => {
+    const raw = new EventEmitter();
+    raw.headers = { 'content-encoding': 'deflate' };
+    const rawPromise = new Promise((resolve) => decompressResponse(raw, resolve));
+    raw.emit('data', zlib.deflateRawSync(Buffer.from('segment')));
+    raw.emit('end');
+    expect((await rawPromise).toString()).toBe('segment');
+  });
 });

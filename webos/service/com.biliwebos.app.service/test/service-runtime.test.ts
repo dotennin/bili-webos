@@ -79,3 +79,68 @@ test('service runtime registers handlers and supports fetch/cast/config flows', 
   const ping = await respondOnce(handlers.ping);
   expect(ping.returnValue).toBe(true);
 });
+
+test('createLocalProxyHandler rejects forbidden hosts and rewrites HLS playlists', async () => {
+  const handler = serviceModule.createLocalProxyHandler({
+    localProxyPort: 7654,
+    isAllowedHost: serviceModule.isAllowedHost,
+    rewriteHlsPlaylist: serviceModule.rewriteHlsPlaylist,
+    decompressResponse(_res, cb) {
+      cb(Buffer.from('#EXTM3U\nsegment.ts\n'));
+    },
+    makeRequest(_parsedUrl, _method, _body, _contentType, _range, cb) {
+      cb(
+        null,
+        createProxyRes(
+          200,
+          { 'content-type': 'application/vnd.apple.mpegurl' },
+          [],
+        ),
+      );
+    },
+  });
+
+  const forbiddenReq = new EventEmitter();
+  forbiddenReq.url = '/proxy/example.com/live/test.m3u8';
+  forbiddenReq.method = 'GET';
+  forbiddenReq.headers = {};
+  const forbiddenRes = {
+    statusCode: 0,
+    body: '',
+    setHeader: mock(() => {}),
+    writeHead(code) {
+      this.statusCode = code;
+    },
+    end(chunk = '') {
+      this.body += String(chunk);
+    },
+  };
+
+  handler(forbiddenReq, forbiddenRes);
+  expect(forbiddenRes.statusCode).toBe(403);
+  expect(forbiddenRes.body).toBe('Forbidden');
+
+  const allowedReq = new EventEmitter();
+  allowedReq.url = '/proxy/api.live.bilibili.com/live/test.m3u8';
+  allowedReq.method = 'GET';
+  allowedReq.headers = {};
+  const allowedRes = {
+    statusCode: 0,
+    headers: {},
+    body: '',
+    setHeader(key, value) {
+      this.headers[key] = value;
+    },
+    writeHead(code) {
+      this.statusCode = code;
+    },
+    end(chunk = '') {
+      this.body += String(chunk);
+    },
+  };
+
+  handler(allowedReq, allowedRes);
+  await new Promise((resolve) => queueMicrotask(resolve));
+  expect(allowedRes.statusCode).toBe(200);
+  expect(allowedRes.body).toContain('/proxy/api.live.bilibili.com/');
+});

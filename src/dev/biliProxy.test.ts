@@ -1,7 +1,10 @@
 // @ts-nocheck
 import { afterEach, expect, mock, test } from 'bun:test';
 import https from 'node:https';
+import zlib from 'node:zlib';
 import {
+  __testing,
+  createBiliDevProxyPlugin,
   extractProxyTarget,
   isAllowedHost,
   isHlsPlaylistResponse,
@@ -66,10 +69,7 @@ test('vite proxy middleware preserves upstream path when forwarding /proxy reque
     return upstreamReq;
   });
 
-  const fresh = await import(
-    `./biliProxy.ts?middleware-path-test=${Date.now()}`
-  );
-  const plugin = fresh.createBiliDevProxyPlugin();
+  const plugin = createBiliDevProxyPlugin();
 
   let middleware;
   plugin.configureServer({
@@ -103,4 +103,31 @@ test('vite proxy middleware preserves upstream path when forwarding /proxy reque
     path: '/x/web-interface/nav?pn=1',
   });
   https.request = originalRequest;
+});
+
+test('bili proxy helpers decode deflate payloads and rewrite response headers for playlists', async () => {
+  const compressed = zlib.deflateRawSync(Buffer.from('playlist-body'));
+  const decoded = await __testing.decompressBuffer(compressed, 'deflate');
+  expect(decoded.toString()).toBe('playlist-body');
+
+  const headerValues = {};
+  __testing.copyResponseHeaders(
+    {
+      headers: {
+        'content-length': '999',
+        'set-cookie': ['SESSDATA=abc'],
+        'content-type': 'application/vnd.apple.mpegurl',
+      },
+    },
+    {
+      setHeader(key, value) {
+        headerValues[key] = value;
+      },
+    },
+    { 'Content-Type': 'application/vnd.apple.mpegurl', 'Content-Length': 14 },
+  );
+
+  expect(headerValues['set-cookie']).toBeUndefined();
+  expect(headerValues['Content-Length']).toBe(14);
+  expect(headerValues['content-length']).toBeUndefined();
 });

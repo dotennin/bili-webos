@@ -63,7 +63,9 @@ function serializeCookies(cookies) {
     .join('; ');
 }
 
-function isAllowedHost(host) {
+export { rewriteHlsPlaylist };
+
+export function isAllowedHost(host) {
   const allowed = [
     'api.bilibili.com',
     'passport.bilibili.com',
@@ -271,78 +273,96 @@ castLanServer.start(() => {
 
 let localProxyPort = 7654;
 
-const localProxy = http.createServer((req, res) => {
-  try {
-    const url = new URL(req.url || '/', `http://127.0.0.1:${localProxyPort}`);
-    const pathMatch = url.pathname.match(/^\/proxy\/([^/]+)(\/.*)?$/);
-    if (!pathMatch) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Not Found');
-      return;
-    }
-
-    const host = pathMatch[1];
-    if (!isAllowedHost(host)) {
-      res.writeHead(403, { 'Content-Type': 'text/plain' });
-      res.end('Forbidden');
-      return;
-    }
-
-    const upstreamPath = (pathMatch[2] || '/') + (url.search || '');
-    const parsedUrl = new URL(`https://${host}${upstreamPath}`);
-    const range = req.headers.range || '';
-
-    makeRequest(parsedUrl, req.method, '', '', range, (err, proxyRes) => {
-      if (err) {
-        console.error('[LocalProxy] request failed:', err.message);
-        res.writeHead(502, { 'Content-Type': 'text/plain' });
-        res.end('Bad Gateway');
+export function createLocalProxyHandler({
+  localProxyPort,
+  isAllowedHost,
+  makeRequest,
+  rewriteHlsPlaylist,
+  decompressResponse,
+}) {
+  return (req, res) => {
+    try {
+      const url = new URL(req.url || '/', `http://127.0.0.1:${localProxyPort}`);
+      const pathMatch = url.pathname.match(/^\/proxy\/([^/]+)(\/.*)?$/);
+      if (!pathMatch) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
         return;
       }
 
-      const contentType = String(proxyRes.headers['content-type'] || '');
-      const isPlaylist =
-        contentType.indexOf('application/vnd.apple.mpegurl') >= 0 ||
-        parsedUrl.pathname.endsWith('.m3u8');
-
-      if (!isPlaylist) {
-        Object.keys(proxyRes.headers).forEach((key) => {
-          const value = proxyRes.headers[key];
-          if (value != null) res.setHeader(key, value);
-        });
-        res.writeHead(proxyRes.statusCode || 200);
-        proxyRes.pipe(res);
+      const host = pathMatch[1];
+      if (!isAllowedHost(host)) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('Forbidden');
         return;
       }
 
-      decompressResponse(proxyRes, (bodyBuffer) => {
-        try {
-          const rewritten = rewriteHlsPlaylist(
-            bodyBuffer.toString('utf8'),
-            parsedUrl.toString(),
-            `http://127.0.0.1:${localProxyPort}`,
-          );
-          res.writeHead(proxyRes.statusCode || 200, {
-            'Content-Type': 'application/vnd.apple.mpegurl',
-            'Content-Length': Buffer.byteLength(rewritten),
-            'Cache-Control': 'no-cache',
-          });
-          res.end(rewritten);
-        } catch (playlistError) {
-          console.error(
-            '[LocalProxy] playlist rewrite failed:',
-            playlistError.message,
-          );
-          res.writeHead(500, { 'Content-Type': 'text/plain' });
-          res.end('Playlist rewrite failed');
+      const upstreamPath = (pathMatch[2] || '/') + (url.search || '');
+      const parsedUrl = new URL(`https://${host}${upstreamPath}`);
+      const range = req.headers.range || '';
+
+      makeRequest(parsedUrl, req.method, '', '', range, (err, proxyRes) => {
+        if (err) {
+          console.error('[LocalProxy] request failed:', err.message);
+          res.writeHead(502, { 'Content-Type': 'text/plain' });
+          res.end('Bad Gateway');
+          return;
         }
+
+        const contentType = String(proxyRes.headers['content-type'] || '');
+        const isPlaylist =
+          contentType.indexOf('application/vnd.apple.mpegurl') >= 0 ||
+          parsedUrl.pathname.endsWith('.m3u8');
+
+        if (!isPlaylist) {
+          Object.keys(proxyRes.headers).forEach((key) => {
+            const value = proxyRes.headers[key];
+            if (value != null) res.setHeader(key, value);
+          });
+          res.writeHead(proxyRes.statusCode || 200);
+          proxyRes.pipe(res);
+          return;
+        }
+
+        decompressResponse(proxyRes, (bodyBuffer) => {
+          try {
+            const rewritten = rewriteHlsPlaylist(
+              bodyBuffer.toString('utf8'),
+              parsedUrl.toString(),
+              `http://127.0.0.1:${localProxyPort}`,
+            );
+            res.writeHead(proxyRes.statusCode || 200, {
+              'Content-Type': 'application/vnd.apple.mpegurl',
+              'Content-Length': Buffer.byteLength(rewritten),
+              'Cache-Control': 'no-cache',
+            });
+            res.end(rewritten);
+          } catch (playlistError) {
+            console.error(
+              '[LocalProxy] playlist rewrite failed:',
+              playlistError.message,
+            );
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Playlist rewrite failed');
+          }
+        });
       });
-    });
-  } catch (error) {
-    res.writeHead(400, { 'Content-Type': 'text/plain' });
-    res.end(error.message);
-  }
-});
+    } catch (error) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end(error.message);
+    }
+  };
+}
+
+const localProxy = http.createServer(
+  createLocalProxyHandler({
+    localProxyPort,
+    isAllowedHost,
+    makeRequest,
+    rewriteHlsPlaylist,
+    decompressResponse,
+  }),
+);
 
 localProxy.listen(localProxyPort, '0.0.0.0', () => {
   console.log(`[BiliService] Local proxy on port ${localProxyPort}`);

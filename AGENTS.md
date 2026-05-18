@@ -79,4 +79,5 @@ In Dev: Web App ──HTTP──────▶ Vite Dev Server (/proxy) ──H
 ```
 
 # Development Workflow
-- Use `semantic-release` commit title and message format for automatic changelog and versioning.
+- Use `semantic-release` commit message format for automatic changelog and versioning, also when creating pull requests. Example: `feat: add search page` or `fix: correct video duration format`.
+- Run `bun format` before committing to ensure consistent code style.
