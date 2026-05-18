@@ -1,7 +1,7 @@
 // @ts-nocheck
-var crypto = require('crypto');
+import crypto from 'node:crypto';
 
-var SERVER_NAME = 'Linux/3.0.0, UPnP/1.0, Platinum/1.0.5.13';
+const SERVER_NAME = 'Linux/3.0.0, UPnP/1.0, Platinum/1.0.5.13';
 
 function xmlEscape(str) {
   return String(str || '')
@@ -19,7 +19,7 @@ function randomUuid() {
   return crypto.randomBytes(18).toString('hex').toUpperCase().slice(0, 35);
 }
 
-function createDeviceProfile(options) {
+export function createDeviceProfile(options) {
   options = options || {};
   return {
     uuid: options.uuid || randomUuid(),
@@ -42,34 +42,30 @@ function createDeviceProfile(options) {
   };
 }
 
-function getLocation(profile) {
-  return 'http://' + profile.ip + ':' + profile.httpPort + '/description.xml';
+export function getLocation(profile) {
+  return `http://${profile.ip}:${profile.httpPort}/description.xml`;
 }
 
-function renderDescriptionXml(profile) {
+export function renderDescriptionXml(profile) {
   return [
     '<root xmlns:dlna="urn:schemas-dlna-org:device-1-0" xmlns="urn:schemas-upnp-org:device-1-0">',
     '<specVersion><major>1</major><minor>0</minor></specVersion>',
     '<device>',
     '<deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>',
-    '<UDN>uuid:' + xmlEscape(profile.uuid) + '</UDN>',
-    '<friendlyName>' + xmlEscape(profile.friendlyName) + '</friendlyName>',
-    '<manufacturer>' + xmlEscape(profile.manufacturer) + '</manufacturer>',
-    '<manufacturerURL>' +
-      xmlEscape(profile.manufacturerURL) +
-      '</manufacturerURL>',
-    '<modelDescription>' +
-      xmlEscape(profile.modelDescription) +
-      '</modelDescription>',
-    '<modelName>' + xmlEscape(profile.modelName) + '</modelName>',
-    '<modelNumber>' + xmlEscape(profile.modelNumber) + '</modelNumber>',
-    '<modelURL>' + xmlEscape(profile.modelURL) + '</modelURL>',
-    '<serialNumber>' + xmlEscape(profile.serialNumber) + '</serialNumber>',
-    '<X_brandName>' + xmlEscape(profile.brandName) + '</X_brandName>',
-    '<hostVersion>' + xmlEscape(profile.hostVersion) + '</hostVersion>',
-    '<ottVersion>' + xmlEscape(profile.ottVersion) + '</ottVersion>',
-    '<channelName>' + xmlEscape(profile.channelName) + '</channelName>',
-    '<capability>' + xmlEscape(profile.capability) + '</capability>',
+    `<UDN>uuid:${xmlEscape(profile.uuid)}</UDN>`,
+    `<friendlyName>${xmlEscape(profile.friendlyName)}</friendlyName>`,
+    `<manufacturer>${xmlEscape(profile.manufacturer)}</manufacturer>`,
+    `<manufacturerURL>${xmlEscape(profile.manufacturerURL)}</manufacturerURL>`,
+    `<modelDescription>${xmlEscape(profile.modelDescription)}</modelDescription>`,
+    `<modelName>${xmlEscape(profile.modelName)}</modelName>`,
+    `<modelNumber>${xmlEscape(profile.modelNumber)}</modelNumber>`,
+    `<modelURL>${xmlEscape(profile.modelURL)}</modelURL>`,
+    `<serialNumber>${xmlEscape(profile.serialNumber)}</serialNumber>`,
+    `<X_brandName>${xmlEscape(profile.brandName)}</X_brandName>`,
+    `<hostVersion>${xmlEscape(profile.hostVersion)}</hostVersion>`,
+    `<ottVersion>${xmlEscape(profile.ottVersion)}</ottVersion>`,
+    `<channelName>${xmlEscape(profile.channelName)}</channelName>`,
+    `<capability>${xmlEscape(profile.capability)}</capability>`,
     '<dlna:X_DLNADOC xmlns:dlna="urn:schemas-dlna-org:device-1-0">DMR-1.50</dlna:X_DLNADOC>',
     '<dlna:X_DLNACAP xmlns:dlna="urn:schemas-dlna-org:device-1-0">playcontainer-1-0</dlna:X_DLNACAP>',
     '<serviceList>',
@@ -93,7 +89,7 @@ function renderDescriptionXml(profile) {
   ].join('');
 }
 
-function renderAvTransportScpd() {
+export function renderAvTransportScpd() {
   return [
     '<?xml version="1.0"?>',
     '<scpd xmlns="urn:schemas-upnp-org:service-1-0">',
@@ -108,7 +104,7 @@ function renderAvTransportScpd() {
   ].join('');
 }
 
-function renderNirvanaScpd() {
+export function renderNirvanaScpd() {
   return '<actionList><action><name>GetAppInfo</name><argumentList></argumentList></action></actionList>';
 }
 
@@ -116,62 +112,52 @@ function buildNotify(profile, nt, usn) {
   return [
     'NOTIFY * HTTP/1.1',
     'HOST: 239.255.255.250:1900',
-    'LOCATION: ' + getLocation(profile),
+    `LOCATION: ${getLocation(profile)}`,
     'CACHE-CONTROL: max-age=30',
-    'SERVER: ' + profile.serverName,
+    `SERVER: ${profile.serverName}`,
     'NTS: ssdp:alive',
-    'USN: ' + usn,
-    'NT: ' + nt,
+    `USN: ${usn}`,
+    `NT: ${nt}`,
     '',
     '',
   ].join('\r\n');
 }
 
-function getSsdpNotifyPackets(profile) {
-  var uuid = 'uuid:' + profile.uuid;
+export function getSsdpNotifyPackets(profile) {
+  const uuid = `uuid:${profile.uuid}`;
   return [
-    buildNotify(profile, 'upnp:rootdevice', uuid + '::upnp:rootdevice'),
+    buildNotify(profile, 'upnp:rootdevice', `${uuid}::upnp:rootdevice`),
     buildNotify(
       profile,
       'urn:schemas-upnp-org:device:MediaRenderer:1',
-      uuid + '::urn:schemas-upnp-org:device:MediaRenderer:1',
+      `${uuid}::urn:schemas-upnp-org:device:MediaRenderer:1`,
     ),
     buildNotify(
       profile,
       'urn:schemas-upnp-org:service:AVTransport:1',
-      uuid + '::urn:schemas-upnp-org:service:AVTransport:1',
+      `${uuid}::urn:schemas-upnp-org:service:AVTransport:1`,
     ),
     buildNotify(
       profile,
       'urn:app-bilibili-com:service:NirvanaControl:3',
-      uuid + '::urn:app-bilibili-com:service:NirvanaControl:3',
+      `${uuid}::urn:app-bilibili-com:service:NirvanaControl:3`,
     ),
   ];
 }
 
-function getSsdpSearchResponse(profile, st) {
+export function getSsdpSearchResponse(profile, _st) {
   return [
     'HTTP/1.1 200 OK',
-    'LOCATION: ' + getLocation(profile),
+    `LOCATION: ${getLocation(profile)}`,
     'CACHE-CONTROL: max-age=30',
-    'SERVER: ' + profile.serverName,
+    `SERVER: ${profile.serverName}`,
     'EXT:',
     'BOOTID.UPNP.ORG: 1669443520',
     'CONFIGID.UPNP.ORG: 10177363',
-    'USN: uuid:atvbilibili&' + profile.uuid + '::upnp:rootdevice',
+    `USN: uuid:atvbilibili&${profile.uuid}::upnp:rootdevice`,
     'ST: upnp:rootdevice',
-    'DATE: ' + formatHttpDate(),
+    `DATE: ${formatHttpDate()}`,
     '',
     '',
   ].join('\r\n');
 }
-
-module.exports = {
-  createDeviceProfile: createDeviceProfile,
-  renderDescriptionXml: renderDescriptionXml,
-  renderAvTransportScpd: renderAvTransportScpd,
-  renderNirvanaScpd: renderNirvanaScpd,
-  getSsdpNotifyPackets: getSsdpNotifyPackets,
-  getSsdpSearchResponse: getSsdpSearchResponse,
-  getLocation: getLocation,
-};

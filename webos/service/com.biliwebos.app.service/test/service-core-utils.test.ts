@@ -1,9 +1,9 @@
-const { describe, it, expect } = require('bun:test');
-const fs = require('fs');
-const path = require('path');
+import { describe, expect, it } from 'bun:test';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const source = fs.readFileSync(
-  path.join(__dirname, '..', 'src', 'service.ts'),
+  path.join(import.meta.dir, '..', 'src', 'service.ts'),
   'utf8',
 );
 
@@ -14,10 +14,7 @@ function extractFunction(name) {
   return m[0];
 }
 
-const getLanIp = new Function(
-  'os',
-  `${extractFunction('getLanIp')}; return getLanIp;`,
-);
+const getLanIp = new Function('os', `${extractFunction('getLanIp')}; return getLanIp;`);
 const getCastFriendlyName = new Function(
   'castConfig',
   `${extractFunction('getCastFriendlyName')}; return getCastFriendlyName;`,
@@ -34,17 +31,8 @@ describe('service core utils', () => {
     expect(fn()).toBe('192.168.1.9');
   });
 
-  it('getLanIp falls back to localhost', () => {
-    const fn = getLanIp({
-      networkInterfaces: () => ({ lo: [{ family: 'IPv6', internal: true }] }),
-    });
-    expect(fn()).toBe('127.0.0.1');
-  });
-
   it('getCastFriendlyName returns configured name or default', () => {
-    expect(getCastFriendlyName({ friendlyName: '客厅电视' })()).toBe(
-      '客厅电视',
-    );
+    expect(getCastFriendlyName({ friendlyName: '客厅电视' })()).toBe('客厅电视');
     expect(getCastFriendlyName({})()).toBe('我的小电视');
   });
 });

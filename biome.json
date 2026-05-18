@@ -25,6 +25,9 @@
       "recommended": false,
       "suspicious": {
         "noImplicitAnyLet": "off"
+      },
+      "nursery": {
+        "noCommonJs": "error"
       }
     }
   },

@@ -1,11 +1,11 @@
 // @ts-nocheck
-function buildProxyUrl(proxyBase, host, pathWithSearch) {
+export function buildProxyUrl(proxyBase, host, pathWithSearch) {
   return proxyBase.replace(/\/$/, '') + '/proxy/' + host + pathWithSearch;
 }
 
 function shouldRewriteLine(line) {
   if (!line) return false;
-  var trimmed = line.trim();
+  const trimmed = line.trim();
   if (!trimmed) return false;
   if (trimmed[0] === '#') return false;
   return true;
@@ -13,7 +13,7 @@ function shouldRewriteLine(line) {
 
 function rewriteAttributeUri(line, sourceUrl, proxyBase) {
   return line.replace(/URI="([^"]+)"/g, function (_, uri) {
-    var resolved = new URL(uri, sourceUrl);
+    const resolved = new URL(uri, sourceUrl);
     return (
       'URI="' +
       buildProxyUrl(
@@ -26,7 +26,7 @@ function rewriteAttributeUri(line, sourceUrl, proxyBase) {
   });
 }
 
-function rewriteHlsPlaylist(playlistText, sourceUrl, proxyBase) {
+export function rewriteHlsPlaylist(playlistText, sourceUrl, proxyBase) {
   return String(playlistText || '')
     .split('\n')
     .map(function (line) {
@@ -34,7 +34,7 @@ function rewriteHlsPlaylist(playlistText, sourceUrl, proxyBase) {
         return rewriteAttributeUri(line, sourceUrl, proxyBase);
       }
       if (!shouldRewriteLine(line)) return line;
-      var resolved = new URL(line.trim(), sourceUrl);
+      const resolved = new URL(line.trim(), sourceUrl);
       return buildProxyUrl(
         proxyBase,
         resolved.host,
@@ -43,8 +43,3 @@ function rewriteHlsPlaylist(playlistText, sourceUrl, proxyBase) {
     })
     .join('\n');
 }
-
-module.exports = {
-  buildProxyUrl: buildProxyUrl,
-  rewriteHlsPlaylist: rewriteHlsPlaylist,
-};
