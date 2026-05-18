@@ -1,6 +1,7 @@
 // @ts-nocheck
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { shouldIncludeCoverageFile } from './coverage-files.ts';
 
 const PROJECT_ROOT = path.resolve(import.meta.dir, '..');
 const INCLUDE_PATTERNS = [
@@ -8,7 +9,6 @@ const INCLUDE_PATTERNS = [
   'src/**/*.tsx',
   'webos/service/com.biliwebos.app.service/src/**/*.ts',
 ];
-const EXCLUDE_PATTERNS = [/\.test\.ts$/, /\/test\//, /\/node_modules\//];
 
 const coverageImports = [];
 for (const pattern of INCLUDE_PATTERNS) {
@@ -16,7 +16,7 @@ for (const pattern of INCLUDE_PATTERNS) {
     cwd: PROJECT_ROOT,
     absolute: false,
   })) {
-    if (EXCLUDE_PATTERNS.some((pattern) => pattern.test(file))) {
+    if (!shouldIncludeCoverageFile(file)) {
       continue;
     }
     coverageImports.push(file);
