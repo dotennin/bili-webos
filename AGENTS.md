@@ -20,7 +20,7 @@ bun tools/test-e2e.ts
 # Run unit tests
 bun test
 
-# Run tests with coverage report
+# Run tests with coverage report, Must be greater than 90% to pass CI while changing existing code.
 bun test:coverage
 ```
 
