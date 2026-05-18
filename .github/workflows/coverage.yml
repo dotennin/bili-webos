@@ -47,6 +47,17 @@ jobs:
           git fetch origin document:refs/remotes/origin/document || true
           git show origin/document:coverage/coverage-summary.json > coverage/base/coverage-summary.json || true
 
+      - name: Build weighted coverage comparison
+        if: github.event_name == 'pull_request'
+        run: |
+          bun run coverage:compare -- \
+            --current coverage/coverage-summary.json \
+            --base coverage/base/coverage-summary.json \
+            --threshold 90 \
+            --baseline-label main \
+            --result-out coverage/compare-result.json \
+            --comment-out coverage/pr-comment.md
+
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -85,17 +96,6 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           node -e "const fs=require('fs'); const report=JSON.parse(fs.readFileSync('coverage/compare-result.json','utf8')); if (report.failed) { console.error('Weighted coverage below threshold:', report.belowThreshold.join(', ')); process.exit(1); }"
-
-      - name: Build weighted coverage comparison
-        if: github.event_name == 'pull_request'
-        run: |
-          bun run coverage:compare -- \
-            --current coverage/coverage-summary.json \
-            --base coverage/base/coverage-summary.json \
-            --threshold 90 \
-            --baseline-label main \
-            --result-out coverage/compare-result.json \
-            --comment-out coverage/pr-comment.md
 
       - name: Update badge json in document branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
