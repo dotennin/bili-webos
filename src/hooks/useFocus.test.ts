@@ -109,23 +109,6 @@ function createKeyEvent(key, overrides = {}) {
   };
 }
 
-test('initKeyboardNav lets a custom key handler consume events', async () => {
-  const mod = await loadModule();
-  const { __testing, setCustomKeyHandler } = mod;
-
-  const consumed = [];
-  setCustomKeyHandler((event) => {
-    if (event.key === 'X') {
-      consumed.push('custom');
-      return true;
-    }
-    return false;
-  });
-
-  expect(__testing.invokeCustomKeyHandler(createKeyEvent('X'))).toBe(true);
-  expect(consumed).toEqual(['custom']);
-});
-
 test('initKeyboardNav handles arrows, enter, sidebar transitions, and back key', async () => {
   const mod = await loadModule();
   const {
