@@ -203,13 +203,14 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
 
   await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
   expect(textOf(renderer.toJSON())).not.toContain('PlayerPage');
+  await interact(() => renderer.unmount());
 
   storageState.auth = null;
   navResponse = { data: { isLogin: false } };
   const freshRenderer = await render(React.createElement(App));
   await flush();
   await interact(() =>
-    sidebarItems.find((item) => item.label === '关注').onSelect(),
+    sidebarItems.filter((item) => item.label === '关注').at(-1).onSelect(),
   );
   expect(playerProps.login).not.toBeNull();
 
@@ -221,13 +222,15 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   ).toBe(true);
 
   await interact(() =>
-    sidebarItems.find((item) => item.label === '我的').onSelect(),
+    sidebarItems.filter((item) => item.label === '我的').at(-1).onSelect(),
   );
   const settingsEntry = pageProps
     .filter((entry) => entry.page === 'SettingsPage')
     .at(-1);
   await interact(() => settingsEntry.props.onLogout());
   expect(storageState.auth).toBeNull();
+  globalThis.window.webOS.platformBack.mockClear();
+  globalThis.window.close.mockClear();
 
   await interact(() =>
     castSubscription({
@@ -241,6 +244,10 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
     }),
   );
   expect(playerProps.live.room).toMatchObject({ roomid: 100, title: '直播间' });
+
+  await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
+  expect(textOf(freshRenderer.toJSON())).not.toContain('mock-LivePlayerPage');
+  expect(globalThis.window.webOS.platformBack).not.toHaveBeenCalled();
 
   await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
   expect(globalThis.window.webOS.platformBack).toHaveBeenCalled();
