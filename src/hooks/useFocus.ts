@@ -227,6 +227,9 @@ export const __testing = {
   getKeyHandler() {
     return keyHandler;
   },
+  invokeCustomKeyHandler(event) {
+    return customKeyHandler?.(event) ?? false;
+  },
   reset() {
     focusRegistry.clear();
     currentFocusId = null;
