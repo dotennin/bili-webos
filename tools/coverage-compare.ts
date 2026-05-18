@@ -86,8 +86,11 @@ export function renderPullRequestComment(report, options = {}) {
   lines.push('| Metric | Current | Main | Delta |');
   lines.push('| --- | ---: | ---: | ---: |');
   for (const row of report.rows) {
+    const deltaValue = row.delta.startsWith('+')
+      ? '$color{green}{\\text{' + row.delta + '}}$'
+      : '$color{red}{\\text{' + row.delta + '}}$';
     lines.push(
-      `| ${row.metric} | ${row.current} | ${row.main} | ${row.delta} |`,
+      `| ${row.metric} | ${row.current} | ${row.main} | ${deltaValue} |`,
     );
   }
   return lines.join('\n');

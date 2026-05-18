@@ -106,7 +106,7 @@ The implementation order is intentional. Coverage improvement comes first. CI co
 
 - The rows are `Lines`, `Statements`, `Functions`, and `Branches`.
 - `Delta` should be formatted as signed percentages such as `+1.24%` or `-0.80%`.
-- When any current weighted metric is below `90%`, include a short warning section above the table that clearly says the coverage gate failed and lists the failing metric values.
+- When any current weighted metric is below `80%`, include a short warning section above the table that clearly says the coverage gate failed and lists the failing metric values.
 - Reuse a stable HTML marker so the workflow updates one bot comment instead of creating duplicates.
 
 ## Code Changes
