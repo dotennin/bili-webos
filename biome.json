@@ -9,9 +9,7 @@
       "src/test/**/*",
       "tools/**/*.test.ts",
       "webos/service/com.biliwebos.app.service/test/**/*.ts",
-      "webos/service/com.biliwebos.app.service/service.js",
-      "webos/service/com.biliwebos.app.service/cast/*.js",
-      "webos/service/com.biliwebos.app.service/webos-service-stub.js"
+      "webos/service/com.biliwebos.app.service/dist"
     ]
   },
   "organizeImports": {

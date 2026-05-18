@@ -52,7 +52,7 @@ bili_webos/
 │   └── service/                  # TV Background Service (Node.js v16)
 │       └── com.biliwebos.app.service/
 │       ├── src/                  # TypeScript service source
-│       ├── service.js            # Compiled Luna methods + local HTTP proxy (:7654)
+│       ├── dist/                 # Compiled Luna methods + local HTTP proxy (:7654)
 │       ├── services.json
 │       └── package.json
 │

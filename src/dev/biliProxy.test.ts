@@ -7,13 +7,7 @@ import {
   isHlsPlaylistResponse,
   toCookieBridge,
 } from './biliProxy.ts';
-import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
-
-const require = createRequire(import.meta.url);
-const {
-  rewriteHlsPlaylist,
-} = require('../../webos/service/com.biliwebos.app.service/cast/hlsPlaylist.js');
 
 afterEach(() => {
   mock.restore();

@@ -88,7 +88,7 @@ bun run build-and-deploy
 ### 开发模式
 
 ```bash
-# 一键启动开发模式（会先生成 service 运行时 JS，再启动 Vite dev server）
+# 一键启动开发模式（会先生成 service dist 运行时，再启动 Vite dev server）
 bun run dev
 # 浏览器打开 http://localhost:5173
 ```
@@ -138,8 +138,7 @@ bili-webos/
 │   └── service/
 │       └── com.biliwebos.app.service/
 │       ├── src/                  # TypeScript service source
-│       ├── service.js            # 编译后的运行时入口
-│       ├── cast/hlsPlaylist.js   # 编译后的 HLS 播放列表重写运行时文件
+│       ├── dist/                 # 编译后的运行时产物
 │       └── test/                 # service 侧单元测试
 │
 ├── tools/                        # 部署/调试/测试工具

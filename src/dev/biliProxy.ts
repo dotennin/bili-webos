@@ -1,12 +1,7 @@
 // @ts-nocheck
 import zlib from 'node:zlib';
-import { createRequire } from 'node:module';
 import https from 'node:https';
-
-const require = createRequire(import.meta.url);
-const {
-  rewriteHlsPlaylist,
-} = require('../../webos/service/com.biliwebos.app.service/cast/hlsPlaylist.js');
+import { rewriteHlsPlaylist } from '../../webos/service/com.biliwebos.app.service/src/cast/hlsPlaylist.ts';
 
 const ALLOWED_HOSTS = [
   'api.bilibili.com',

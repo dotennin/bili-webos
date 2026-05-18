@@ -1,5 +1,5 @@
 {
   "name": "com.biliwebos.app.service",
-  "main": "service.js",
+  "main": "dist/service.js",
   "version": "1.4.0"
 }
