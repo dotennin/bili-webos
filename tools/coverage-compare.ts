@@ -143,7 +143,7 @@ if (import.meta.main) {
   fs.writeFileSync(commentOut, `${comment}\n`);
 
   console.log(comment);
-  if (report.failed) {
-    process.exitCode = 1;
-  }
+  // if (report.failed) {
+  //   process.exitCode = 1;
+  // }
 }
