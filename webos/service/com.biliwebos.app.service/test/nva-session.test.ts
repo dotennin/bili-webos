@@ -1,4 +1,4 @@
-import { test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import assert from 'node:assert/strict';
 import {
   decodeFrame,
@@ -57,4 +57,55 @@ test('NvaSession parses chunked frames and sends replies', () => {
   assert.equal(seen[0].action, 'Pause');
   session.sendReply({ ok: true });
   assert.equal(socket.written.length, 1);
+});
+
+test('NvaSession decodes reply frames and closes ping lifecycle safely', () => {
+  const decodedReply = decodeFrame(
+    Buffer.concat([
+      Buffer.from([0xc0, 0x01]),
+      Buffer.from([0x00, 0x00, 0x00, 0x05]),
+      Buffer.from([0x00, 0x00, 0x00, 0x0d]),
+      Buffer.from('{"ok":true}'),
+    ]),
+  );
+  expect(decodedReply.type).toBe('reply');
+
+  const intervalHandles = [];
+  const originalSetInterval = global.setInterval;
+  const originalClearInterval = global.clearInterval;
+  global.setInterval = (fn) => {
+    const handle = { fn };
+    intervalHandles.push(handle);
+    return handle;
+  };
+  global.clearInterval = mock(() => {});
+
+  class FakeSocket extends EventEmitter {
+    written = [];
+    destroyed = false;
+    write(buf) {
+      this.written.push(buf);
+    }
+    destroy() {
+      this.destroyed = true;
+    }
+  }
+
+  const socket = new FakeSocket();
+  const onClose = mock(() => {});
+  const session = new NvaSession('s2', socket, null, onClose);
+  session.startPing();
+  intervalHandles[0].fn();
+  expect(socket.written.at(-1)[0]).toBe(0xe4);
+
+  session.sendEmpty();
+  session.sendCommand('OnPlayState', { playState: 4 });
+  expect(socket.written.length).toBe(3);
+
+  socket.emit('close');
+  expect(socket.destroyed).toBe(true);
+  expect(onClose).toHaveBeenCalled();
+
+  global.setInterval = originalSetInterval;
+  global.clearInterval = originalClearInterval;
 });

@@ -302,4 +302,5 @@ export function createBiliDevProxyPlugin() {
 export const __testing = {
   copyResponseHeaders,
   decompressBuffer,
+  sendProxyRequest,
 };

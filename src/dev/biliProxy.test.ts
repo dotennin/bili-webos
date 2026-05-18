@@ -131,3 +131,101 @@ test('bili proxy helpers decode deflate payloads and rewrite response headers fo
   expect(headerValues['Content-Length']).toBe(14);
   expect(headerValues['content-length']).toBeUndefined();
 });
+
+test('vite proxy middleware handles ping next and forbidden host branches', () => {
+  const plugin = createBiliDevProxyPlugin();
+  let middleware;
+  plugin.configureServer({
+    middlewares: {
+      use(fn) {
+        middleware = fn;
+      },
+    },
+  });
+
+  const pingRes = {
+    statusCode: 0,
+    body: '',
+    writeHead(code) {
+      this.statusCode = code;
+    },
+    end(chunk) {
+      this.body = String(chunk);
+    },
+    setHeader() {},
+  };
+  middleware({ originalUrl: '/ping', headers: {} }, pingRes, () => {});
+  expect(pingRes.statusCode).toBe(200);
+  expect(pingRes.body).toContain('"status":"ok"');
+
+  let nextCalled = false;
+  middleware(
+    { originalUrl: '/not-proxy', headers: {} },
+    { writeHead() {}, end() {}, setHeader() {} },
+    () => {
+      nextCalled = true;
+    },
+  );
+  expect(nextCalled).toBe(true);
+
+  const deniedRes = {
+    statusCode: 0,
+    body: '',
+    writeHead(code) {
+      this.statusCode = code;
+    },
+    end(chunk) {
+      this.body = String(chunk);
+    },
+    setHeader() {},
+  };
+  middleware(
+    { originalUrl: '/proxy/example.com/x', headers: {} },
+    deniedRes,
+    () => {},
+  );
+  expect(deniedRes.statusCode).toBe(403);
+  expect(deniedRes.body).toContain('Host not allowed');
+});
+
+test('sendProxyRequest reports upstream request errors as json', async () => {
+  const originalRequest = https.request;
+  https.request = mock((_options, _cb) => {
+    const upstreamReq = new EventEmitter();
+    upstreamReq.write = mock(() => {});
+    upstreamReq.end = () => {
+      upstreamReq.emit('error', new Error('boom'));
+    };
+    upstreamReq.destroy = mock(() => {});
+    return upstreamReq;
+  });
+
+  const req = new EventEmitter();
+  req.method = 'GET';
+  req.headers = { host: 'localhost:5173' };
+  const res = {
+    headersSent: false,
+    statusCode: 0,
+    body: '',
+    writeHead(code) {
+      this.statusCode = code;
+    },
+    end(chunk) {
+      this.body = String(chunk);
+    },
+    setHeader() {},
+  };
+
+  __testing.sendProxyRequest(req, res, {
+    host: 'api.bilibili.com',
+    hostname: 'api.bilibili.com',
+    port: 443,
+    upstreamPath: '/x',
+  });
+  req.emit('end');
+  await new Promise((resolve) => queueMicrotask(resolve));
+
+  expect(res.statusCode).toBe(502);
+  expect(res.body).toContain('"error":"boom"');
+  https.request = originalRequest;
+});
