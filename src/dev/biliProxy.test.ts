@@ -263,3 +263,110 @@ test('bili proxy testing helpers parse cookies build proxy base and read streams
   stream.emit('end');
   expect((await streamPromise).toString()).toBe('hello world');
 });
+
+test('sendProxyRequest rewrites HLS playlists and exposes bridged cookies', async () => {
+  const originalRequest = https.request;
+  https.request = mock((_options, cb) => {
+    const upstreamRes = new EventEmitter();
+    upstreamRes.headers = {
+      'content-type': 'application/vnd.apple.mpegurl',
+      'content-encoding': 'identity',
+      'set-cookie': ['SESSDATA=abc; Path=/'],
+    };
+    upstreamRes.statusCode = 200;
+
+    const upstreamReq = new EventEmitter();
+    upstreamReq.write = mock(() => {});
+    upstreamReq.end = () => {
+      cb(upstreamRes);
+      queueMicrotask(() => {
+        upstreamRes.emit('data', Buffer.from('#EXTM3U\nsegment.ts\n'));
+        upstreamRes.emit('end');
+      });
+    };
+    upstreamReq.destroy = mock(() => {});
+    return upstreamReq;
+  });
+
+  const req = new EventEmitter();
+  req.method = 'GET';
+  req.headers = { host: 'localhost:5173' };
+  const res = {
+    headersSent: false,
+    statusCode: 0,
+    headers: {},
+    body: '',
+    setHeader(key, value) {
+      this.headers[key] = value;
+    },
+    writeHead(code) {
+      this.statusCode = code;
+    },
+    end(chunk) {
+      this.body = String(chunk);
+    },
+  };
+
+  __testing.sendProxyRequest(req, res, {
+    host: 'api.live.bilibili.com',
+    hostname: 'api.live.bilibili.com',
+    port: 443,
+    upstreamPath: '/live/test.m3u8',
+  });
+  req.emit('end');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(res.statusCode).toBe(200);
+  expect(res.body).toContain('http://localhost:5173/proxy/api.live.bilibili.com/live/segment.ts');
+  expect(res.headers['X-Set-Cookie']).toContain('SESSDATA');
+  https.request = originalRequest;
+});
+
+test('sendProxyRequest forwards request chunks and destroys upstream on request errors', () => {
+  const originalRequest = https.request;
+  const writes = [];
+  const destroys = [];
+  const requestOptions = [];
+
+  https.request = mock((options, _cb) => {
+    requestOptions.push(options);
+    const upstreamReq = new EventEmitter();
+    upstreamReq.write = (chunk) => {
+      writes.push(String(chunk));
+    };
+    upstreamReq.end = mock(() => {});
+    upstreamReq.destroy = () => {
+      destroys.push('destroyed');
+    };
+    return upstreamReq;
+  });
+
+  const req = new EventEmitter();
+  req.method = 'POST';
+  req.headers = {
+    host: 'localhost:5173',
+    'x-cookie': 'DedeUserID=100',
+  };
+  const res = {
+    headersSent: false,
+    writeHead() {},
+    end() {},
+    setHeader() {},
+  };
+
+  __testing.sendProxyRequest(req, res, {
+    host: 'api.bilibili.com',
+    hostname: 'api.bilibili.com',
+    port: 443,
+    upstreamPath: '/x/web-interface/nav',
+  });
+
+  req.emit('data', Buffer.from('body-part'));
+  req.emit('error', new Error('request broke'));
+
+  expect(writes).toEqual(['body-part']);
+  expect(destroys).toEqual(['destroyed']);
+  expect(requestOptions[0].headers.origin).toBe('https://www.bilibili.com');
+  expect(requestOptions[0].headers.cookie).toContain('DedeUserID=100');
+  https.request = originalRequest;
+});

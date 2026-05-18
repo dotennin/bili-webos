@@ -26,16 +26,6 @@ async function loadModule() {
   return useFocusModule;
 }
 
-async function waitFor(check, attempts = 50) {
-  for (let index = 0; index < attempts; index += 1) {
-    if (check()) return;
-    await Promise.resolve();
-    await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 1));
-  }
-  throw new Error('Timed out waiting for condition');
-}
-
 beforeEach(() => {
   globalThis.window = testWindow;
   globalThis.document = testDocument;
@@ -107,4 +97,131 @@ test('createFocusableHandlers focuses on hover and selects on click', async () =
 
   props.onClick({ preventDefault() {} });
   expect(calls).toEqual(['select']);
+});
+
+function createKeyEvent(key, overrides = {}) {
+  return {
+    key,
+    keyCode: overrides.keyCode ?? 0,
+    preventDefault() {},
+    stopPropagation() {},
+    ...overrides,
+  };
+}
+
+test('initKeyboardNav handles custom keys, arrows, enter, sidebar transitions, and back key', async () => {
+  const mod = await loadModule();
+  const {
+    __testing,
+    getCurrentFocusId,
+    initKeyboardNav,
+    registerFocusable,
+    setCustomKeyHandler,
+    setFocus,
+  } = mod;
+  const selections = [];
+  const backEvents = [];
+
+  createFocusableNode('sidebar-0-0');
+  createFocusableNode('content-0-0');
+  createFocusableNode('content-0-1');
+  createFocusableNode('content-1-1');
+
+  registerFocusable('sidebar-0-0', { row: 0, col: 0, group: 'sidebar' });
+  registerFocusable('content-0-0', {
+    row: 0,
+    col: 0,
+    group: 'content',
+    onSelect: () => selections.push('content-0-0'),
+  });
+  registerFocusable('content-0-1', {
+    row: 0,
+    col: 1,
+    group: 'content',
+    onSelect: () => selections.push('content-0-1'),
+  });
+  registerFocusable('content-1-1', {
+    row: 1,
+    col: 1,
+    group: 'content',
+    onSelect: () => selections.push('content-1-1'),
+  });
+
+  testWindow.addEventListener('tv-back', () => {
+    backEvents.push('tv-back');
+  });
+
+  initKeyboardNav();
+  const keyHandler = __testing.getKeyHandler();
+  expect(typeof keyHandler).toBe('function');
+
+  const consumed = [];
+  setCustomKeyHandler((event) => {
+    if (event.key === 'X') {
+      consumed.push('custom');
+      return true;
+    }
+    return false;
+  });
+
+  keyHandler(createKeyEvent('X'));
+  expect(consumed).toEqual(['custom']);
+
+  setFocus('sidebar-0-0');
+  keyHandler(createKeyEvent('ArrowRight'));
+  expect(getCurrentFocusId()).toBe('content-0-0');
+
+  keyHandler(createKeyEvent('ArrowRight'));
+  expect(getCurrentFocusId()).toBe('content-0-1');
+
+  keyHandler(createKeyEvent('ArrowDown'));
+  expect(getCurrentFocusId()).toBe('content-1-1');
+
+  keyHandler(createKeyEvent('Enter'));
+  expect(selections).toEqual(['content-1-1']);
+
+  keyHandler(createKeyEvent('ArrowLeft'));
+  expect(getCurrentFocusId()).toBe('sidebar-0-0');
+
+  keyHandler(
+    createKeyEvent('GoBack', {
+      keyCode: 461,
+    }),
+  );
+  expect(backEvents).toEqual(['tv-back']);
+});
+
+test('keyboard navigation falls back across sparse grids and missing default targets', async () => {
+  const mod = await loadModule();
+  const {
+    __testing,
+    getCurrentFocusId,
+    initKeyboardNav,
+    registerFocusable,
+    setFocus,
+  } = mod;
+
+  createFocusableNode('sidebar-2-0');
+  createFocusableNode('content-0-2');
+  createFocusableNode('content-1-0');
+  createFocusableNode('content-2-2');
+
+  registerFocusable('sidebar-2-0', { row: 2, col: 0, group: 'sidebar' });
+  registerFocusable('content-0-2', { row: 0, col: 2, group: 'content' });
+  registerFocusable('content-1-0', { row: 1, col: 0, group: 'content' });
+  registerFocusable('content-2-2', { row: 2, col: 2, group: 'content' });
+
+  initKeyboardNav();
+  const keyHandler = __testing.getKeyHandler();
+
+  setFocus('sidebar-2-0');
+  keyHandler(createKeyEvent('ArrowRight'));
+  expect(getCurrentFocusId()).toBe('content-1-0');
+
+  setFocus('content-2-2');
+  keyHandler(createKeyEvent('ArrowUp'));
+  expect(getCurrentFocusId()).toBe('content-1-0');
+
+  keyHandler(createKeyEvent('ArrowLeft'));
+  expect(getCurrentFocusId()).toBe('sidebar-2-0');
 });

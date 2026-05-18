@@ -426,3 +426,73 @@ test('createLocalProxyHandler covers passthrough and error branches plus testing
   expect(serviceModule.__testing.getLocalProxy()).toBeTruthy();
   expect(serviceModule.__testing.getCastConfig()).toBeTruthy();
 });
+
+test('cast intents launch app, keep healthy subscribers, and drop broken ones', async () => {
+  const handlers = serviceModule.service.handlers;
+  const originalConsoleError = console.error;
+  const originalConsoleLog = console.log;
+  const errorLogs = [];
+  const infoLogs = [];
+  console.error = (...args) => {
+    errorLogs.push(args);
+  };
+  console.log = (...args) => {
+    infoLogs.push(args);
+  };
+
+  const execPlans = [
+    (_file, _args, cb) => cb(null, 'ok\n', 'warn\n'),
+    (_file, _args, cb) => cb(new Error('launch failed'), '', ''),
+  ];
+  childProcess.execFile = mock((file, args, cb) => {
+    execPlans.shift()(file, args, cb);
+  });
+
+  const goodResponses = [];
+  const brokenSubscription = {
+    payload: {},
+    isSubscription: true,
+    respond() {},
+  };
+  handlers.castSubscribe({
+    payload: {},
+    isSubscription: true,
+    respond(value) {
+      goodResponses.push(value);
+    },
+  });
+  handlers.castSubscribe(brokenSubscription);
+  brokenSubscription.respond = () => {
+    throw new Error('subscriber closed');
+  };
+
+  serviceModule.castController.emitIntent({ type: 'pause' });
+  expect(goodResponses.at(-1)).toMatchObject({
+    event: { kind: 'command', command: { type: 'pause' } },
+  });
+  expect(infoLogs).toEqual(
+    expect.arrayContaining([
+      ['[Cast] launch stderr:', 'warn'],
+      ['[Cast] launch:', 'ok'],
+    ]),
+  );
+
+  serviceModule.castController.emitIntent({ type: 'resume' });
+  expect(errorLogs).toEqual(
+    expect.arrayContaining([['[Cast] launch app failed:', 'launch failed']]),
+  );
+
+  const stateResult = await new Promise((resolve) =>
+    handlers.castReportState({
+      payload: { playState: 'paused' },
+      respond: resolve,
+    }),
+  );
+  expect(stateResult).toEqual({ returnValue: true });
+  expect(goodResponses.at(-1)).toMatchObject({
+    event: { kind: 'state', payload: { playState: 'paused' } },
+  });
+
+  console.error = originalConsoleError;
+  console.log = originalConsoleLog;
+});

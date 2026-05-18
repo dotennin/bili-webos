@@ -221,3 +221,93 @@ test('CastLanServer handles tcp port conflict and request parsing from socket da
   expect(socket.ended).toContain('200 OK');
   expect(socket.ended).toContain('GetAppInfo');
 });
+
+test('CastLanServer ignores non-discovery packets and cleans up sessions and sockets', () => {
+  const originalConsoleError = console.error;
+  const errorCalls = [];
+  console.error = (...args) => {
+    errorCalls.push(args);
+  };
+
+  const controller = {
+    attachSession: mock(() => {}),
+    detachSession: mock(() => {}),
+  };
+  const server = new CastLanServer({
+    profile: {
+      httpPort: 9012,
+      uuid: 'uuid-4',
+      serverName: 'Bili,TV',
+      friendlyName: 'TV',
+      ip: '192.168.1.5',
+    },
+    controller,
+    onFrame() {},
+  });
+
+  server.startUdp();
+  udpSockets[0].handlers.message(Buffer.from('NOTIFY * HTTP/1.1\r\n\r\n'), {
+    port: 1900,
+    address: '192.168.1.10',
+  });
+  expect(udpSockets[0].sent).toHaveLength(0);
+
+  udpSockets[0].handlers.error({ message: 'udp broke' });
+  expect(errorCalls[0]).toEqual(['[Cast][SSDP] error:', 'udp broke']);
+
+  server.handleSessionClose({ id: 'session-44' });
+  expect(controller.detachSession).toHaveBeenCalledWith('session-44');
+
+  const closeUdp = mock(() => {});
+  const closeTcp = mock(() => {});
+  server.broadcastTimer = { id: 1 };
+  server.udpServer = { close: closeUdp };
+  server.tcpServer = { close: closeTcp };
+  server.stop();
+  expect(closeUdp).toHaveBeenCalled();
+  expect(closeTcp).toHaveBeenCalled();
+
+  console.error = originalConsoleError;
+});
+
+test('CastLanServer keeps tcp port on non-EADDRINUSE errors and parses chunked headers once', () => {
+  const originalConsoleError = console.error;
+  console.error = () => {};
+
+  const server = new CastLanServer({
+    profile: {
+      httpPort: 9013,
+      uuid: 'uuid-5',
+      serverName: 'Bili,TV',
+      friendlyName: 'TV',
+      ip: '192.168.1.6',
+    },
+    controller: { attachSession() {}, detachSession() {} },
+    onFrame() {},
+  });
+
+  server.startTcp(() => {});
+  tcpServers[0].handlers.error({ code: 'ECONNRESET', message: 'reset' });
+  expect(server.tcpPort).toBe(9013);
+
+  const socketHandlers = {};
+  const socket = {
+    ended: '',
+    on(event, handler) {
+      socketHandlers[event] = handler;
+    },
+    removeListener: mock(() => {}),
+    end(payload) {
+      this.ended = payload;
+    },
+  };
+  server.handleSocket(socket);
+  socketHandlers.data(Buffer.from('GET /description.xml HTTP/1.1\r\nHost: tv'));
+  expect(socket.ended).toBe('');
+  socketHandlers.data(Buffer.from('\r\n\r\n'));
+  expect(socket.ended).toContain('200 OK');
+  expect(socket.ended).toContain('friendlyName');
+  expect(socket.removeListener).toHaveBeenCalled();
+
+  console.error = originalConsoleError;
+});
