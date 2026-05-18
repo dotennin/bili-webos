@@ -479,6 +479,14 @@ describe('PlayerPage', () => {
     await interact(() => customKeyHandler(event('ArrowDown')));
     await interact(() => customKeyHandler(event('ArrowDown')));
     expect(JSON.stringify(renderer.toJSON())).toContain('related-card');
+    await interact(() =>
+      renderer.container.querySelector('.related-card')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      ),
+    );
+    expect(onPlayNext).toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV2' }),
+    );
     await interact(() => customKeyHandler(event('ArrowRight')));
     timers.find((item) => item.delay === 30 && !item.cleared)?.fn();
     await interact(() => customKeyHandler(event('ArrowDown')));
@@ -494,6 +502,13 @@ describe('PlayerPage', () => {
     expect(JSON.stringify(renderer.toJSON())).toContain(
       'player-controls hidden',
     );
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() =>
+      timers.find((item) => item.delay === 5000 && !item.cleared)?.fn(),
+    );
+    expect(JSON.stringify(renderer.toJSON())).toContain(
+      'player-controls hidden',
+    );
     await interact(() => customKeyHandler(event('Backspace', 461)));
     expect(onBack).toHaveBeenCalledTimes(2);
 
@@ -502,11 +517,18 @@ describe('PlayerPage', () => {
 
     await interact(() => video.dispatch('ended'));
     expect(JSON.stringify(renderer.toJSON())).toContain('播放结束');
+    await interact(() =>
+      renderer.container
+        .querySelectorAll('[style*="cursor: pointer"]')
+        .item(0)
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    expect(onPlayNext).toHaveBeenCalledTimes(2);
 
     await interact(() => customKeyHandler(event('ArrowLeft')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('Enter')));
-    expect(onPlayNext).toHaveBeenCalled();
+    expect(onPlayNext).toHaveBeenCalledTimes(3);
     await interact(() => customKeyHandler(event('Backspace', 461)));
     expect(onBack).toHaveBeenCalledTimes(3);
 
@@ -629,6 +651,93 @@ describe('PlayerPage', () => {
       unsupportedRenderer.unmount();
     });
   });
+
+  test('covers additional player keyboard branches for controls, related grid, and endscreen', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    const onPlayNext = mock(() => {});
+
+    api.getRelated.mockResolvedValueOnce({
+      data: Array.from({ length: 6 }, (_, index) => ({
+        bvid: `BV-R${index + 1}`,
+        title: `相关${index + 1}`,
+        pic: `//img/${index + 1}.jpg`,
+      })),
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-BRANCH',
+          cid: 12,
+          title: '分支视频',
+          owner: { name: '作者' },
+        },
+        onBack,
+        onPlayNext,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 120;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    video.paused = true;
+    await interact(() => customKeyHandler(event('MediaPlayPause')));
+    await interact(() => customKeyHandler(event('Backspace', 461)));
+    await interact(() => customKeyHandler(event('Enter')));
+    video.paused = false;
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(customKeyHandler(event('X'))).toBe(false);
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+    video.paused = true;
+    await interact(() => customKeyHandler(event('Enter')));
+    video.paused = false;
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(customKeyHandler(event('X'))).toBe(false);
+
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(customKeyHandler(event('X'))).toBe(false);
+    await interact(() => customKeyHandler(event('Backspace', 461)));
+
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    expect(customKeyHandler(event('X'))).toBe(false);
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    timers.find((item) => item.delay === 30 && !item.cleared)?.fn();
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+    timers.find((item) => item.delay === 30 && !item.cleared)?.fn();
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    timers.find((item) => item.delay === 30 && !item.cleared)?.fn();
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    timers.find((item) => item.delay === 30 && !item.cleared)?.fn();
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(onPlayNext).toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV-R1' }),
+    );
+
+    await interact(() => video.dispatch('ended'));
+    expect(customKeyHandler(event('X'))).toBe(false);
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(onPlayNext).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 });
 
 describe('LivePlayerPage', () => {
@@ -652,6 +761,15 @@ describe('LivePlayerPage', () => {
     });
 
     expect(api.getLiveStreamSource).toHaveBeenCalledWith(9);
+    mpegtsPlayers.at(-1)?.errorHandler?.(
+      'network',
+      'stalled',
+      { msg: 'decoder-broke' },
+    );
+    expect(api.castReportState).toHaveBeenCalledWith({
+      playState: 'error',
+      error: 'decoder-broke',
+    });
 
     video.readyState = 2;
     await interact(() => video.dispatch('playing'));
@@ -735,8 +853,12 @@ describe('LivePlayerPage', () => {
       'http://proxy.test/proxy/live.test/segment-2.ts',
     );
 
+    video.readyState = 2;
+    intervals.at(-1)?.fn();
     video.currentTime = 1;
     await interact(() => video.dispatch('timeupdate'));
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('canplay'));
     await interact(() => video.dispatch('waiting'));
     video.ended = false;
     await interact(() => video.dispatch('pause'));
@@ -752,6 +874,8 @@ describe('LivePlayerPage', () => {
     });
 
     await interact(() => customKeyHandler(event('MediaPlayPause')));
+    await interact(() => customKeyHandler(event('MediaPlay', 415)));
+    await interact(() => customKeyHandler(event('MediaRewind', 412)));
     await interact(() => customKeyHandler(event('MediaFastForward', 417)));
     await interact(() => customKeyHandler(event('ArrowDown')));
     await interact(() => timers.at(-1).fn());

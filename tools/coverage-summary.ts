@@ -16,7 +16,7 @@ const total = {
 };
 const files = [];
 
-for (const record of text.split('end_of_record\n')) {
+for (const record of text.split('end_of_record')) {
   if (!record.trim()) continue;
 
   const file = {

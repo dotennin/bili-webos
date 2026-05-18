@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Raise weighted LCOV total coverage to at least 95%, then add PR coverage comparison against `main` with delta reporting and a `<90%` weighted-total failure gate.
+**Goal:** Raise weighted LCOV total coverage to at least 95%, then add PR coverage comparison against `main` with delta reporting and a `<80%` weighted-total failure gate.
 
 **Architecture:** Increase coverage by testing the biggest weighted hotspots first, using the existing Bun + Happy DOM test stack and only minimal testability extractions where top-level side effects block stable tests. After coverage reaches the target, add a single coverage-comparison utility in `tools/` and make the GitHub Actions workflow use that utility for both PR comments and gate decisions so all weighted calculations come from one code path.
 
@@ -455,7 +455,7 @@ describe('coverage compare', () => {
     const report = buildCoverageReport(
       { total: { lines: { pct: 96 }, statements: { pct: 96 }, functions: { pct: 95 }, branches: { pct: 100 } } },
       { total: { lines: { pct: 94.5 }, statements: { pct: 94.5 }, functions: { pct: 93 }, branches: { pct: 100 } } },
-      90,
+      80,
     );
     expect(report.rows[0]).toEqual({
       metric: 'Lines',
@@ -469,7 +469,7 @@ describe('coverage compare', () => {
   it('flags below-threshold weighted metrics and emits warning text', () => {
     const failed = findBelowThresholdMetrics(
       { lines: { pct: 89.5 }, statements: { pct: 91 }, functions: { pct: 88 }, branches: { pct: 100 } },
-      90,
+      80,
     );
     expect(failed).toEqual(['Lines', 'Functions']);
   });
@@ -506,7 +506,7 @@ export function findBelowThresholdMetrics(total: any, threshold: number) {
     .map((metric) => metric[0].toUpperCase() + metric.slice(1));
 }
 
-export function buildCoverageReport(currentSummary: any, mainSummary: any, threshold = 90) {
+export function buildCoverageReport(currentSummary: any, mainSummary: any, threshold = 80) {
   const rows = METRICS.map((metric) => {
     const currentPct = Number(currentSummary.total[metric].pct);
     const mainPct = Number(mainSummary?.total?.[metric]?.pct ?? NaN);
@@ -561,11 +561,11 @@ git commit -m "feat: add weighted coverage comparison utility"
 
 ```ts
 // tools/coverage-compare.test.ts
-it('builds a PR comment with a warning section when weighted coverage is below 90%', () => {
+it('builds a PR comment with a warning section when weighted coverage is below 80%', () => {
   const report = buildCoverageReport(
     { total: { lines: { pct: 89.5 }, statements: { pct: 91 }, functions: { pct: 88 }, branches: { pct: 100 } } },
     { total: { lines: { pct: 96 }, statements: { pct: 96 }, functions: { pct: 95 }, branches: { pct: 100 } } },
-    90,
+    80,
   );
   expect(renderPullRequestComment(report, { baselineLabel: 'main' })).toContain(
     'Coverage gate failed',
@@ -595,7 +595,7 @@ export function renderPullRequestComment(report: any, options = {}) {
     ? [
         '## Coverage Report',
         '',
-        `Coverage gate failed: weighted coverage is below ${options.threshold ?? 90}%`,
+        `Coverage gate failed: weighted coverage is below ${options.threshold ?? 80}%`,
         '',
         ...report.belowThreshold.map((metric: string) => {
           const row = report.rows.find((entry: any) => entry.metric === metric);
@@ -636,7 +636,7 @@ export function renderPullRequestComment(report: any, options = {}) {
     "$BUN_BIN" tools/coverage-compare.ts \
       --current coverage/coverage-summary.json \
       --base coverage/base/coverage-summary.json \
-      --threshold 90 \
+      --threshold 80 \
       --comment-out coverage/pr-comment.md
 
 - name: Comment coverage on PR

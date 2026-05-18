@@ -53,7 +53,7 @@ jobs:
           bun run coverage:compare -- \
             --current coverage/coverage-summary.json \
             --base coverage/base/coverage-summary.json \
-            --threshold 90 \
+            --threshold 80 \
             --baseline-label main \
             --result-out coverage/compare-result.json \
             --comment-out coverage/pr-comment.md

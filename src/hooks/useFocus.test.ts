@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { React, render, interact } from '../test/reactTestUtils.ts';
 
 let useFocusModule;
 const testWindow = globalThis.__TEST_WINDOW__;
@@ -211,4 +212,42 @@ test('keyboard navigation falls back across sparse grids and missing default tar
 
   keyHandler(createKeyEvent('ArrowLeft'));
   expect(getCurrentFocusId()).toBe('sidebar-2-0');
+});
+
+test('useFocusable registers, exposes props, and unregisters on unmount', async () => {
+  const mod = await import(`./useFocus.ts?hook=${Date.now()}-${Math.random()}`);
+  mod.__testing.reset();
+  const { useFocusable, __testing, getCurrentFocusId } = mod;
+  const selects = [];
+
+  function Probe() {
+    const focusable = useFocusable({
+      id: 'content-3-2',
+      row: 3,
+      col: 2,
+      group: 'content',
+      onSelect: () => selects.push('selected'),
+    });
+    return React.createElement(
+      'button',
+      focusable.props,
+      focusable.isFocused ? 'focused' : 'idle',
+    );
+  }
+
+  const renderer = await render(React.createElement(Probe));
+  const button = renderer.container.querySelector('button');
+
+  expect(__testing.hasFocusable('content-3-2')).toBe(true);
+  expect(button.getAttribute('data-focus-id')).toBe('content-3-2');
+
+  await interact(() =>
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+  );
+  expect(getCurrentFocusId()).toBe('content-3-2');
+  expect(selects).toEqual(['selected']);
+
+  renderer.unmount();
+  expect(__testing.hasFocusable('content-3-2')).toBe(false);
+  mod.__testing.reset();
 });

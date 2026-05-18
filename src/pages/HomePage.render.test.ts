@@ -198,3 +198,44 @@ test('HomePage loads by mode, dedupes items, focuses first content, and loads mo
   expect(renderer).toBeTruthy();
   expect(recommendRenderer).toBeTruthy();
 });
+
+test('HomePage handles initial and pagination failures without leaving loading state stuck', async () => {
+  const { default: HomePage } = await importFresh();
+
+  api.getPopular.mockImplementationOnce(async () => {
+    throw new Error('load failed');
+  });
+  const failedRenderer = await render(
+    React.createElement(HomePage, {
+      mode: 'hot',
+      refreshKey: 9,
+      onPlayVideo() {},
+    }),
+  );
+  await flush();
+  expect(String(failedRenderer.container.textContent || '')).not.toContain(
+    '加载中...',
+  );
+
+  api.getPopular.mockResolvedValueOnce({
+    data: { list: [{ bvid: 'BV10', title: '热门10' }] },
+  });
+  const pagingRenderer = await render(
+    React.createElement(HomePage, {
+      mode: 'hot',
+      refreshKey: 10,
+      onPlayVideo() {},
+    }),
+  );
+  await flush();
+  api.getPopular.mockImplementationOnce(async () => {
+    throw new Error('page failed');
+  });
+  await interact(() => focusListener?.('content-0-0'));
+  expect(videoGridCalls.at(-1).videos).toEqual([
+    { bvid: 'BV10', title: '热门10' },
+  ]);
+
+  expect(failedRenderer).toBeTruthy();
+  expect(pagingRenderer).toBeTruthy();
+});

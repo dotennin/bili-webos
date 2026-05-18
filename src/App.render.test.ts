@@ -11,7 +11,9 @@ import {
 
 let focusState;
 let castSubscription;
+let castFailure;
 let navResponse;
+let navFailure;
 let storageState;
 let sidebarItems;
 let pageProps;
@@ -22,9 +24,11 @@ let timers;
 beforeEach(() => {
   focusState = { current: null, listeners: [] };
   castSubscription = null;
+  castFailure = null;
   navResponse = {
     data: { isLogin: true, mid: 1, uname: '已登录用户', face: 'avatar.png' },
   };
+  navFailure = null;
   storageState = {
     auth: { SESSDATA: 'sess' },
   };
@@ -40,6 +44,10 @@ beforeEach(() => {
       service: {
         request(_uri, options) {
           if (options.method === 'fetch') {
+            if (navFailure) {
+              options.onFailure?.(navFailure);
+              return;
+            }
             options.onSuccess?.({
               returnValue: true,
               body: JSON.stringify(navResponse),
@@ -49,6 +57,9 @@ beforeEach(() => {
           if (options.method === 'castSubscribe') {
             castSubscription = (event) => {
               options.onSuccess?.({ event });
+            };
+            castFailure = (err) => {
+              options.onFailure?.(err);
             };
             return;
           }
@@ -166,8 +177,24 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   expect(playerProps.live.room.roomid).toBe(77);
 
   await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
+  await interact(() =>
+    recommendEntry.props.onPlayVideo({ bvid: 'BV-local', title: '本地视频' }),
+  );
+  expect(playerProps.video.video).toMatchObject({ bvid: 'BV-local' });
+  await interact(() =>
+    playerProps.video.onPlayNext({ bvid: 'BV-next', title: '下一集' }),
+  );
+  expect(playerProps.video.video).toMatchObject({ bvid: 'BV-next' });
+  await interact(() => playerProps.video.onBack());
+  expect(textOf(renderer.toJSON())).not.toContain('mock-PlayerPage');
+  await interact(() =>
+    recommendEntry.props.onPlayVideo({ bvid: 'BV-local', title: '本地视频' }),
+  );
+  await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
   await interact(() => recommendEntry.props.onPlayVideo({ title: '坏视频' }));
   expect(textOf(renderer.toJSON())).toContain('无法播放此视频');
+  await interact(() => timers.at(-1).fn());
+  expect(textOf(renderer.toJSON())).not.toContain('无法播放此视频');
 
   await interact(() =>
     castSubscription({
@@ -188,6 +215,13 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
     progress: 15,
     fromCast: true,
   });
+  await interact(() =>
+    castSubscription({
+      kind: 'command',
+      command: { type: 'resume' },
+    }),
+  );
+  await interact(() => castFailure?.({ errorText: 'subscribe failed' }));
 
   await interact(() =>
     castSubscription({
@@ -209,6 +243,11 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
     sidebarItems.filter((item) => item.label === '关注').at(-1).onSelect(),
   );
   expect(playerProps.login).not.toBeNull();
+  await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
+  expect(textOf(freshRenderer.toJSON())).not.toContain('mock-LoginPage');
+  await interact(() =>
+    sidebarItems.filter((item) => item.label === '关注').at(-1).onSelect(),
+  );
 
   await interact(() => playerProps.login.onLogin());
   expect(
@@ -244,9 +283,31 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
   expect(textOf(freshRenderer.toJSON())).not.toContain('mock-LivePlayerPage');
   expect(globalThis.window.webOS.platformBack).not.toHaveBeenCalled();
+  await interact(() =>
+    castSubscription({
+      kind: 'command',
+      command: {
+        type: 'play',
+        contentType: 'live',
+        roomId: 101,
+        title: '直接返回直播',
+      },
+    }),
+  );
+  await interact(() => playerProps.live.onBack());
+  expect(textOf(freshRenderer.toJSON())).not.toContain('mock-LivePlayerPage');
 
+  globalThis.window.webOS.platformBack.mockImplementationOnce(() => {
+    throw new Error('no platform back');
+  });
   await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
-  expect(globalThis.window.webOS.platformBack).toHaveBeenCalled();
+  expect(globalThis.window.close).toHaveBeenCalled();
+
+  navFailure = { errorText: 'nav failed' };
+  storageState.auth = { SESSDATA: 'sess' };
+  const failedNavRenderer = await render(React.createElement(App));
+  await flush();
+  await interact(() => failedNavRenderer.unmount());
 
   const appAgain = React.createElement(App);
   await update(freshRenderer, appAgain);

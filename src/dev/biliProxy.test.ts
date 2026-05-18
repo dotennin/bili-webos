@@ -291,6 +291,10 @@ test('sendProxyRequest rewrites HLS playlists and exposes bridged cookies', asyn
   const req = new EventEmitter();
   req.method = 'GET';
   req.headers = { host: 'localhost:5173' };
+  let resolveResponse;
+  const responseEnded = new Promise((resolve) => {
+    resolveResponse = resolve;
+  });
   const res = {
     headersSent: false,
     statusCode: 0,
@@ -304,6 +308,7 @@ test('sendProxyRequest rewrites HLS playlists and exposes bridged cookies', asyn
     },
     end(chunk) {
       this.body = String(chunk);
+      resolveResponse();
     },
   };
 
@@ -314,7 +319,7 @@ test('sendProxyRequest rewrites HLS playlists and exposes bridged cookies', asyn
     upstreamPath: '/live/test.m3u8',
   });
   req.emit('end');
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await responseEnded;
 
   expect(res.statusCode).toBe(200);
   expect(res.body).toContain('http://localhost:5173/proxy/api.live.bilibili.com/live/segment.ts');

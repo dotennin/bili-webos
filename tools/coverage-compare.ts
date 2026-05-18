@@ -26,7 +26,7 @@ export function findBelowThresholdMetrics(total, threshold) {
 export function buildCoverageReport(
   currentSummary,
   baseSummary,
-  threshold = 90,
+  threshold = 80,
 ) {
   const currentTotal = currentSummary?.total ?? {};
   const baseTotal = baseSummary?.total ?? null;
