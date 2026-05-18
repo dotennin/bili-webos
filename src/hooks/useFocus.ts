@@ -224,6 +224,9 @@ export const __testing = {
     return focusRegistry.has(id);
   },
   createFocusableHandlers,
+  getKeyHandler() {
+    return keyHandler;
+  },
   reset() {
     focusRegistry.clear();
     currentFocusId = null;

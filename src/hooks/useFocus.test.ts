@@ -18,22 +18,6 @@ function createFocusableNode(id) {
   };
 }
 
-function dispatchKey(key, keyCode = 0) {
-  const event = new KeyboardEvent('keydown', {
-    key,
-    bubbles: true,
-    cancelable: true,
-  });
-  if (keyCode) {
-    Object.defineProperty(event, 'keyCode', {
-      configurable: true,
-      value: keyCode,
-    });
-  }
-  window.dispatchEvent(event);
-  return event;
-}
-
 async function loadModule() {
   if (!useFocusModule) {
     useFocusModule = await import('./useFocus.ts');
@@ -103,8 +87,13 @@ test('register/setFocus/onFocusChange update DOM focus classes', async () => {
 
 test('initKeyboardNav handles enter, arrows, sidebar/content transitions, and back key', async () => {
   const mod = await loadModule();
-  const { registerFocusable, setFocus, initKeyboardNav, setCustomKeyHandler } =
-    mod;
+  const {
+    registerFocusable,
+    setFocus,
+    initKeyboardNav,
+    setCustomKeyHandler,
+    __testing,
+  } = mod;
 
   const sidebar0 = createFocusableNode('sidebar-0-0');
   createFocusableNode('sidebar-1-0');
@@ -145,6 +134,8 @@ test('initKeyboardNav handles enter, arrows, sidebar/content transitions, and ba
   });
 
   initKeyboardNav();
+  const keyHandler = __testing.getKeyHandler();
+  expect(typeof keyHandler).toBe('function');
 
   const consumed = [];
   setCustomKeyHandler((event) => {
@@ -155,32 +146,62 @@ test('initKeyboardNav handles enter, arrows, sidebar/content transitions, and ba
     return false;
   });
 
-  dispatchKey('X');
+  keyHandler({ key: 'X' });
   expect(consumed).toEqual(['custom']);
 
   setFocus('sidebar-0-0');
-  dispatchKey('ArrowRight');
+  keyHandler({
+    key: 'ArrowRight',
+    preventDefault() {},
+    stopPropagation() {},
+  });
   expect(mod.getCurrentFocusId()).toBe('content-0-0');
 
-  dispatchKey('ArrowDown');
+  keyHandler({
+    key: 'ArrowDown',
+    preventDefault() {},
+    stopPropagation() {},
+  });
   expect(mod.getCurrentFocusId()).toBe('content-1-0');
   expect(content10.element.classList.contains('focused')).toBe(true);
 
-  dispatchKey('ArrowRight');
+  keyHandler({
+    key: 'ArrowRight',
+    preventDefault() {},
+    stopPropagation() {},
+  });
   expect(mod.getCurrentFocusId()).toBe('content-1-1');
 
-  dispatchKey('ArrowLeft');
+  keyHandler({
+    key: 'ArrowLeft',
+    preventDefault() {},
+    stopPropagation() {},
+  });
   expect(mod.getCurrentFocusId()).toBe('content-1-0');
 
-  dispatchKey('Enter');
+  keyHandler({
+    key: 'Enter',
+    preventDefault() {},
+    stopPropagation() {},
+  });
   expect(selected).toContain('c1');
 
   const backEvents = [];
   const handleBack = (event) => backEvents.push(event.type);
   window.addEventListener('tv-back', handleBack);
-  dispatchKey('Backspace', 461);
+  const backEvent = {
+    key: 'Backspace',
+    keyCode: 461,
+    stopped: false,
+    preventDefault() {},
+    stopPropagation() {
+      this.stopped = true;
+    },
+  };
+  keyHandler(backEvent);
   window.removeEventListener('tv-back', handleBack);
   expect(backEvents).toEqual(['tv-back']);
+  expect(backEvent.stopped).toBe(true);
   expect(sidebar0.element.classList.contains('focused')).toBe(false);
 });
 
@@ -244,18 +265,32 @@ test('keyboard navigation falls back across sparse grids and missing groups', as
   const seen = [];
   const off = onFocusChange((id) => seen.push(id));
   initKeyboardNav();
+  const keyHandler = mod.__testing.getKeyHandler();
+  expect(typeof keyHandler).toBe('function');
 
   setFocus('sidebar-3-0');
-  dispatchKey('ArrowRight');
+  keyHandler({
+    key: 'ArrowRight',
+    preventDefault() {},
+    stopPropagation() {},
+  });
   expect(mod.getCurrentFocusId()).toBe('content-1-0');
 
   setFocus('content-2-2');
-  dispatchKey('ArrowUp');
+  keyHandler({
+    key: 'ArrowUp',
+    preventDefault() {},
+    stopPropagation() {},
+  });
   expect(mod.getCurrentFocusId()).toBe('content-1-0');
 
   unregisterFocusable('sidebar-3-0');
   setFocus('content-1-0');
-  dispatchKey('ArrowLeft');
+  keyHandler({
+    key: 'ArrowLeft',
+    preventDefault() {},
+    stopPropagation() {},
+  });
   expect(mod.getCurrentFocusId()).toBe('content-1-0');
 
   off();
