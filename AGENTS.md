@@ -77,3 +77,6 @@ On TV:  Web App ──Luna bus──▶ JS Service (Node.js) ──HTTPS──�
 
 In Dev: Web App ──HTTP──────▶ Vite Dev Server (/proxy) ──HTTPS──▶ B站 API/CDN
 ```
+
+# Development Workflow
+- Use `semantic-release` commit title and message format for automatic changelog and versioning.
