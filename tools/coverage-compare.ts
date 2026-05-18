@@ -56,7 +56,12 @@ export function buildCoverageReport(
 
 export function renderPullRequestComment(report, options = {}) {
   const baselineLabel = options.baselineLabel ?? 'main';
-  const lines = ['## Coverage Report', ''];
+  const lines = [
+    '## Coverage Report',
+    '',
+    'Build weighted coverage comparison',
+    '',
+  ];
 
   if (report.failed) {
     lines.push(
