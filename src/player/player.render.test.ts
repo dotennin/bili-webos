@@ -837,6 +837,55 @@ describe('PlayerPage', () => {
     });
   });
 
+  test('shows an unsupported-speed message inside packaged webos apps', async () => {
+    globalThis.window = Object.assign(eventTarget, {
+      PalmSystem: { identifier: 'com.biliwebos.app' },
+    });
+
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-WEBOS-NOSPEED',
+          cid: 16,
+          title: '实机视频',
+        },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 120;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+
+    expect(JSON.stringify(renderer.toJSON())).toContain('倍速');
+
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    expect(customKeyHandler(event('ArrowRight'))).toBe(true);
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('Enter')));
+
+    const tree = JSON.stringify(renderer.toJSON());
+    expect(tree).toContain('speed-panel');
+    expect(tree).toContain('此设备不支持倍速');
+    expect(tree).not.toContain('0.25x');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test('keeps the selected playback rate after follow-up media events and quality reloads', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();

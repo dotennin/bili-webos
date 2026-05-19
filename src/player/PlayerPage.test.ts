@@ -31,6 +31,14 @@ const buildMPD = new Function(
   'escapeXml',
   `${extractFunction('buildMPD')}; return buildMPD;`,
 )(escapeXml);
+const browserAppIdMatch = source.match(
+  /const WEBOS_BROWSER_APP_ID = '([^']+)'/,
+);
+if (!browserAppIdMatch) throw new Error('missing WEBOS_BROWSER_APP_ID');
+const supportsPlaybackSpeedControl = new Function(
+  'WEBOS_BROWSER_APP_ID',
+  `${extractFunction('supportsPlaybackSpeedControl')}; return supportsPlaybackSpeedControl;`,
+)(browserAppIdMatch[1]);
 
 test('escapeXml encodes xml-sensitive characters', () => {
   expect(escapeXml('a&b<c>"')).toBe('a&amp;b&lt;c&gt;&quot;');
@@ -54,4 +62,23 @@ test('buildMPD emits both video/audio adaptation sets and escaped URLs', () => {
 test('buildMPD supports empty tracks', () => {
   const mpd = buildMPD({ duration: 0, minBufferTime: 1, video: [], audio: [] });
   expect(mpd).toContain('<Period></Period>');
+});
+
+test('supportsPlaybackSpeedControl disables speed in packaged webos apps only', () => {
+  const originalWindow = globalThis.window;
+
+  globalThis.window = {};
+  expect(supportsPlaybackSpeedControl()).toBe(true);
+
+  globalThis.window = {
+    PalmSystem: { identifier: 'com.webos.app.browser' },
+  };
+  expect(supportsPlaybackSpeedControl()).toBe(true);
+
+  globalThis.window = {
+    PalmSystem: { identifier: 'com.biliwebos.app' },
+  };
+  expect(supportsPlaybackSpeedControl()).toBe(false);
+
+  globalThis.window = originalWindow;
 });
