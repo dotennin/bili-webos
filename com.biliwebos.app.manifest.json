@@ -1,6 +1,6 @@
 {
   "id": "com.biliwebos.app",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "type": "web",
   "title": "BiliTV",
   "appDescription": "Bilibili client for webOS TV",
