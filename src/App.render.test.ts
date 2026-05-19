@@ -246,6 +246,20 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
   expect(textOf(freshRenderer.toJSON())).not.toContain('mock-LoginPage');
   await interact(() =>
+    sidebarItems.filter((item) => item.label === '我的').at(-1).onSelect(),
+  );
+  expect(playerProps.login).not.toBeNull();
+  await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
+  expect(textOf(freshRenderer.toJSON())).not.toContain('mock-LoginPage');
+  await interact(() =>
+    freshRenderer.container
+      .querySelector('.sidebar-user-login')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true })),
+  );
+  expect(playerProps.login).not.toBeNull();
+  await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
+  expect(textOf(freshRenderer.toJSON())).not.toContain('mock-LoginPage');
+  await interact(() =>
     sidebarItems.filter((item) => item.label === '关注').at(-1).onSelect(),
   );
 
