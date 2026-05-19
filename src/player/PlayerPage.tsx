@@ -23,6 +23,7 @@ const SEEK_MAX_MULTIPLIER = 6;
 const SEEK_END_BUFFER_SEC = 1;
 const SEEK_EPSILON = 0.001;
 const RESUME_REWIND_SEC = 2;
+const RELATED_GRID_COLS = 4;
 
 export default function PlayerPage({ video, onBack, onPlayNext }) {
   const videoRef = useRef(null);
@@ -95,6 +96,12 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   }, []);
 
   const CONTROLS = ['play', 'danmaku', 'quality'];
+
+  const getGridVerticalTarget = useCallback((currentIdx, direction, total) => {
+    const nextIdx = currentIdx + direction * RELATED_GRID_COLS;
+    if (nextIdx < 0 || nextIdx >= total) return currentIdx;
+    return nextIdx;
+  }, []);
 
   const syncResumeProgress = useCallback(
     (timeSec, durationSec) => {
@@ -393,6 +400,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
         videoRef.current.addEventListener('ended', () => {
           endedRef.current = true;
+          if (controlsTimer.current) clearTimeout(controlsTimer.current);
           setEnded(true);
           setShowControls(true);
           setFocusArea('endscreen');
@@ -554,7 +562,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   const hideControlsLater = useCallback(() => {
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
     controlsTimer.current = setTimeout(() => {
-      if (!ended) {
+      if (!endedRef.current) {
         commitPreviewSeek();
         setShowControls(false);
         setShowRelated(false);
@@ -562,7 +570,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         setFocusArea('none');
       }
     }, 5000);
-  }, [commitPreviewSeek, ended]);
+  }, [commitPreviewSeek]);
 
   const showTimelineControls = useCallback(() => {
     setShowControls(true);
@@ -972,10 +980,9 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
       // === Related videos panel (4-column grid) ===
       if (focusArea === 'related') {
-        const RCOLS = 4;
         if (key === 'ArrowLeft') {
           e.preventDefault();
-          if (focusIdx % RCOLS > 0) {
+          if (focusIdx % RELATED_GRID_COLS > 0) {
             setFocusIdx((prev) => prev - 1);
             scrollRelatedIntoView(focusIdx - 1);
           }
@@ -984,7 +991,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         if (key === 'ArrowRight') {
           e.preventDefault();
           if (
-            focusIdx % RCOLS < RCOLS - 1 &&
+            focusIdx % RELATED_GRID_COLS < RELATED_GRID_COLS - 1 &&
             focusIdx < relatedVideos.length - 1
           ) {
             setFocusIdx((prev) => prev + 1);
@@ -994,8 +1001,8 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
-          if (focusIdx >= RCOLS) {
-            const newIdx = focusIdx - RCOLS;
+          if (focusIdx >= RELATED_GRID_COLS) {
+            const newIdx = focusIdx - RELATED_GRID_COLS;
             setFocusIdx(newIdx);
             scrollRelatedIntoView(newIdx);
           } else {
@@ -1006,7 +1013,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         }
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          const nextIdx = focusIdx + RCOLS;
+          const nextIdx = focusIdx + RELATED_GRID_COLS;
           if (nextIdx < relatedVideos.length) {
             setFocusIdx(nextIdx);
             scrollRelatedIntoView(nextIdx);
@@ -1034,6 +1041,20 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         if (key === 'ArrowRight') {
           e.preventDefault();
           setFocusIdx((prev) => Math.min(relatedVideos.length - 1, prev + 1));
+          return true;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          setFocusIdx((prev) =>
+            getGridVerticalTarget(prev, -1, relatedVideos.length),
+          );
+          return true;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          setFocusIdx((prev) =>
+            getGridVerticalTarget(prev, 1, relatedVideos.length),
+          );
           return true;
         }
         if (key === 'Enter') {
@@ -1065,6 +1086,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     commitPreviewSeek,
     hideControlsLater,
     changeQuality,
+    getGridVerticalTarget,
     showTimelineControls,
   ]);
 
@@ -1257,7 +1279,14 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           <div style={{ fontSize: 20, color: '#aaa', marginBottom: 20 }}>
             接下来播放
           </div>
-          <div style={{ display: 'flex', gap: 20 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${RELATED_GRID_COLS}, minmax(0, 280px))`,
+              gap: 20,
+              justifyContent: 'center',
+            }}
+          >
             {relatedVideos.map((rv, i) => {
               const thumb = (rv.pic || '').startsWith('//')
                 ? 'https:' + rv.pic
