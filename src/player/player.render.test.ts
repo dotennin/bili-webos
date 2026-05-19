@@ -1009,6 +1009,63 @@ describe('PlayerPage', () => {
       renderer.unmount();
     });
   });
+
+  test('keeps accelerated seek anchored to the committed preview target when player time reports stale values', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    let currentTimeValue = 100;
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get() {
+        return currentTimeValue;
+      },
+      set(value) {
+        currentTimeValue = value;
+      },
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-SEEK-STALE', cid: 24, title: '长按进度回跳' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 300;
+    video.readyState = 2;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() =>
+      timers.find((item) => item.delay === 250 && !item.cleared)?.fn(),
+    );
+    expect(video.currentTime).toBeCloseTo(112.5, 3);
+
+    currentTimeValue = 100;
+    await interact(() => intervals.find((item) => item.delay === 500)?.fn());
+
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    expect(
+      renderer.container.querySelector('.player-time')?.textContent,
+    ).toContain('2:05 / 5:00');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 });
 
 describe('LivePlayerPage', () => {
