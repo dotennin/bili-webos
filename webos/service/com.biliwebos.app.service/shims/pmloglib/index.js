@@ -24,6 +24,7 @@ class ConsoleShim {
   }
 }
 
+// biome-ignore lint/nursery/noCommonJs: <explanation>
 module.exports = {
   Console: ConsoleShim,
 };
