@@ -69,8 +69,8 @@ body,
 }
 .sidebar-item.focused {
   background: #141430;
-  color: #00a1d6;
-  border-left-color: #00a1d6;
+  color: #102e38;
+  border-left-color: #102e38;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .sidebar-item.active {
@@ -161,7 +161,7 @@ body,
   transform: scale(1.03);
 }
 .video-card.focused .video-card-thumb {
-  outline: 4px solid #00a1d6;
+  outline: 4px solid #102e38;
   outline-offset: -4px;
 }
 .video-card-thumb {
@@ -290,7 +290,7 @@ body,
 }
 .search-input.focused,
 .search-input:focus {
-  border-color: #00a1d6;
+  border-color: #102e38;
 }
 
 /* ===== On-Screen Keyboard ===== */
@@ -320,7 +320,7 @@ body,
   width: 110px;
 }
 .osk-key.focused {
-  background: #00a1d6;
+  background: #102e38;
   color: #fff;
   transform: scale(1.08);
 }
@@ -399,7 +399,7 @@ body,
   transition: transform 0.15s ease, background 0.15s ease;
 }
 .player-btn.focused {
-  background: #00a1d6;
+  background: #102e38;
   transform: scale(1.1);
 }
 .player-time {
@@ -455,7 +455,7 @@ body,
   /* no transition */
 }
 .quality-option.focused {
-  background: #00a1d6;
+  background: #102e38;
   color: #fff;
 }
 .quality-option.active {
@@ -479,7 +479,7 @@ body,
   /* no transition */
 }
 .tab.focused {
-  background: #00a1d6;
+  background: #102e38;
   color: #fff;
   transform: scale(1.05);
 }
@@ -539,5 +539,5 @@ body,
 }
 .detail-btn.focused {
   transform: scale(1.05);
-  box-shadow: 0 0 0 3px #00a1d6, 0 4px 15px rgba(0, 161, 214, 0.4);
+  box-shadow: 0 0 0 3px #102e38, 0 4px 15px rgba(0, 161, 214, 0.4);
 }
