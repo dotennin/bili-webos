@@ -30,6 +30,7 @@ const RESUME_REWIND_SEC = 2;
 const RELATED_GRID_COLS = 4;
 const PLAYBACK_SPEEDS = [2, 1.5, 1.25, 1, 0.75, 0.5, 0.25];
 const PLAYBACK_RATE_SYNC_DELAY_MS = 1200;
+const WEBOS_BROWSER_APP_ID = 'com.webos.app.browser';
 
 function getSeekProfile(durationSec) {
   const safeDuration = Math.max(0, Number(durationSec) || 0);
@@ -52,6 +53,12 @@ function getSeekProfile(durationSec) {
     multiplierIncrement: SEEK_MULTIPLIER_INCREMENT,
     maxMultiplier: SEEK_MAX_MULTIPLIER,
   };
+}
+
+function supportsPlaybackSpeedControl() {
+  const appId = window?.PalmSystem?.identifier?.split(' ')[0];
+  if (!appId) return true;
+  return appId === WEBOS_BROWSER_APP_ID;
 }
 
 export default function PlayerPage({ video, onBack, onPlayNext }) {
@@ -129,6 +136,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     pendingSeekRef.current = null;
   }, []);
 
+  const playbackSpeedSupported = supportsPlaybackSpeedControl();
   const CONTROLS = ['play', 'danmaku', 'quality', 'speed'];
 
   const getGridVerticalTarget = useCallback((currentIdx, direction, total) => {
@@ -1082,7 +1090,11 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
             setShowQuality(false);
             setShowSpeed(true);
             setFocusArea('speed');
-            setFocusIdx(Math.max(0, PLAYBACK_SPEEDS.indexOf(playbackRate)));
+            setFocusIdx(
+              playbackSpeedSupported
+                ? Math.max(0, PLAYBACK_SPEEDS.indexOf(playbackRate))
+                : 0,
+            );
           }
           hideControlsLater();
           return true;
@@ -1118,6 +1130,17 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
       // === Speed panel ===
       if (focusArea === 'speed') {
+        if (!playbackSpeedSupported) {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            return true;
+          }
+          if (key === 'Enter') {
+            e.preventDefault();
+            return true;
+          }
+          return false;
+        }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           setFocusIdx((prev) => Math.max(0, prev - 1));
@@ -1341,7 +1364,9 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
                     : '弹幕 关'
                   : btn === 'quality'
                     ? QUALITY_MAP[currentQuality] || `${currentQuality}`
-                    : `${playbackRate}x`}
+                    : playbackSpeedSupported
+                      ? `${playbackRate}x`
+                      : '倍速'}
             </button>
           ))}
           <span ref={timeTextRef} className="player-time">
@@ -1437,14 +1462,20 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
       {showSpeed && (
         <div className="quality-panel speed-panel">
-          {PLAYBACK_SPEEDS.map((rate, i) => (
-            <div
-              key={rate}
-              className={`quality-option speed-option ${focusArea === 'speed' && focusIdx === i ? 'focused' : ''} ${playbackRate === rate ? 'active' : ''}`}
-            >
-              {rate}x
+          {playbackSpeedSupported ? (
+            PLAYBACK_SPEEDS.map((rate, i) => (
+              <div
+                key={rate}
+                className={`quality-option speed-option ${focusArea === 'speed' && focusIdx === i ? 'focused' : ''} ${playbackRate === rate ? 'active' : ''}`}
+              >
+                {rate}x
+              </div>
+            ))
+          ) : (
+            <div className="quality-option speed-option focused active">
+              此设备不支持倍速
             </div>
-          ))}
+          )}
         </div>
       )}
 
