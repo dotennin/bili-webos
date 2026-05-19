@@ -217,6 +217,8 @@ export function createVideoMock() {
   const mockVideo = {
     currentTime: 0,
     duration: 120,
+    defaultPlaybackRate: 1,
+    playbackRate: 1,
     paused: true,
     readyState: 0,
     ended: false,
@@ -264,6 +266,8 @@ export function createVideoMock() {
       for (const key of [
         'currentTime',
         'duration',
+        'defaultPlaybackRate',
+        'playbackRate',
         'paused',
         'readyState',
         'ended',

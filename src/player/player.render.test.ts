@@ -786,6 +786,131 @@ describe('PlayerPage', () => {
     });
   });
 
+  test('opens the speed popup and applies the selected playback rate', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-SPEED',
+          cid: 14,
+          title: '倍速视频',
+        },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 120;
+    video.playbackRate = 1;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('Enter')));
+
+    expect(JSON.stringify(renderer.toJSON())).toContain('speed-panel');
+
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+
+    expect(video.playbackRate).toBe(0.5);
+    expect(JSON.stringify(renderer.toJSON())).toContain('0.5x');
+    expect(
+      renderer.container.querySelector('.player-btn.focused')?.textContent,
+    ).toContain('0.5x');
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('speed-panel');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test('keeps the selected playback rate after follow-up media events and quality reloads', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-SPEED-STICKY',
+          cid: 15,
+          title: '倍速保持视频',
+        },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 120;
+    video.playbackRate = 1;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+
+    expect(video.playbackRate).toBe(0.5);
+
+    video.playbackRate = 1;
+    await interact(() => video.dispatch('loadedmetadata'));
+    expect(video.playbackRate).toBe(0.5);
+
+    video.playbackRate = 1;
+    await interact(() => video.dispatch('canplay'));
+    expect(video.playbackRate).toBe(0.5);
+
+    video.playbackRate = 1;
+    await interact(() => video.dispatch('loadeddata'));
+    expect(video.playbackRate).toBe(0.5);
+
+    video.playbackRate = 1;
+    await interact(() => video.dispatch('play'));
+    expect(video.playbackRate).toBe(0.5);
+    expect(video.defaultPlaybackRate).toBe(0.5);
+
+    video.playbackRate = 1;
+    await interact(() => video.dispatch('ratechange'));
+    expect(video.playbackRate).toBe(0.5);
+
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    expect(video.playbackRate).toBe(0.5);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test('keeps endscreen navigation active after a pre-ended auto-hide timer fires', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();

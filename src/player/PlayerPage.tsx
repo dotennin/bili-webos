@@ -28,6 +28,8 @@ const SEEK_MEDIUM_VIDEO_SEC = 30 * 60;
 const SEEK_LONG_VIDEO_SEC = 60 * 60;
 const RESUME_REWIND_SEC = 2;
 const RELATED_GRID_COLS = 4;
+const PLAYBACK_SPEEDS = [2, 1.5, 1.25, 1, 0.75, 0.5, 0.25];
+const PLAYBACK_RATE_SYNC_DELAY_MS = 1200;
 
 function getSeekProfile(durationSec) {
   const safeDuration = Math.max(0, Number(durationSec) || 0);
@@ -62,6 +64,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   const [qualities, setQualities] = useState([]);
   const [currentQuality, setCurrentQuality] = useState(80);
   const [showQuality, setShowQuality] = useState(false);
+  const [showSpeed, setShowSpeed] = useState(false);
   const [showRelated, setShowRelated] = useState(false);
   const [danmakus, setDanmakus] = useState([]);
   const [danmakuEnabled, setDanmakuEnabled] = useState(true);
@@ -70,9 +73,10 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   const [firstFrameReady, setFirstFrameReady] = useState(false);
   const [ended, setEnded] = useState(false);
   const [relatedVideos, setRelatedVideos] = useState([]);
-  // Focus: 'none' (no UI) | 'timeline' | 'controls' | 'quality' | 'related' | 'endscreen'
+  // Focus: 'none' (no UI) | 'timeline' | 'controls' | 'quality' | 'speed' | 'related' | 'endscreen'
   const [focusArea, setFocusArea] = useState('none');
   const [focusIdx, setFocusIdx] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const controlsTimer = useRef(null);
   const timeUpdateRef = useRef(null);
   const cidRef = useRef(null);
@@ -88,6 +92,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   const timeTextRef = useRef(null);
   const committedSeekTargetRef = useRef(null);
   const persistResumeFromPlayerRef = useRef(() => {});
+  const playbackRateSyncTimerRef = useRef(null);
 
   const pendingSeekRef = useRef(null);
   const endedRef = useRef(false);
@@ -124,7 +129,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     pendingSeekRef.current = null;
   }, []);
 
-  const CONTROLS = ['play', 'danmaku', 'quality'];
+  const CONTROLS = ['play', 'danmaku', 'quality', 'speed'];
 
   const getGridVerticalTarget = useCallback((currentIdx, direction, total) => {
     const nextIdx = currentIdx + direction * RELATED_GRID_COLS;
@@ -153,7 +158,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         updatedAt: Date.now(),
       });
     },
-    [video],
+    [playbackRate, video],
   );
 
   const persistResumeFromPlayer = useCallback(() => {
@@ -180,6 +185,23 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     blockedSeekDirectionRef.current = 0;
     committedSeekTargetRef.current = null;
   }, [clearSeekCommitTimer]);
+
+  const syncPlaybackRate = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.defaultPlaybackRate = playbackRate;
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
+
+  const schedulePlaybackRateSync = useCallback(() => {
+    if (playbackRateSyncTimerRef.current) {
+      clearTimeout(playbackRateSyncTimerRef.current);
+    }
+    playbackRateSyncTimerRef.current = setTimeout(() => {
+      playbackRateSyncTimerRef.current = null;
+      syncPlaybackRate();
+    }, PLAYBACK_RATE_SYNC_DELAY_MS);
+  }, [syncPlaybackRate]);
 
   const getStablePlaybackTime = useCallback(() => {
     const playerTime = Number(videoRef.current?.currentTime) || 0;
@@ -443,6 +465,8 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
 
         await player.load(mpdUrl);
         URL.revokeObjectURL(mpdUrl);
+        syncPlaybackRate();
+        schedulePlaybackRateSync();
 
         if (video.progress && video.progress > 0) {
           queueOrApplySeek(
@@ -482,7 +506,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         }).catch(() => {});
       }
     },
-    [video, queueOrApplySeek],
+    [video, queueOrApplySeek, schedulePlaybackRateSync, syncPlaybackRate],
   );
 
   function buildMPD(dash) {
@@ -556,15 +580,38 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     if (!el) return;
 
     const handlePlay = () => {
+      syncPlaybackRate();
+      schedulePlaybackRateSync();
       setPlaying(true);
       castReportState({ playState: 'playing' }).catch(() => {});
     };
-    const handleLoadedMetadata = () => flushPendingSeek();
-    const handleCanPlay = () => flushPendingSeek();
+    const handleLoadedMetadata = () => {
+      flushPendingSeek();
+      syncPlaybackRate();
+      schedulePlaybackRateSync();
+    };
+    const handleCanPlay = () => {
+      flushPendingSeek();
+      syncPlaybackRate();
+      schedulePlaybackRateSync();
+    };
     const handleLoadedData = () => {
+      syncPlaybackRate();
+      schedulePlaybackRateSync();
       setFirstFrameReady(true);
       setLoading(false);
       syncTimelineFromPlayer();
+    };
+    const handleRateChange = () => {
+      if (!videoRef.current) return;
+      if (
+        Math.abs((videoRef.current.playbackRate || 1) - playbackRate) <=
+        SEEK_EPSILON
+      ) {
+        return;
+      }
+      syncPlaybackRate();
+      schedulePlaybackRateSync();
     };
 
     const handlePause = () => {
@@ -577,14 +624,28 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     el.addEventListener('loadedmetadata', handleLoadedMetadata);
     el.addEventListener('canplay', handleCanPlay);
     el.addEventListener('loadeddata', handleLoadedData);
+    el.addEventListener('ratechange', handleRateChange);
     return () => {
       el.removeEventListener('play', handlePlay);
       el.removeEventListener('pause', handlePause);
       el.removeEventListener('loadedmetadata', handleLoadedMetadata);
       el.removeEventListener('canplay', handleCanPlay);
       el.removeEventListener('loadeddata', handleLoadedData);
+      el.removeEventListener('ratechange', handleRateChange);
     };
-  }, [ended, flushPendingSeek, syncTimelineFromPlayer]);
+  }, [
+    ended,
+    flushPendingSeek,
+    playbackRate,
+    schedulePlaybackRateSync,
+    syncPlaybackRate,
+    syncTimelineFromPlayer,
+  ]);
+
+  useEffect(() => {
+    syncPlaybackRate();
+    schedulePlaybackRateSync();
+  }, [schedulePlaybackRateSync, syncPlaybackRate]);
 
   useEffect(() => {
     persistResumeFromPlayerRef.current = persistResumeFromPlayer;
@@ -593,6 +654,9 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
   useEffect(() => {
     return () => {
       resetSeekController();
+      if (playbackRateSyncTimerRef.current) {
+        clearTimeout(playbackRateSyncTimerRef.current);
+      }
       if (video?.bvid && !endedRef.current) {
         persistResumeFromPlayerRef.current();
       }
@@ -629,6 +693,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         setShowControls(false);
         setShowRelated(false);
         setShowQuality(false);
+        setShowSpeed(false);
         setFocusArea('none');
       }
     }, 5000);
@@ -638,6 +703,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     setShowControls(true);
     setShowRelated(false);
     setShowQuality(false);
+    setShowSpeed(false);
     setFocusArea('timeline');
     setFocusIdx(0);
     hideControlsLater();
@@ -721,6 +787,8 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           await shakaRef.current.load(mpdUrl);
           URL.revokeObjectURL(mpdUrl);
           videoRef.current.currentTime = pos;
+          syncPlaybackRate();
+          schedulePlaybackRateSync();
           videoRef.current.play();
           setCurrentQuality(res?.data?.quality || qn);
         }
@@ -728,8 +796,17 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         console.error('Quality change error:', e);
       }
     },
-    [video],
+    [schedulePlaybackRateSync, syncPlaybackRate, video],
   );
+
+  const changePlaybackRate = useCallback((rate) => {
+    const nextRate = Number(rate) || 1;
+    if (videoRef.current) {
+      videoRef.current.defaultPlaybackRate = nextRate;
+      videoRef.current.playbackRate = nextRate;
+    }
+    setPlaybackRate(nextRate);
+  }, []);
 
   useEffect(() => {
     storage.setSettings({ ...storage.getSettings(), danmaku: danmakuEnabled });
@@ -846,6 +923,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           commitPreviewSeek();
           setShowControls(false);
           setShowQuality(false);
+          setShowSpeed(false);
           setShowRelated(false);
           setFocusArea('none');
           if (controlsTimer.current) clearTimeout(controlsTimer.current);
@@ -925,6 +1003,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           setShowControls(false);
           setShowRelated(false);
           setShowQuality(false);
+          setShowSpeed(false);
           setFocusArea('none');
           if (controlsTimer.current) clearTimeout(controlsTimer.current);
           return true;
@@ -966,6 +1045,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
           commitPreviewSeek();
           setShowRelated(false);
           setShowQuality(false);
+          setShowSpeed(false);
           setFocusArea('timeline');
           return true;
         }
@@ -995,8 +1075,14 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
             setDanmakuEnabled((prev) => !prev);
           } else if (btn === 'quality') {
             setShowQuality(true);
+            setShowSpeed(false);
             setFocusArea('quality');
             setFocusIdx(0);
+          } else if (btn === 'speed') {
+            setShowQuality(false);
+            setShowSpeed(true);
+            setFocusArea('speed');
+            setFocusIdx(Math.max(0, PLAYBACK_SPEEDS.indexOf(playbackRate)));
           }
           hideControlsLater();
           return true;
@@ -1024,6 +1110,32 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
             setShowQuality(false);
             setFocusArea('controls');
             setFocusIdx(2);
+          }
+          return true;
+        }
+        return false;
+      }
+
+      // === Speed panel ===
+      if (focusArea === 'speed') {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setFocusIdx((prev) => Math.max(0, prev - 1));
+          return true;
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setFocusIdx((prev) => Math.min(PLAYBACK_SPEEDS.length - 1, prev + 1));
+          return true;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          const rate = PLAYBACK_SPEEDS[focusIdx];
+          if (rate) {
+            changePlaybackRate(rate);
+            setShowSpeed(false);
+            setFocusArea('controls');
+            setFocusIdx(3);
           }
           return true;
         }
@@ -1139,6 +1251,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     qualities,
     showControls,
     showQuality,
+    showSpeed,
     showRelated,
     ended,
     relatedVideos,
@@ -1148,7 +1261,9 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
     commitPreviewSeek,
     hideControlsLater,
     changeQuality,
+    changePlaybackRate,
     getGridVerticalTarget,
+    playbackRate,
     showTimelineControls,
   ]);
 
@@ -1224,7 +1339,9 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
                   ? danmakuEnabled
                     ? '弹幕 开'
                     : '弹幕 关'
-                  : QUALITY_MAP[currentQuality] || `${currentQuality}`}
+                  : btn === 'quality'
+                    ? QUALITY_MAP[currentQuality] || `${currentQuality}`
+                    : `${playbackRate}x`}
             </button>
           ))}
           <span ref={timeTextRef} className="player-time">
@@ -1313,6 +1430,19 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
               className={`quality-option ${focusArea === 'quality' && focusIdx === i ? 'focused' : ''} ${currentQuality === q.qn ? 'active' : ''}`}
             >
               {q.label}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showSpeed && (
+        <div className="quality-panel speed-panel">
+          {PLAYBACK_SPEEDS.map((rate, i) => (
+            <div
+              key={rate}
+              className={`quality-option speed-option ${focusArea === 'speed' && focusIdx === i ? 'focused' : ''} ${playbackRate === rate ? 'active' : ''}`}
+            >
+              {rate}x
             </div>
           ))}
         </div>
