@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.9.0...bili-webos-tv-v1.9.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* focus style color ([#98](https://github.com/dotennin/bili-webos/issues/98)) ([c02ac38](https://github.com/dotennin/bili-webos/commit/c02ac38582c53f02a8516eb631d4ecbe01964bcb))
+
 ## [1.9.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.8.0...bili-webos-tv-v1.9.0) (2026-05-19)
 
 
