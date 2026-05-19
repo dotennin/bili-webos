@@ -15,6 +15,9 @@ let videoGridCalls;
 let qrCalls;
 let intervals;
 let timeouts;
+let setFocusCalls;
+let currentFocusId;
+let customKeyHandler;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
@@ -39,7 +42,7 @@ beforeEach(() => {
   };
   storageState = {
     auth: {},
-    settings: { danmaku: true, quality: 80 },
+    settings: { danmaku: true, quality: 80, videoGridCols: 4 },
   };
   focusConfigs = [];
   oskKeys = [];
@@ -47,6 +50,9 @@ beforeEach(() => {
   qrCalls = [];
   intervals = [];
   timeouts = [];
+  setFocusCalls = [];
+  currentFocusId = null;
+  customKeyHandler = null;
 
   mock.module(apiPath, () => ({
     ...realApi,
@@ -74,6 +80,16 @@ beforeEach(() => {
   }));
   mock.module(hooksPath, () => ({
     ...realHooks,
+    getCurrentFocusId() {
+      return currentFocusId;
+    },
+    setFocus(id) {
+      setFocusCalls.push(id);
+      currentFocusId = id;
+    },
+    setCustomKeyHandler(handler) {
+      customKeyHandler = handler;
+    },
     useFocusable(config) {
       focusConfigs.push(config);
       return {
@@ -140,7 +156,7 @@ afterEach(() => {
 });
 
 describe('page rendering', () => {
-  test('FavoritesPage covers logged-out, loading, and loaded states', async () => {
+  test('FavoritesPage covers logged-out, folder switching, loading, and loaded states', async () => {
     const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
 
     const noUser = await render(
@@ -149,7 +165,7 @@ describe('page rendering', () => {
     expect(textOf(noUser.toJSON())).toContain('请先登录');
 
     api.getFavFolders.mockImplementationOnce(async () => ({
-      data: { list: [{ id: 7 }] },
+      data: { list: [{ id: 7, title: '默认收藏夹' }, { id: 8, title: '动画' }] },
     }));
     api.getFavList.mockImplementationOnce(async () => ({
       data: {
@@ -171,12 +187,50 @@ describe('page rendering', () => {
     await flush();
     expect(api.getFavFolders).toHaveBeenCalledWith(1);
     expect(api.getFavList).toHaveBeenCalledWith(7, 1, 24);
+    expect(textOf(page.toJSON())).toContain('默认收藏夹');
+    expect(textOf(page.toJSON())).toContain('动画');
     expect(videoGridCalls.at(-1).videos[0]).toMatchObject({
       bvid: 'BV1',
       title: '收藏视频',
       owner: { name: 'UP' },
     });
+    expect(videoGridCalls.at(-1).cols).toBe(4);
+    expect(setFocusCalls).toContain('content-1-0');
     expect(textOf(page.toJSON())).toContain('收藏视频');
+
+    api.getFavList.mockImplementationOnce(async () => ({
+      data: {
+        medias: [
+          {
+            bvid: 'BV2',
+            title: '动画合集',
+            cover: 'q',
+            duration: 25,
+            upper: { name: '作者2' },
+            cnt_info: { play: 8 },
+          },
+        ],
+      },
+    }));
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'content-0-1').onSelect(),
+    );
+    await flush();
+    expect(api.getFavList).toHaveBeenLastCalledWith(8, 1, 24);
+    expect(videoGridCalls.at(-1).videos[0]).toMatchObject({
+      bvid: 'BV2',
+      title: '动画合集',
+    });
+    expect(setFocusCalls.at(-1)).toBe('content-1-0');
+
+    const keyboardEvent = {
+      key: 'ArrowUp',
+      preventDefault() {},
+      stopPropagation() {},
+    };
+    currentFocusId = 'content-1-0';
+    expect(customKeyHandler(keyboardEvent)).toBe(true);
+    expect(setFocusCalls.at(-1)).toBe('content-0-1');
   });
 
   test('HistoryPage handles login errors, api errors, and successful mapping', async () => {
@@ -221,6 +275,7 @@ describe('page rendering', () => {
       cid: 9,
       progress: 10,
     });
+    expect(videoGridCalls.at(-1).cols).toBe(4);
     expect(textOf(ok.toJSON())).toContain('历史视频');
 
     api.getHistory.mockImplementationOnce(async () => ({ message: '服务异常' }));
@@ -343,25 +398,12 @@ describe('page rendering', () => {
       owner: { name: '作者' },
       stat: { view: 12 },
     });
+    expect(videoGridCalls.at(-1).cols).toBe(4);
     expect(textOf(renderer.toJSON())).toContain('结果');
   });
 
-  test('SettingsPage toggles danmaku, logs out, and renders watch history', async () => {
+  test('SettingsPage toggles danmaku, updates grid columns, and logs out', async () => {
     const { default: SettingsPage } = await importFresh('./SettingsPage.tsx');
-    api.getHistory.mockImplementationOnce(async () => ({
-      data: {
-        list: [
-          {
-            history: { bvid: 'BV4', cid: 4 },
-            title: '最近观看',
-            cover: 'x',
-            duration: 90,
-            progress: 20,
-            author_name: 'UP',
-          },
-        ],
-      },
-    }));
     const logs = [];
     const renderer = await render(
       React.createElement(SettingsPage, {
@@ -373,15 +415,24 @@ describe('page rendering', () => {
     await flush();
 
     expect(textOf(renderer.toJSON())).toContain('测试用户 的空间');
-    expect(textOf(renderer.toJSON())).not.toContain('代理:');
-    expect(videoGridCalls.at(-1).videos[0]).toMatchObject({
-      bvid: 'BV4',
-      progress: 20,
-    });
+    expect(textOf(renderer.toJSON())).toContain('每行视频数: 4');
+    expect(textOf(renderer.toJSON())).not.toContain('最近观看');
 
-    await interact(() => focusConfigs[0].onSelect());
+    await interact(() =>
+      focusConfigs.filter((config) => config.id === 'content-0-0').at(-1).onSelect(),
+    );
     expect(storageState.settings.danmaku).toBe(false);
-    await interact(() => focusConfigs[1].onSelect());
+    await interact(() =>
+      focusConfigs.filter((config) => config.id === 'content-0-1').at(-1).onSelect(),
+    );
+    expect(storageState.settings.videoGridCols).toBe(2);
+    await interact(() =>
+      focusConfigs.filter((config) => config.id === 'content-0-1').at(-1).onSelect(),
+    );
+    expect(storageState.settings.videoGridCols).toBe(3);
+    await interact(() =>
+      focusConfigs.filter((config) => config.id === 'content-0-2').at(-1).onSelect(),
+    );
     expect(logs).toEqual(['logout']);
   });
 });

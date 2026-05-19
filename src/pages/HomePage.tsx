@@ -9,8 +9,8 @@ import {
 } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
 import { getCurrentFocusId, setFocus, onFocusChange } from '../hooks/useFocus';
+import { storage } from '../utils/storage';
 
-const COLS = 3;
 const FETCH_SIZE = 20;
 
 async function fetchByMode(mode, pn) {
@@ -65,6 +65,7 @@ export default function HomePage({
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [focusRow, setFocusRow] = useState(0);
+  const [gridCols] = useState(() => storage.getSettings().videoGridCols || 3);
   const pageRef = useRef(1);
   const seenRef = useRef(new Set());
   const fetchingRef = useRef(false);
@@ -120,7 +121,7 @@ export default function HomePage({
       setFocusRow(row);
 
       // Load more when near bottom
-      const totalRows = Math.ceil(videos.length / COLS);
+      const totalRows = Math.ceil(videos.length / gridCols);
       if (row >= totalRows - 2 && !fetchingRef.current) {
         fetchingRef.current = true;
         fetchByMode(mode, pageRef.current)
@@ -135,7 +136,7 @@ export default function HomePage({
           });
       }
     });
-  }, [videos.length, mode]);
+  }, [videos.length, mode, gridCols]);
 
   if (loading) {
     return (
@@ -151,7 +152,7 @@ export default function HomePage({
       videos={videos}
       group="content"
       startRow={0}
-      cols={COLS}
+      cols={gridCols}
       onSelect={onPlayVideo}
       focusRow={focusRow}
     />
