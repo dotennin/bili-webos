@@ -369,3 +369,60 @@ test('App prefers newer locally saved resume progress when opening a video', asy
 
   await interact(() => renderer.unmount());
 });
+
+test('App ignores saved resume progress when it is older or from another cid', async () => {
+  storageState.values.bili_resume_progress = {
+    'BV-resume': {
+      bvid: 'BV-resume',
+      cid: 99,
+      progress: 88,
+      duration: 120,
+      updatedAt: 1234,
+    },
+    'BV-older': {
+      bvid: 'BV-older',
+      cid: 21,
+      progress: 8,
+      duration: 120,
+      updatedAt: 1235,
+    },
+  };
+
+  const { default: App } = await import('./App.tsx');
+  const renderer = await render(React.createElement(App));
+  await flush();
+
+  const recommendEntry = pageProps.find(
+    (entry) => entry.page === 'HomePage' && entry.props.mode === 'recommend',
+  );
+
+  await interact(() =>
+    recommendEntry.props.onPlayVideo({
+      bvid: 'BV-resume',
+      cid: 12,
+      title: 'cid 不匹配',
+      progress: 10,
+    }),
+  );
+  expect(playerProps.video.video).toMatchObject({
+    bvid: 'BV-resume',
+    cid: 12,
+    progress: 10,
+  });
+
+  await interact(() =>
+    recommendEntry.props.onPlayVideo({
+      bvid: 'BV-older',
+      cid: 21,
+      title: '本地更旧',
+      progress: 18,
+    }),
+  );
+  expect(playerProps.video.video).toMatchObject({
+    bvid: 'BV-older',
+    cid: 21,
+    progress: 18,
+  });
+
+  await interact(() => renderer.unmount());
+});
