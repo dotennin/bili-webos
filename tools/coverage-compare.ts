@@ -87,8 +87,8 @@ export function renderPullRequestComment(report, options = {}) {
   lines.push('| --- | ---: | ---: | ---: |');
   for (const row of report.rows) {
     const deltaValue = row.delta.startsWith('+')
-      ? '$\\color{green}{\\text{' + row.delta + '}}$'
-      : '$\\color{red}{\\text{' + row.delta + '}}$';
+      ? '$\\color{green}{\\text{' + row.delta.replace('%', '\\\\%') + '}}$'
+      : '$\\color{red}{\\text{' + row.delta.replace('%', '\\\\%') + '}}$';
     lines.push(
       `| ${row.metric} | ${row.current} | ${row.main} | ${deltaValue} |`,
     );
