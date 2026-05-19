@@ -8,6 +8,7 @@ import {
   update,
   interact,
 } from './test/reactTestUtils.ts';
+import packageJson from '../package.json';
 
 let focusState;
 let castSubscription;
@@ -156,7 +157,7 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   await flush();
 
   expect(textOf(renderer.toJSON())).toContain('Bili');
-  expect(textOf(renderer.toJSON())).toContain('1.7.0');
+  expect(textOf(renderer.toJSON())).toContain(packageJson.version);
   expect(textOf(renderer.toJSON())).toContain('已登录用户');
   expect(sidebarItems.slice(0, 9).map((item) => item.label)).toEqual([
     '推荐',
