@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.6.0...bili-webos-tv-v1.6.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* restore unauthenticated login entry points ([#86](https://github.com/dotennin/bili-webos/issues/86)) ([c2c13f0](https://github.com/dotennin/bili-webos/commit/c2c13f0f44b8c7fa9ba0d64e3e2eadeafb74f72d))
+
 ## [1.6.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.5.0...bili-webos-tv-v1.6.0) (2026-05-19)
 
 
