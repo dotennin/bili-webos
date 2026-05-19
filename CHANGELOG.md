@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.7.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.6.1...bili-webos-tv-v1.7.0) (2026-05-19)
+
+
+### Features
+
+* resume playback from recent progress ([#89](https://github.com/dotennin/bili-webos/issues/89)) ([639df33](https://github.com/dotennin/bili-webos/commit/639df332deaaba0da2fce6a490a3108c4e15088d))
+
+
+### Bug Fixes
+
+* improve player seek behavior ([#92](https://github.com/dotennin/bili-webos/issues/92)) ([fa856ad](https://github.com/dotennin/bili-webos/commit/fa856ad6314179a738d84772ee79c397935581e9))
+* keep endscreen recommendation navigation stable ([#91](https://github.com/dotennin/bili-webos/issues/91)) ([560c147](https://github.com/dotennin/bili-webos/commit/560c1474199be754cf1f04520515c3b99adc2d35))
+
 ## [1.6.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.6.0...bili-webos-tv-v1.6.1) (2026-05-19)
 
 
