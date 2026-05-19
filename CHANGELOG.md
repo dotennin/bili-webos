@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.7.0...bili-webos-tv-v1.8.0) (2026-05-19)
+
+
+### Features
+
+* add player playback speed control ([#93](https://github.com/dotennin/bili-webos/issues/93)) ([cb3ec2e](https://github.com/dotennin/bili-webos/commit/cb3ec2e1072701d338890400597da8be1a0c9828))
+
 ## [1.7.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.6.1...bili-webos-tv-v1.7.0) (2026-05-19)
 
 
