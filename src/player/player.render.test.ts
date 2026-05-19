@@ -766,10 +766,73 @@ describe('PlayerPage', () => {
 
     await interact(() => video.dispatch('ended'));
     expect(customKeyHandler(event('X'))).toBe(false);
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(onPlayNext).toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV-R5' }),
+    );
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(onPlayNext).toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV-R1' }),
+    );
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowLeft')));
     await interact(() => customKeyHandler(event('Enter')));
-    expect(onPlayNext).toHaveBeenCalledTimes(2);
+    expect(onPlayNext).toHaveBeenCalledTimes(4);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test('keeps endscreen navigation active after a pre-ended auto-hide timer fires', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onPlayNext = mock(() => {});
+
+    api.getRelated.mockResolvedValueOnce({
+      data: Array.from({ length: 6 }, (_, index) => ({
+        bvid: `BV-T${index + 1}`,
+        title: `推荐${index + 1}`,
+      })),
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-TIMER', cid: 13, title: '计时器视频' },
+        onPlayNext,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 120;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    const staleAutoHideTimer = timers.find(
+      (item) => item.delay === 5000 && !item.cleared,
+    );
+    expect(staleAutoHideTimer).toBeTruthy();
+
+    await interact(() => video.dispatch('ended'));
+    await act(async () => {
+      staleAutoHideTimer?.fn();
+    });
+
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+
+    expect(onPlayNext).toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV-T5' }),
+    );
 
     await act(async () => {
       renderer.unmount();
