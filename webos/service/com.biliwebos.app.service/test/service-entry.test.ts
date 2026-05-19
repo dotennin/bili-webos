@@ -20,6 +20,10 @@ test('service package main can be loaded by a CommonJS loader', () => {
     {
       cwd: serviceRoot,
       encoding: 'utf8',
+      env: {
+        ...process.env,
+        BILI_SERVICE_DISABLE_NETWORK_SERVERS: '1',
+      },
       timeout: 1000,
     },
   );

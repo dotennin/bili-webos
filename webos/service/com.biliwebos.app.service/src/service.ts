@@ -287,12 +287,17 @@ const castLanServer = new CastLanServer({
   },
 });
 
-castLanServer.start(() => {
-  castController.setNetworkInfo(castProfile.ip, castProfile.httpPort);
-  console.log(
-    `[BiliService] Cast server on ${castProfile.ip}:${castProfile.httpPort}`,
-  );
-});
+const disableNetworkServers =
+  process.env.BILI_SERVICE_DISABLE_NETWORK_SERVERS === '1';
+
+if (!disableNetworkServers) {
+  castLanServer.start(() => {
+    castController.setNetworkInfo(castProfile.ip, castProfile.httpPort);
+    console.log(
+      `[BiliService] Cast server on ${castProfile.ip}:${castProfile.httpPort}`,
+    );
+  });
+}
 
 let localProxyPort = 7654;
 
@@ -387,9 +392,11 @@ const localProxy = http.createServer(
   }),
 );
 
-localProxy.listen(localProxyPort, '0.0.0.0', () => {
-  console.log(`[BiliService] Local proxy on port ${localProxyPort}`);
-});
+if (!disableNetworkServers) {
+  localProxy.listen(localProxyPort, '0.0.0.0', () => {
+    console.log(`[BiliService] Local proxy on port ${localProxyPort}`);
+  });
+}
 
 service.register('fetch', (message) => {
   const requestUrl = message.payload.url;
