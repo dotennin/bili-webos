@@ -24,8 +24,33 @@ const SEEK_END_BUFFER_SEC = 1;
 const SEEK_EPSILON = 0.001;
 const SEEK_COMMIT_ANCHOR_MS = 1000;
 const SEEK_COMMIT_MAX_DRIFT_SEC = 30;
+const SEEK_MEDIUM_VIDEO_SEC = 30 * 60;
+const SEEK_LONG_VIDEO_SEC = 60 * 60;
 const RESUME_REWIND_SEC = 2;
 const RELATED_GRID_COLS = 4;
+
+function getSeekProfile(durationSec) {
+  const safeDuration = Math.max(0, Number(durationSec) || 0);
+  if (safeDuration >= SEEK_LONG_VIDEO_SEC) {
+    return {
+      baseStepSec: 18,
+      multiplierIncrement: 1.5,
+      maxMultiplier: 16,
+    };
+  }
+  if (safeDuration >= SEEK_MEDIUM_VIDEO_SEC) {
+    return {
+      baseStepSec: 10,
+      multiplierIncrement: 1,
+      maxMultiplier: 12,
+    };
+  }
+  return {
+    baseStepSec: SEEK_BASE_STEP_SEC,
+    multiplierIncrement: SEEK_MULTIPLIER_INCREMENT,
+    maxMultiplier: SEEK_MAX_MULTIPLIER,
+  };
+}
 
 export default function PlayerPage({ video, onBack, onPlayNext }) {
   const videoRef = useRef(null);
@@ -283,13 +308,15 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         return true;
       }
 
+      const profile = getSeekProfile(bounds.duration);
+
       const nextMultiplier =
         direction === lastSeekDirectionRef.current &&
         gap >= 0 &&
         gap < SEEK_IDLE_RESET_MS
           ? Math.min(
-              seekMultiplierRef.current + SEEK_MULTIPLIER_INCREMENT,
-              SEEK_MAX_MULTIPLIER,
+              seekMultiplierRef.current + profile.multiplierIncrement,
+              profile.maxMultiplier,
             )
           : 1;
       seekMultiplierRef.current = nextMultiplier;
@@ -300,7 +327,7 @@ export default function PlayerPage({ video, onBack, onPlayNext }) {
         ? displayTimeRef.current
         : getStablePlaybackTime();
       const unclampedTarget =
-        baseTime + direction * SEEK_BASE_STEP_SEC * nextMultiplier;
+        baseTime + direction * profile.baseStepSec * nextMultiplier;
       const target = Math.min(bounds.max, Math.max(0, unclampedTarget));
       const changed = Math.abs(target - baseTime) > SEEK_EPSILON;
 
