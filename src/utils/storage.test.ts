@@ -38,8 +38,12 @@ test('auth/settings helpers roundtrip values', () => {
     storage.setAuth({ token: 'abc' });
     expect(storage.getAuth()).toEqual({ token: 'abc' });
 
-    storage.setSettings({ danmaku: false, quality: 64 });
-    expect(storage.getSettings()).toEqual({ danmaku: false, quality: 64 });
+    storage.setSettings({ danmaku: false, quality: 64, videoGridCols: 4 });
+    expect(storage.getSettings()).toEqual({
+      danmaku: false,
+      quality: 64,
+      videoGridCols: 4,
+    });
 
     storage.clearAuth();
     expect(storage.getAuth()).toBeNull();
@@ -61,14 +65,22 @@ test('get returns null for invalid json and set tolerates quota errors', () => {
 test('getSettings returns defaults when missing', () => {
   withMockLocalStorage((map) => {
     map.delete('bili_settings');
-    expect(storage.getSettings()).toEqual({ danmaku: true, quality: 80 });
+    expect(storage.getSettings()).toEqual({
+      danmaku: true,
+      quality: 80,
+      videoGridCols: 3,
+    });
   });
 });
 
 test('getSettings tolerates invalid stored payloads', () => {
   withMockLocalStorage((map) => {
     map.set('bili_settings', '{oops');
-    expect(storage.getSettings()).toEqual({ danmaku: true, quality: 80 });
+    expect(storage.getSettings()).toEqual({
+      danmaku: true,
+      quality: 80,
+      videoGridCols: 3,
+    });
   });
 });
 

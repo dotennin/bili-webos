@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { searchVideo } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
 import OSKey from '../components/OSKey';
+import { storage } from '../utils/storage';
 
 const KEYBOARD_ROWS = [
   ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
@@ -16,6 +17,7 @@ export default function SearchPage({ onPlayVideo }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [gridCols] = useState(() => storage.getSettings().videoGridCols || 3);
 
   async function doSearch() {
     if (!keyword.trim()) return;
@@ -91,7 +93,7 @@ export default function SearchPage({ onPlayVideo }) {
           <VideoGrid
             videos={results}
             startRow={10}
-            cols={2}
+            cols={gridCols}
             group="content"
             onSelect={onPlayVideo}
           />

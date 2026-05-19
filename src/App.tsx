@@ -4,10 +4,13 @@ import { initKeyboardNav, setFocus, useFocusable } from './hooks/useFocus';
 import { castAck, castSubscribe, getNavInfo } from './api/client';
 import { storage } from './utils/storage';
 import SidebarItem from './components/SidebarItem';
+import packageJson from '../package.json';
 
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
+import HistoryPage from './pages/HistoryPage';
+import FavoritesPage from './pages/FavoritesPage';
 import SettingsPage from './pages/SettingsPage';
 import PlayerPage from './player/PlayerPage';
 import LivePlayerPage from './player/LivePlayerPage';
@@ -18,8 +21,10 @@ const NAV_ITEMS = [
   { key: 'live', label: '直播', icon: '📡' },
   { key: 'partition', label: '分区', icon: '📁' },
   { key: 'follow', label: '关注', icon: '👤' },
-  { key: 'search', label: '搜索', icon: '🔍', dividerBefore: true },
-  { key: 'settings', label: '我的', icon: '⚙️' },
+  { key: 'history', label: '最近观看', icon: '🕘' },
+  { key: 'favorites', label: '我的收藏', icon: '⭐' },
+  { key: 'search', label: '搜索', icon: '🔍' },
+  { key: 'settings', label: '设置', icon: '⚙️' },
 ];
 
 function Sidebar({ activePage, onPageChange, onLoginSelect, user }) {
@@ -34,8 +39,8 @@ function Sidebar({ activePage, onPageChange, onLoginSelect, user }) {
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
-        <h1>B站</h1>
-        <span>webOS</span>
+        <h1>Bili</h1>
+        <span>webOS v{packageJson.version}</span>
       </div>
 
       {NAV_ITEMS.map((item, i) => (
@@ -239,11 +244,8 @@ export default function App() {
   // Sidebar select (Enter/click) = switch page, select same page = refresh
   const handlePageChange = useCallback(
     (key) => {
-      if (key === 'follow' && !loggedIn) {
-        setShowLogin(true);
-        return;
-      }
-      if (key === 'settings' && !loggedIn) {
+      if ((key === 'follow' || key === 'favorites') && !loggedIn) {
+        setPage(key);
         setShowLogin(true);
         return;
       }
@@ -310,6 +312,10 @@ export default function App() {
             />
           )}
           {page === 'search' && <SearchPage onPlayVideo={handlePlayVideo} />}
+          {page === 'history' && <HistoryPage onPlayVideo={handlePlayVideo} />}
+          {page === 'favorites' && (
+            <FavoritesPage userMid={user?.mid} onPlayVideo={handlePlayVideo} />
+          )}
           {page === 'settings' && (
             <SettingsPage
               onLogout={handleLogout}

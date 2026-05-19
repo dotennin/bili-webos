@@ -2,35 +2,9 @@
 import React, { useState } from 'react';
 import { storage } from '../utils/storage';
 import { useFocusable } from '../hooks/useFocus';
-import { getHistory } from '../api/client';
-import VideoGrid from '../components/VideoGrid';
 
-export default function SettingsPage({ onLogout, user, onPlayVideo }) {
-  const [history, setHistory] = useState([]);
+export default function SettingsPage({ onLogout, user }) {
   const [settings, setSettings] = useState(storage.getSettings());
-
-  React.useEffect(() => {
-    if (!user) return;
-    async function load() {
-      try {
-        const res = await getHistory(0, 0, 12);
-        if (res?.data?.list) {
-          setHistory(
-            res.data.list.map((item) => ({
-              bvid: item.history?.bvid,
-              cid: item.history?.cid,
-              title: item.title,
-              pic: item.cover,
-              duration: item.duration,
-              progress: item.progress,
-              owner: { name: item.author_name },
-            })),
-          );
-        }
-      } catch {}
-    }
-    load();
-  }, [user]);
 
   const { props: danmakuProps } = useFocusable({
     id: 'content-0-0',
@@ -44,10 +18,24 @@ export default function SettingsPage({ onLogout, user, onPlayVideo }) {
     },
   });
 
-  const { props: logoutProps } = useFocusable({
+  const { props: gridColsProps } = useFocusable({
     id: 'content-0-1',
     row: 0,
     col: 1,
+    group: 'content',
+    onSelect: () => {
+      const current = Number(settings.videoGridCols) || 3;
+      const nextCols = current >= 4 ? 2 : current + 1;
+      const nextSettings = { ...settings, videoGridCols: nextCols };
+      storage.setSettings(nextSettings);
+      setSettings(nextSettings);
+    },
+  });
+
+  const { props: logoutProps } = useFocusable({
+    id: 'content-0-2',
+    row: 0,
+    col: 2,
     group: 'content',
     onSelect: () => {
       storage.clearAuth();
@@ -72,6 +60,9 @@ export default function SettingsPage({ onLogout, user, onPlayVideo }) {
         <div {...danmakuProps} className="detail-btn" style={{ fontSize: 16 }}>
           弹幕: {settings.danmaku ? '开' : '关'}
         </div>
+        <div {...gridColsProps} className="detail-btn" style={{ fontSize: 16 }}>
+          每行视频数: {settings.videoGridCols}
+        </div>
         <div
           {...logoutProps}
           className="detail-btn secondary"
@@ -80,20 +71,6 @@ export default function SettingsPage({ onLogout, user, onPlayVideo }) {
           退出登录
         </div>
       </div>
-      {user && history.length > 0 && (
-        <>
-          <div style={{ fontSize: 20, color: '#aaa', marginBottom: 14 }}>
-            最近观看
-          </div>
-          <VideoGrid
-            videos={history}
-            group="content"
-            startRow={1}
-            cols={2}
-            onSelect={onPlayVideo}
-          />
-        </>
-      )}
     </div>
   );
 }

@@ -13,10 +13,13 @@ let focusListener;
 let setFocusCalls;
 let videoGridCalls;
 let timers;
+let storageState;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
+const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
 const realApi = await import(apiPath);
 const realHooks = await import(hooksPath);
+const realStorage = await import(storagePath);
 
 async function importFresh() {
   return import(`./HomePage.tsx?t=${Date.now()}-${Math.random()}`);
@@ -74,6 +77,9 @@ beforeEach(() => {
   setFocusCalls = [];
   videoGridCalls = [];
   timers = [];
+  storageState = {
+    settings: { danmaku: true, quality: 80, videoGridCols: 4 },
+  };
 
   globalThis.window = createEventTarget();
   globalThis.setTimeout = (fn, delay) => {
@@ -111,6 +117,13 @@ beforeEach(() => {
       };
     },
   }));
+  mock.module(storagePath, () => ({
+    ...realStorage,
+    storage: {
+      ...realStorage.storage,
+      getSettings: () => storageState.settings,
+    },
+  }));
 });
 
 afterEach(() => {
@@ -132,6 +145,7 @@ test('HomePage loads by mode, dedupes items, focuses first content, and loads mo
   expect(videoGridCalls.at(-1).videos).toEqual([
     { bvid: 'BV1', title: '热门1' },
   ]);
+  expect(videoGridCalls.at(-1).cols).toBe(4);
   timers[0].fn();
   expect(setFocusCalls).toEqual(['content-0-0']);
 

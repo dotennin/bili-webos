@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { getHistory } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
+import { storage } from '../utils/storage';
 
 export default function HistoryPage({ onPlayVideo }) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [gridCols] = useState(() => storage.getSettings().videoGridCols || 3);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,18 +62,19 @@ export default function HistoryPage({ onPlayVideo }) {
   if (error)
     return (
       <div>
-        <div className="page-title">历史记录</div>
+        <div className="page-title">最近观看</div>
         <div className="empty-state">{error}</div>
       </div>
     );
 
   return (
     <div className="content-scroll">
-      <div className="section-title">历史记录</div>
+      <div className="section-title">最近观看</div>
       <VideoGrid
         videos={videos}
         group="content"
         startRow={0}
+        cols={gridCols}
         onSelect={onPlayVideo}
       />
     </div>

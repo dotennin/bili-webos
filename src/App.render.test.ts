@@ -8,6 +8,7 @@ import {
   update,
   interact,
 } from './test/reactTestUtils.ts';
+import packageJson from '../package.json';
 
 let focusState;
 let castSubscription;
@@ -119,7 +120,14 @@ beforeEach(() => {
       );
     },
   }));
-  for (const page of ['LoginPage', 'HomePage', 'SearchPage', 'SettingsPage']) {
+  for (const page of [
+    'LoginPage',
+    'HomePage',
+    'SearchPage',
+    'SettingsPage',
+    'HistoryPage',
+    'FavoritesPage',
+  ]) {
     mock.module(`./pages/${page}.tsx`, () => ({
       default(props) {
         pageProps.push({ page, props });
@@ -148,7 +156,20 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   const renderer = await render(React.createElement(App));
   await flush();
 
+  expect(textOf(renderer.toJSON())).toContain('Bili');
+  expect(textOf(renderer.toJSON())).toContain(packageJson.version);
   expect(textOf(renderer.toJSON())).toContain('已登录用户');
+  expect(sidebarItems.slice(0, 9).map((item) => item.label)).toEqual([
+    '推荐',
+    '热门',
+    '直播',
+    '分区',
+    '关注',
+    '最近观看',
+    '我的收藏',
+    '搜索',
+    '设置',
+  ]);
   expect(
     pageProps.some(
       (entry) => entry.page === 'HomePage' && entry.props.mode === 'recommend',
@@ -169,6 +190,16 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
     sidebarItems.find((item) => item.label === '搜索').onSelect(),
   );
   expect(pageProps.some((entry) => entry.page === 'SearchPage')).toBe(true);
+
+  await interact(() =>
+    sidebarItems.find((item) => item.label === '最近观看').onSelect(),
+  );
+  expect(pageProps.some((entry) => entry.page === 'HistoryPage')).toBe(true);
+
+  await interact(() =>
+    sidebarItems.find((item) => item.label === '我的收藏').onSelect(),
+  );
+  expect(pageProps.some((entry) => entry.page === 'FavoritesPage')).toBe(true);
 
   const recommendEntry = pageProps.find(
     (entry) => entry.page === 'HomePage' && entry.props.mode === 'recommend',
@@ -252,7 +283,7 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
   expect(textOf(freshRenderer.toJSON())).not.toContain('mock-LoginPage');
   await interact(() =>
-    sidebarItems.filter((item) => item.label === '我的').at(-1).onSelect(),
+    sidebarItems.filter((item) => item.label === '我的收藏').at(-1).onSelect(),
   );
   expect(playerProps.login).not.toBeNull();
   await interact(() => eventTarget.dispatchEvent(new CustomEvent('tv-back')));
@@ -277,7 +308,7 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   ).toBe(true);
 
   await interact(() =>
-    sidebarItems.filter((item) => item.label === '我的').at(-1).onSelect(),
+    sidebarItems.filter((item) => item.label === '设置').at(-1).onSelect(),
   );
   const settingsEntry = pageProps
     .filter((entry) => entry.page === 'SettingsPage')

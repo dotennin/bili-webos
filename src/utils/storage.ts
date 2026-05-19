@@ -2,6 +2,11 @@
 const PREFIX = 'bili_';
 const RESUME_PROGRESS_KEY = 'resume_progress';
 const RESUME_END_THRESHOLD_SEC = 3;
+const DEFAULT_SETTINGS = {
+  danmaku: true,
+  quality: 80,
+  videoGridCols: 3,
+};
 
 function normalizeResumeEntry(entry) {
   if (!entry?.bvid) return null;
@@ -62,12 +67,10 @@ export const storage = {
   },
 
   getSettings() {
-    return (
-      this.get('settings') || {
-        danmaku: true,
-        quality: 80,
-      }
-    );
+    return {
+      ...DEFAULT_SETTINGS,
+      ...(this.get('settings') || {}),
+    };
   },
 
   setSettings(settings) {
