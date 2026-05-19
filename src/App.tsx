@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { initKeyboardNav, setFocus } from './hooks/useFocus';
+import { initKeyboardNav, setFocus, useFocusable } from './hooks/useFocus';
 import { castAck, castSubscribe, getNavInfo } from './api/client';
 import { storage } from './utils/storage';
 import SidebarItem from './components/SidebarItem';
@@ -22,7 +22,15 @@ const NAV_ITEMS = [
   { key: 'settings', label: '我的', icon: '⚙️' },
 ];
 
-function Sidebar({ activePage, onPageChange, user }) {
+function Sidebar({ activePage, onPageChange, onLoginSelect, user }) {
+  const { props: loginProps } = useFocusable({
+    id: `sidebar-${NAV_ITEMS.length}-0`,
+    row: NAV_ITEMS.length,
+    col: 0,
+    group: 'sidebar',
+    onSelect: onLoginSelect,
+  });
+
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
@@ -53,7 +61,9 @@ function Sidebar({ activePage, onPageChange, user }) {
             <div className="sidebar-user-name">{user.uname}</div>
           </>
         ) : (
-          <div className="sidebar-user-login">未登录</div>
+          <div {...loginProps} className="sidebar-user-login">
+            未登录
+          </div>
         )}
       </div>
     </div>
@@ -222,6 +232,10 @@ export default function App() {
         setShowLogin(true);
         return;
       }
+      if (key === 'settings' && !loggedIn) {
+        setShowLogin(true);
+        return;
+      }
       if (key === page) {
         setRefreshKey((n) => n + 1);
       } else {
@@ -245,6 +259,7 @@ export default function App() {
         <Sidebar
           activePage={page}
           onPageChange={handlePageChange}
+          onLoginSelect={() => setShowLogin(true)}
           user={user}
         />
         <div className="main-content">
