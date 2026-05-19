@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.8.0...bili-webos-tv-v1.9.0) (2026-05-19)
+
+
+### Features
+
+* update recent history and favorites navigation ([#95](https://github.com/dotennin/bili-webos/issues/95)) ([703b319](https://github.com/dotennin/bili-webos/commit/703b319f6118808c65fb6c402f4fe90b62be9782))
+
+
+### Bug Fixes
+
+* show unsupported playback speed message on webos ([#97](https://github.com/dotennin/bili-webos/issues/97)) ([94955d4](https://github.com/dotennin/bili-webos/commit/94955d4264768efbe2abaf8245e9882f6c83a1df))
+
 ## [1.8.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.7.0...bili-webos-tv-v1.8.0) (2026-05-19)
 
 
