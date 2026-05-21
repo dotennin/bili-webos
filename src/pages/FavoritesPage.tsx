@@ -183,7 +183,11 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
       setSubscriptionsLoading(true);
       setSubscriptionsError('');
       try {
-        const res = await getMySubscriptions(userMid, 1, SUBSCRIPTIONS_PAGE_SIZE);
+        const res = await getMySubscriptions(
+          userMid,
+          1,
+          SUBSCRIPTIONS_PAGE_SIZE,
+        );
         if (cancelled) return;
         setSubscriptions(res.items || []);
         setSubscriptionsPage(
@@ -250,12 +254,11 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           ...current,
           [cacheKey]: {
             items: res.items || [],
-            page:
-              res.page || {
-                pageNum: 1,
-                pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
-                total: 0,
-              },
+            page: res.page || {
+              pageNum: 1,
+              pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
+              total: 0,
+            },
           },
         }));
       } catch (err) {
@@ -386,7 +389,9 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
         });
         setSubscriptionVideos((current) => {
-          const seen = new Set(current.map((item) => `${item.bvid}-${item.cid}`));
+          const seen = new Set(
+            current.map((item) => `${item.bvid}-${item.cid}`),
+          );
           const merged = current.concat(
             (res.items || []).filter(
               (item) => !seen.has(`${item.bvid}-${item.cid}`),
@@ -396,12 +401,11 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
             ...cache,
             [selectedSubscription.id]: {
               items: merged,
-              page:
-                res.page || {
-                  pageNum: nextPage,
-                  pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
-                  total: subscriptionVideosPage.total,
-                },
+              page: res.page || {
+                pageNum: nextPage,
+                pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
+                total: subscriptionVideosPage.total,
+              },
             },
           }));
           return merged;
@@ -539,7 +543,9 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
         event.key === 'Enter' &&
         (focusId === 'content-0-0' || focusId === 'content-0-1')
       ) {
-        handleModeSelect(focusId === 'content-0-0' ? FAVORITES_MODE : SUBSCRIPTIONS_MODE);
+        handleModeSelect(
+          focusId === 'content-0-0' ? FAVORITES_MODE : SUBSCRIPTIONS_MODE,
+        );
       }
 
       return false;
@@ -690,7 +696,9 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           }}
         />
       </div>
-      {isFavoritesMode ? renderFavoritesContent() : renderSubscriptionsContent()}
+      {isFavoritesMode
+        ? renderFavoritesContent()
+        : renderSubscriptionsContent()}
     </div>
   );
 }

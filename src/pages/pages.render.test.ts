@@ -268,8 +268,17 @@ describe('page rendering', () => {
           stat: { view: 5 },
           isInvalid: false,
         },
+        {
+          bvid: '',
+          title: '视频已失效',
+          pic: '',
+          duration: 0,
+          owner: { name: '未知UP主' },
+          stat: { view: 0 },
+          isInvalid: true,
+        },
       ],
-      page: { pageNum: 1, pageSize: 30, total: 1 },
+      page: { pageNum: 1, pageSize: 30, total: 2 },
     }));
 
     const page = await render(
@@ -297,6 +306,11 @@ describe('page rendering', () => {
       pageSize: 30,
     });
     expect(textOf(page.toJSON())).toContain('详情视频');
+    expect(videoGridCalls.at(-1).videos[1]).toMatchObject({
+      isInvalid: true,
+      title: '视频已失效',
+      owner: { name: '未知UP主' },
+    });
 
     currentFocusId = 'content-1-0';
     const backEvent = {
@@ -312,6 +326,26 @@ describe('page rendering', () => {
 
     expect(textOf(page.toJSON())).toContain('订阅 15');
     expect(setFocusCalls.at(-1)).toBe('subscription-14-0');
+
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'content-0-0').onSelect(),
+    );
+    await flush();
+    expect(textOf(page.toJSON())).toContain('默认收藏夹');
+
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'content-0-1').onSelect(),
+    );
+    await flush();
+
+    expect(api.getMySubscriptions).toHaveBeenCalledTimes(1);
+
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'subscription-14-0').onSelect(),
+    );
+    await flush();
+
+    expect(api.getSubscriptionVideos).toHaveBeenCalledTimes(1);
   });
 
   test('HistoryPage handles login errors, api errors, and successful mapping', async () => {
