@@ -1,12 +1,12 @@
 import React from 'react';
 import { useFocusable } from '../hooks/useFocus';
-import { buildProxyUrl } from '../utils/proxy';
+import { buildStaticAssetUrl } from '../utils/proxy';
 
 function proxyImg(url) {
   if (!url) return '';
   const raw = url.startsWith('//') ? `https:${url}` : url;
   try {
-    return buildProxyUrl(raw);
+    return buildStaticAssetUrl(raw);
   } catch {
     return raw;
   }

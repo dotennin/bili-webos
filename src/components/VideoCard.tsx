@@ -1,7 +1,7 @@
 import React from 'react';
 import { useFocusable } from '../hooks/useFocus';
 import { formatCount, formatDuration, formatTime } from '../utils/format';
-import { buildProxyUrl } from '../utils/proxy';
+import { buildStaticAssetUrl } from '../utils/proxy';
 
 type VideoCardProps = {
   video: any;
@@ -19,7 +19,7 @@ function proxyImg(url: string) {
     u += '@672w_420h_1c.webp';
   }
   try {
-    return buildProxyUrl(u);
+    return buildStaticAssetUrl(u);
   } catch {
     return u;
   }

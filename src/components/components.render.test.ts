@@ -38,6 +38,9 @@ beforeEach(() => {
 afterEach(() => {
   mock.restore();
   globalThis.URL = originalURL;
+  if (globalThis.window) {
+    delete globalThis.window.webOS;
+  }
 });
 
 describe('rendered components', () => {
@@ -177,6 +180,29 @@ describe('rendered components', () => {
 
     expect(renderer.container.querySelector('img').getAttribute('src')).toBe(
       'https://example.com/cover.jpg',
+    );
+    renderer.unmount();
+  });
+
+  test('VideoCard keeps raw static asset urls on webOS runtime', async () => {
+    globalThis.window.webOS = {};
+    const { default: VideoCard } = await importComponent('./VideoCard.tsx');
+    const renderer = await render(
+      React.createElement(VideoCard, {
+        video: {
+          bvid: 'BV-WEBOS',
+          pic: '//archive.biliimg.com/bfs/archive/test.jpg',
+          title: 'webos 原图',
+        },
+        focusId: 'content-0-2',
+        row: 0,
+        col: 2,
+        group: 'content',
+      }),
+    );
+
+    expect(renderer.container.querySelector('img').getAttribute('src')).toBe(
+      'https://archive.biliimg.com/bfs/archive/test.jpg',
     );
     renderer.unmount();
   });
