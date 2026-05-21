@@ -201,7 +201,7 @@ describe('page rendering', () => {
       owner: { name: 'UP' },
     });
     expect(videoGridCalls.at(-1).cols).toBe(4);
-    expect(setFocusCalls).toContain('content-1-0');
+    expect(setFocusCalls).toContain('content-2-0');
     expect(textOf(page.toJSON())).toContain('收藏视频');
 
     api.getFavList.mockImplementationOnce(async () => ({
@@ -219,7 +219,7 @@ describe('page rendering', () => {
       },
     }));
     await interact(() =>
-      focusConfigs.find((config) => config.id === 'content-0-1').onSelect(),
+      focusConfigs.find((config) => config.id === 'content-1-1').onSelect(),
     );
     await flush();
     expect(api.getFavList).toHaveBeenLastCalledWith(8, 1, 24);
@@ -227,36 +227,19 @@ describe('page rendering', () => {
       bvid: 'BV2',
       title: '动画合集',
     });
-    expect(setFocusCalls.at(-1)).toBe('content-1-0');
+    expect(setFocusCalls.at(-1)).toBe('content-2-0');
 
     const keyboardEvent = {
       key: 'ArrowUp',
       preventDefault() {},
       stopPropagation() {},
     };
-    currentFocusId = 'content-1-0';
+    currentFocusId = 'content-2-0';
     expect(customKeyHandler(keyboardEvent)).toBe(true);
-    expect(setFocusCalls.at(-1)).toBe('content-0-1');
+    expect(setFocusCalls.at(-1)).toBe('content-1-1');
   });
 
   test('FavoritesPage supports subscriptions list, detail, and focus restoration', async () => {
-    const listeners = new Map();
-    globalThis.window = {
-      addEventListener(type, handler) {
-        if (!listeners.has(type)) listeners.set(type, new Set());
-        listeners.get(type).add(handler);
-      },
-      removeEventListener(type, handler) {
-        listeners.get(type)?.delete(handler);
-      },
-      dispatchEvent(event) {
-        for (const handler of listeners.get(event.type) || []) {
-          handler(event);
-        }
-        return true;
-      },
-    };
-
     const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
 
     api.getFavFolders.mockImplementationOnce(async () => ({
@@ -315,7 +298,16 @@ describe('page rendering', () => {
     });
     expect(textOf(page.toJSON())).toContain('详情视频');
 
-    await interact(() => window.dispatchEvent(new Event('tv-back')));
+    currentFocusId = 'content-1-0';
+    const backEvent = {
+      key: 'GoBack',
+      keyCode: 461,
+      preventDefault() {},
+      stopPropagation() {},
+    };
+    await interact(() => {
+      expect(customKeyHandler(backEvent)).toBe(true);
+    });
     await flush();
 
     expect(textOf(page.toJSON())).toContain('订阅 15');

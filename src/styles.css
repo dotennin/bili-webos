@@ -498,6 +498,45 @@ body,
   font-size: 22px;
 }
 
+.subscription-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 60px 32px;
+}
+
+.subscription-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 88px;
+  padding: 0 28px;
+  border-radius: 12px;
+  background: rgba(25, 28, 52, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #f2f5ff;
+}
+
+.subscription-row-title {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.subscription-row-meta {
+  font-size: 18px;
+  color: #9ca3c7;
+}
+
+.subscription-row.focused {
+  background: #102e38;
+  border-color: rgba(0, 161, 214, 0.7);
+  transform: scale(1.01);
+}
+
+.subscription-row.invalid .subscription-row-title {
+  color: #c7c9d9;
+}
+
 /* ===== Toast ===== */
 .toast {
   position: fixed;
