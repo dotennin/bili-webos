@@ -422,18 +422,22 @@ export async function getFavList(mediaId, pn, ps) {
 }
 
 function normalizeSubscriptionRow(item) {
-  const meta = item?.meta || item?.season || item || {};
-  const seasonId = Number(meta.season_id || meta.id || item?.seasonId || 0);
-  const mid = Number(meta.mid || item?.mid || 0);
-  const rawTitle = meta.name || meta.title || item?.title || '';
-  const cover = meta.cover || item?.cover || '';
-  const total = Number(meta.total || meta.count || item?.total || 0);
-  const isInvalid = !seasonId || !mid || !rawTitle || !cover;
+  const meta = item || {};
+  const mediaId = Number(
+    meta.id || meta.media_id || meta.mediaId || meta.fid || 0,
+  );
+  const ownerMid = Number(meta.upper?.mid || meta.mid || meta.owner_mid || 0);
+  const rawTitle = meta.title || meta.name || '';
+  const cover = meta.cover || '';
+  const total = Number(
+    meta.media_count || meta.count || meta.cnt_info?.media_count || 0,
+  );
+  const isInvalid = !mediaId || !rawTitle || !cover;
 
   return {
-    id: `season-${seasonId || 'invalid'}-${mid || 0}`,
-    seasonId,
-    mid,
+    id: `collected-folder-${mediaId || 'invalid'}`,
+    mediaId,
+    ownerMid,
     title: rawTitle || '未命名订阅',
     cover,
     total,
@@ -448,9 +452,17 @@ function normalizeSubscriptionVideo(archive) {
   const duration = Number(archive?.duration || archive?.arc?.duration || 0);
   const pubdate = Number(archive?.pubdate || archive?.ptime || 0);
   const ownerName =
-    archive?.owner?.name || archive?.author || archive?.author_name || '';
+    archive?.owner?.name ||
+    archive?.upper?.name ||
+    archive?.author ||
+    archive?.author_name ||
+    '';
   const viewCount =
-    archive?.stat?.view || archive?.stat?.play || archive?.play || 0;
+    archive?.stat?.view ||
+    archive?.stat?.play ||
+    archive?.cnt_info?.play ||
+    archive?.play ||
+    0;
   const isInvalid = !bvid || !rawTitle;
 
   return {
@@ -468,39 +480,36 @@ function normalizeSubscriptionVideo(archive) {
 }
 
 export async function getMySubscriptions(userMid, pn, ps) {
-  const res = await wbiFetch('/x/polymer/web-space/home/seasons_series', {
+  const res = await wbiFetch('/x/v3/fav/folder/collected/list', {
     mid: userMid,
-    page_num: pn || 1,
-    page_size: ps || 20,
+    pn: pn || 1,
+    ps: ps || 20,
   });
-  const data = res?.data?.items_lists || res?.data || {};
-  const items = data?.series_list || data?.seasons_list || data?.items || [];
+  const data = res?.data || {};
+  const items = data?.list || data?.items || [];
 
   return {
     items: items.map(normalizeSubscriptionRow),
     page: {
-      pageNum: Number(data?.page?.page_num || pn || 1),
-      pageSize: Number(data?.page?.page_size || ps || 20),
-      total: Number(data?.page?.total || items.length || 0),
+      pageNum: Number(data?.pn || pn || 1),
+      pageSize: Number(data?.ps || ps || 20),
+      total: Number(data?.count || data?.total || items.length || 0),
     },
   };
 }
 
 export async function getSubscriptionVideos(params) {
-  const res = await wbiFetch('/x/polymer/web-space/seasons_archives_list', {
-    mid: params.mid,
-    season_id: params.seasonId,
-    page_num: params.pageNum || 1,
-    page_size: params.pageSize || 30,
-  });
+  const res = await getFavList(params.mediaId, params.pageNum, params.pageSize);
 
   return {
-    meta: res?.data?.meta || {},
-    items: (res?.data?.archives || []).map(normalizeSubscriptionVideo),
+    meta: res?.data?.info || {},
+    items: (res?.data?.medias || []).map(normalizeSubscriptionVideo),
     page: {
-      pageNum: Number(res?.data?.page?.page_num || params.pageNum || 1),
-      pageSize: Number(res?.data?.page?.page_size || params.pageSize || 30),
-      total: Number(res?.data?.page?.total || 0),
+      pageNum: Number(res?.data?.pn || params.pageNum || 1),
+      pageSize: Number(res?.data?.ps || params.pageSize || 30),
+      total: Number(
+        res?.data?.info?.media_count || res?.data?.count || res?.data?.total || 0,
+      ),
     },
   };
 }

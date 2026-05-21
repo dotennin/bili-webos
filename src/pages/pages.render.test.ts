@@ -248,9 +248,9 @@ describe('page rendering', () => {
     api.getFavList.mockImplementationOnce(async () => ({ data: { medias: [] } }));
     api.getMySubscriptions.mockImplementationOnce(async () => ({
       items: Array.from({ length: 15 }, (_, index) => ({
-        id: `season-${index + 1}-100`,
-        seasonId: index + 1,
-        mid: 100,
+        id: `collected-folder-${index + 1}`,
+        mediaId: index + 1,
+        ownerMid: 100,
         title: `订阅 ${index + 1}`,
         cover: `cover-${index + 1}`,
         total: 3,
@@ -300,8 +300,7 @@ describe('page rendering', () => {
     await flush();
 
     expect(api.getSubscriptionVideos).toHaveBeenCalledWith({
-      mid: 100,
-      seasonId: 15,
+      mediaId: 15,
       pageNum: 1,
       pageSize: 30,
     });

@@ -297,29 +297,24 @@ describe('api client integration paths', () => {
         json: async () => ({
           code: 0,
           data: {
-            items_lists: {
-              page: { page_num: 1, total: 2 },
-              seasons_list: [
-                {
-                  meta: {
-                    season_id: 11,
-                    mid: 22,
-                    name: '连载合集',
-                    cover: 'cover-a',
-                    total: 30,
-                  },
-                },
-                {
-                  meta: {
-                    season_id: 12,
-                    mid: 23,
-                    name: '',
-                    cover: '',
-                    total: 0,
-                  },
-                },
-              ],
-            },
+            list: [
+              {
+                id: 11,
+                title: '已收藏列表',
+                cover: 'cover-a',
+                media_count: 30,
+                upper: { mid: 22 },
+              },
+              {
+                id: 12,
+                title: '',
+                cover: '',
+                media_count: 0,
+              },
+            ],
+            pn: 1,
+            ps: 20,
+            count: 2,
           },
         }),
       });
@@ -329,18 +324,18 @@ describe('api client integration paths', () => {
 
     expect(navCalls).toBe(1);
     expect(res.items[0]).toMatchObject({
-      id: 'season-11-22',
-      seasonId: 11,
-      mid: 22,
-      title: '连载合集',
+      id: 'collected-folder-11',
+      mediaId: 11,
+      ownerMid: 22,
+      title: '已收藏列表',
       cover: 'cover-a',
       total: 30,
       isInvalid: false,
     });
     expect(res.items[1]).toMatchObject({
-      id: 'season-12-23',
-      seasonId: 12,
-      mid: 23,
+      id: 'collected-folder-12',
+      mediaId: 12,
+      ownerMid: 0,
       title: '未命名订阅',
       cover: '',
       total: 0,
@@ -374,7 +369,7 @@ describe('api client integration paths', () => {
         json: async () => ({
           code: 0,
           data: {
-            archives: [
+            medias: [
               {
                 aid: 7,
                 bvid: 'BV1X',
@@ -383,8 +378,8 @@ describe('api client integration paths', () => {
                 pic: 'pic-a',
                 duration: 61,
                 pubdate: 123,
-                owner: { name: 'UP' },
-                stat: { view: 9 },
+                upper: { name: 'UP' },
+                cnt_info: { play: 9 },
               },
               {
                 bvid: '',
@@ -392,16 +387,16 @@ describe('api client integration paths', () => {
                 pic: '',
               },
             ],
-            meta: { name: '连载合集', season_id: 11, mid: 22, total: 2 },
-            page: { page_num: 1, total: 2 },
+            info: { id: 11, title: '已收藏列表', media_count: 2 },
+            pn: 1,
+            ps: 30,
           },
         }),
       });
     });
 
     const res = await getSubscriptionVideos({
-      mid: 22,
-      seasonId: 11,
+      mediaId: 11,
       pageNum: 1,
       pageSize: 30,
     });
