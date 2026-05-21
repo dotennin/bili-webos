@@ -69,6 +69,11 @@ Reuse the existing focus system rather than introducing a new navigation model.
 - In `我的订阅 -> list`, focus moves from the mode switch into the subscription list.
 - In `我的订阅 -> detail`, focus defaults to the first video card after data loads.
 - Pressing `ArrowUp` from the first content row in detail should prefer moving focus back to the page-level control area rather than jumping unexpectedly to the sidebar.
+- When returning from `我的订阅 -> detail` to `我的订阅 -> list`, focus must be restored to the exact subscription item that launched the detail view instead of resetting to the top of the list.
+- The mode switch must have a distinct visual focus treatment so users can tell they are in the page-level control area rather than the global sidebar.
+- From the page-level control area, `ArrowLeft` should be the intentional path back to the sidebar to avoid ambiguous horizontal movement between local controls and global navigation.
+
+This focus restoration behavior is required, not optional polish, because losing position in a long TV list creates severe navigation friction.
 
 ### Back Behavior
 
@@ -93,13 +98,45 @@ Recommended UI state shape:
 - `subscriptionView`: `list | detail`
 - `selectedFolderId`
 - `selectedSubscription`
+- `lastFocusedSubscriptionId`
 - `folders`
 - `favoriteVideos`
 - `subscriptions`
 - `subscriptionVideos`
+- pagination state for large datasets, including the subscriptions list and subscription detail content
+- cache metadata such as loaded flags, cursors, or last successful fetch timestamps
 - loading and error state scoped to the active mode/view where practical
 
 The important design rule is that subscription directory items and playable video items should not share one raw shape. Subscription rows are directory entities. Detail rows are video entities.
+
+### Focus Restoration
+
+The subscriptions list state must retain enough information to restore the user's previous position.
+
+- The UI must remember the last focused subscription list item by a stable identifier, not only by array index.
+- Returning from detail should restore both the focused item and the visible list position whenever possible.
+- Appending more items during pagination must not invalidate the remembered focus target.
+
+### Pagination
+
+Do not assume any subscription dataset fits into a single response.
+
+- The subscriptions list needs explicit pagination or cursor state.
+- The subscription detail videos need explicit pagination or cursor state.
+- Load-more behavior should trigger as the user nears the bottom of the currently loaded list or grid.
+- Appending paginated data must preserve current focus and avoid visible layout jumps.
+
+Pagination state should stay local to the relevant mode and view so switching between `收藏夹` and `我的订阅` does not corrupt load progress.
+
+### Cache Strategy
+
+Mode switching should reuse successful in-memory results whenever practical.
+
+- If `收藏夹` or `我的订阅` data already exists and is still fresh enough for the current session, show cached data immediately on re-entry.
+- Prefer stale-while-refresh behavior: render cached data first, then refresh in the background if needed.
+- Cache should be scoped independently for favorites folders, favorite videos, subscription list items, and subscription detail videos.
+
+The goal is to avoid unnecessary spinners and refetch-induced jank on lower-powered TV hardware.
 
 ## API Design
 
@@ -116,6 +153,12 @@ These wrappers should do two things:
 The page component should consume normalized data only. If Bilibili field names drift, the fix should stay in the mapping layer whenever possible.
 
 If the upstream endpoint is inconsistent or partially documented, prefer the thinnest possible wrapper plus a dedicated pure mapping helper that can be unit-tested.
+
+The mapping layer should also harden invalid upstream entities:
+
+- mark invalid or deleted items with a stable field such as `isInvalid`
+- supply safe fallback values for missing required display fields
+- prevent malformed items from breaking focusable rendering structures
 
 ## Error Handling
 
@@ -137,6 +180,14 @@ If the subscriptions API fails or returns unmappable data:
 
 - show an error state inside the subscriptions mode only
 - keep favorites mode available and unaffected
+
+### Invalid Or Deleted Content
+
+Subscription collections, channels, or child videos may be partially unavailable.
+
+- Invalid entries should still normalize into safe UI objects so list indexing and focus order stay stable.
+- Invalid video entries should render with a clear unavailable presentation instead of crashing on missing artwork or metadata.
+- The UI must never assume cover URLs, titles, or owner information are always present.
 
 ## UI Components
 
@@ -161,14 +212,22 @@ Extend `src/pages/pages.render.test.ts` to cover:
 - rendering the subscription list
 - selecting a subscription and rendering its detail videos
 - back behavior from subscription detail to subscription list
+- restoring focus to the previously selected subscription row after returning from detail
 - empty subscriptions state
 - subscriptions API failure without breaking favorites rendering
+- invalid subscription or child video entries rendering safely without breaking layout or focus behavior
 
 ### API Tests
 
 Add API-level coverage for the new subscription wrappers and mapping logic. If the mapping logic grows beyond a trivial inline transform, extract it into a pure helper and test it directly for stability.
 
 This follows the repository guidance to avoid brittle tests that depend on global DOM timing or singleton mutation behavior.
+
+API or mapper tests should explicitly cover:
+
+- pagination response mapping
+- cache-safe normalized entity shapes
+- invalid or deleted content fallback mapping
 
 ## Implementation Notes
 
