@@ -33,6 +33,12 @@ beforeEach(() => {
   api = {
     getFavFolders: mock(async () => ({ data: { list: [] } })),
     getFavList: mock(async () => ({ data: { medias: [] } })),
+    getMySubscriptions: mock(
+      async () => ({ items: [], page: { pageNum: 1, pageSize: 20, total: 0 } }),
+    ),
+    getSubscriptionVideos: mock(
+      async () => ({ items: [], page: { pageNum: 1, pageSize: 30, total: 0 } }),
+    ),
     getHistory: mock(async () => ({ data: { list: [] } })),
     searchVideo: mock(async () => ({ data: { result: [] } })),
     qrCodeGenerate: mock(async () => ({
@@ -231,6 +237,89 @@ describe('page rendering', () => {
     currentFocusId = 'content-1-0';
     expect(customKeyHandler(keyboardEvent)).toBe(true);
     expect(setFocusCalls.at(-1)).toBe('content-0-1');
+  });
+
+  test('FavoritesPage supports subscriptions list, detail, and focus restoration', async () => {
+    const listeners = new Map();
+    globalThis.window = {
+      addEventListener(type, handler) {
+        if (!listeners.has(type)) listeners.set(type, new Set());
+        listeners.get(type).add(handler);
+      },
+      removeEventListener(type, handler) {
+        listeners.get(type)?.delete(handler);
+      },
+      dispatchEvent(event) {
+        for (const handler of listeners.get(event.type) || []) {
+          handler(event);
+        }
+        return true;
+      },
+    };
+
+    const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
+
+    api.getFavFolders.mockImplementationOnce(async () => ({
+      data: { list: [{ id: 7, title: '默认收藏夹' }] },
+    }));
+    api.getFavList.mockImplementationOnce(async () => ({ data: { medias: [] } }));
+    api.getMySubscriptions.mockImplementationOnce(async () => ({
+      items: Array.from({ length: 15 }, (_, index) => ({
+        id: `season-${index + 1}-100`,
+        seasonId: index + 1,
+        mid: 100,
+        title: `订阅 ${index + 1}`,
+        cover: `cover-${index + 1}`,
+        total: 3,
+        isInvalid: false,
+      })),
+      page: { pageNum: 1, pageSize: 20, total: 15 },
+    }));
+    api.getSubscriptionVideos.mockImplementationOnce(async () => ({
+      items: [
+        {
+          bvid: 'BV-DETAIL',
+          title: '详情视频',
+          pic: 'detail-cover',
+          owner: { name: 'UP' },
+          stat: { view: 5 },
+          isInvalid: false,
+        },
+      ],
+      page: { pageNum: 1, pageSize: 30, total: 1 },
+    }));
+
+    const page = await render(
+      React.createElement(FavoritesPage, { userMid: 1, onPlayVideo() {} }),
+    );
+    await flush();
+
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'content-0-1').onSelect(),
+    );
+    await flush();
+
+    expect(api.getMySubscriptions).toHaveBeenCalledWith(1, 1, 20);
+    expect(textOf(page.toJSON())).toContain('订阅 15');
+
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'subscription-14-0').onSelect(),
+    );
+    await flush();
+
+    expect(api.getSubscriptionVideos).toHaveBeenCalledWith({
+      mid: 100,
+      seasonId: 15,
+      pageNum: 1,
+      pageSize: 30,
+    });
+    expect(textOf(page.toJSON())).toContain('详情视频');
+
+    await interact(() => window.dispatchEvent(new Event('tv-back')));
+    await flush();
+
+    expect(textOf(page.toJSON())).toContain('订阅 15');
+    expect(setFocusCalls.at(-1)).toBe('subscription-14-0');
   });
 
   test('HistoryPage handles login errors, api errors, and successful mapping', async () => {
