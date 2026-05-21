@@ -18,6 +18,7 @@ let timeouts;
 let setFocusCalls;
 let currentFocusId;
 let customKeyHandler;
+let focusChangeHandler;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
@@ -27,6 +28,10 @@ const realStorage = await import(storagePath);
 
 async function importFresh(pathname) {
   return import(`${pathname}?t=${Date.now()}-${Math.random()}`);
+}
+
+function getLastFocusConfig(id) {
+  return [...focusConfigs].reverse().find((config) => config.id === id);
 }
 
 beforeEach(() => {
@@ -59,6 +64,7 @@ beforeEach(() => {
   setFocusCalls = [];
   currentFocusId = null;
   customKeyHandler = null;
+  focusChangeHandler = null;
 
   mock.module(apiPath, () => ({
     ...realApi,
@@ -92,6 +98,12 @@ beforeEach(() => {
     setFocus(id) {
       setFocusCalls.push(id);
       currentFocusId = id;
+    },
+    onFocusChange(handler) {
+      focusChangeHandler = handler;
+      return () => {
+        if (focusChangeHandler === handler) focusChangeHandler = null;
+      };
     },
     setCustomKeyHandler(handler) {
       customKeyHandler = handler;
@@ -369,7 +381,7 @@ describe('page rendering', () => {
     await flush();
 
     await interact(() =>
-      focusConfigs.find((config) => config.id === 'content-0-1').onSelect(),
+      getLastFocusConfig('content-0-1').onSelect(),
     );
     await flush();
 
@@ -474,6 +486,157 @@ describe('page rendering', () => {
     expect(setFocusCalls.at(-1)).toBe('content-0-1');
 
     page.unmount();
+  });
+
+  test('FavoritesPage paginates subscriptions and subscription detail grids near the bottom', async () => {
+    const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
+
+    api.getFavFolders.mockImplementationOnce(async () => ({
+      data: { list: [{ id: 7, title: '默认收藏夹' }] },
+    }));
+    api.getFavList.mockImplementationOnce(async () => ({ data: { medias: [] } }));
+    api.getMySubscriptions
+      .mockImplementationOnce(async () => ({
+        items: Array.from({ length: 4 }, (_, index) => ({
+          id: `collected-folder-${index + 1}`,
+          mediaId: index + 1,
+          seasonId: index + 1,
+          ownerMid: 100,
+          title: `订阅 ${index + 1}`,
+          cover: `cover-${index + 1}`,
+          total: 3,
+          isInvalid: false,
+        })),
+        page: { pageNum: 1, pageSize: 50, total: 6 },
+      }))
+      .mockImplementationOnce(async () => ({
+        items: [
+          {
+            id: 'collected-folder-4',
+            mediaId: 4,
+            seasonId: 4,
+            ownerMid: 100,
+            title: '订阅 4',
+            cover: 'cover-4',
+            total: 3,
+            isInvalid: false,
+          },
+          {
+            id: 'collected-folder-5',
+            mediaId: 5,
+            seasonId: 5,
+            ownerMid: 100,
+            title: '订阅 5',
+            cover: 'cover-5',
+            total: 3,
+            isInvalid: false,
+          },
+        ],
+        page: { pageNum: 2, pageSize: 50, total: 6 },
+      }));
+    api.getSubscriptionVideos
+      .mockImplementationOnce(async () => ({
+        items: Array.from({ length: 4 }, (_, index) => ({
+          bvid: `BV-DETAIL-${index + 1}`,
+          cid: index + 1,
+          title: `详情视频 ${index + 1}`,
+          pic: `detail-${index + 1}`,
+          owner: { name: 'UP' },
+          stat: { view: 5 },
+        })),
+        page: { pageNum: 1, pageSize: 30, total: 6 },
+      }))
+      .mockImplementationOnce(async () => ({
+        items: [
+          {
+            bvid: 'BV-DETAIL-4',
+            cid: 4,
+            title: '详情视频 4',
+            pic: 'detail-4',
+            owner: { name: 'UP' },
+            stat: { view: 5 },
+          },
+          {
+            bvid: 'BV-DETAIL-5',
+            cid: 5,
+            title: '详情视频 5',
+            pic: 'detail-5',
+            owner: { name: 'UP' },
+            stat: { view: 5 },
+          },
+        ],
+        page: { pageNum: 2, pageSize: 30, total: 6 },
+      }));
+
+    const page = await render(
+      React.createElement(FavoritesPage, { userMid: 1, onPlayVideo() {} }),
+    );
+    await flush();
+
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'content-0-1').onSelect(),
+    );
+    await flush();
+
+    await interact(() => focusChangeHandler?.('subscription-0-3'));
+    await flush();
+
+    expect(api.getMySubscriptions).toHaveBeenCalledWith(1, 2, 50);
+    expect(textOf(page.toJSON())).toContain('订阅 5');
+
+    await interact(() =>
+      getLastFocusConfig('subscription-0-0').onSelect(),
+    );
+    await flush();
+
+    await interact(() => focusChangeHandler?.('content-0-3'));
+    await flush();
+
+    expect(api.getSubscriptionVideos).toHaveBeenLastCalledWith({
+      seasonId: 1,
+      pageNum: 2,
+      pageSize: 30,
+    });
+    expect(textOf(page.toJSON())).toContain('详情视频 5');
+
+    page.unmount();
+  });
+
+  test('FavoritesPage shows subscription loading errors and empty folder states', async () => {
+    const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
+
+    api.getFavFolders.mockImplementationOnce(async () => ({
+      data: { list: [] },
+    }));
+    const noFolders = await render(
+      React.createElement(FavoritesPage, { userMid: 1, onPlayVideo() {} }),
+    );
+    await flush();
+    expect(textOf(noFolders.toJSON())).toContain('暂无收藏夹');
+
+    api.getFavFolders.mockImplementationOnce(async () => ({
+      data: { list: [{ id: 7, title: '默认收藏夹' }] },
+    }));
+    api.getFavList.mockImplementationOnce(async () => ({ data: { medias: [] } }));
+    api.getMySubscriptions.mockImplementationOnce(async () => {
+      throw new Error('订阅加载失败');
+    });
+
+    const failedSubscriptions = await render(
+      React.createElement(FavoritesPage, { userMid: 1, onPlayVideo() {} }),
+    );
+    await flush();
+
+    await interact(() =>
+      getLastFocusConfig('content-0-1').onSelect(),
+    );
+    await flush();
+    await flush();
+
+    expect(textOf(failedSubscriptions.toJSON())).toContain('订阅加载失败');
+
+    noFolders.unmount();
+    failedSubscriptions.unmount();
   });
 
   test('HistoryPage handles login errors, api errors, and successful mapping', async () => {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, it } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +18,10 @@ function makeTempDir() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bili-webos-release-'));
   tempDirs.push(dir);
   return dir;
+}
+
+function bunBin() {
+  return process.env.BUN_BIN || path.join(os.homedir(), '.bun/bin/bun');
 }
 
 afterEach(() => {
@@ -200,5 +205,60 @@ describe('release manifest helpers', () => {
         version: '1.2.3',
       }),
     ).toThrow('found: other-package.ipk');
+  });
+
+  it('cli writes the manifest and reports the generated output path', () => {
+    const dir = makeTempDir();
+    const distDir = path.join(dir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    const templatePath = path.join(dir, 'manifest.template.json');
+    const outputPath = path.join(dir, 'nested/manifest.final.json');
+    const ipkPath = path.join(distDir, 'com.biliwebos.app_1.2.3_all.ipk');
+
+    fs.writeFileSync(
+      templatePath,
+      `${JSON.stringify(
+        {
+          id: 'com.biliwebos.app',
+          version: '1.2.3',
+          ipkUrl:
+            'https://github.com/dotennin/bili-webos/releases/download/v{version}/com.biliwebos.app_{version}_all.ipk',
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    fs.writeFileSync(ipkPath, 'release-binary');
+
+    const output = execFileSync(
+      bunBin(),
+      [
+        'tools/release-manifest.ts',
+        '--template',
+        templatePath,
+        '--dist',
+        distDir,
+        '--output',
+        outputPath,
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+      },
+    );
+
+    expect(output).toContain(`Generated ${outputPath}`);
+    expect(output).toContain('Using com.biliwebos.app_1.2.3_all.ipk');
+    expect(JSON.parse(fs.readFileSync(outputPath, 'utf8')).ipkHash.sha256).toHaveLength(64);
+  });
+
+  it('cli reports missing argument values and exits non-zero', () => {
+    expect(() =>
+      execFileSync(bunBin(), ['tools/release-manifest.ts', '--template'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }),
+    ).toThrow('Missing value for --template');
   });
 });
