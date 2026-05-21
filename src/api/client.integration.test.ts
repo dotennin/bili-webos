@@ -16,6 +16,8 @@ import {
   getHistory,
   getFavFolders,
   getFavList,
+  getMySubscriptions,
+  getSubscriptionVideos,
   castReportState,
   castReportProgress,
   castGetStatus,
@@ -270,6 +272,166 @@ describe('api client integration paths', () => {
 
   it('throws when getVideoInfo is called without aid/bvid', async () => {
     await expect(getVideoInfo({})).rejects.toThrow('Missing video identifier');
+  });
+
+  it('maps subscribed channel directory items into safe subscription rows', async () => {
+    let navCalls = 0;
+    globalThis.fetch = mock((url) => {
+      if (String(url).includes('/x/web-interface/nav')) {
+        navCalls += 1;
+        return Promise.resolve({
+          headers: { get: () => 'application/json' },
+          json: async () => ({
+            data: {
+              wbi_img: {
+                img_url: 'https://i/a12345678901234567890123456789012.png',
+                sub_url: 'https://i/b12345678901234567890123456789012.png',
+              },
+            },
+          }),
+        });
+      }
+
+      return Promise.resolve({
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          code: 0,
+          data: {
+            items_lists: {
+              page: { page_num: 1, total: 2 },
+              seasons_list: [
+                {
+                  meta: {
+                    season_id: 11,
+                    mid: 22,
+                    name: '连载合集',
+                    cover: 'cover-a',
+                    total: 30,
+                  },
+                },
+                {
+                  meta: {
+                    season_id: 12,
+                    mid: 23,
+                    name: '',
+                    cover: '',
+                    total: 0,
+                  },
+                },
+              ],
+            },
+          },
+        }),
+      });
+    });
+
+    const res = await getMySubscriptions(100, 1, 20);
+
+    expect(navCalls).toBe(1);
+    expect(res.items[0]).toMatchObject({
+      id: 'season-11-22',
+      seasonId: 11,
+      mid: 22,
+      title: '连载合集',
+      cover: 'cover-a',
+      total: 30,
+      isInvalid: false,
+    });
+    expect(res.items[1]).toMatchObject({
+      id: 'season-12-23',
+      seasonId: 12,
+      mid: 23,
+      title: '未命名订阅',
+      cover: '',
+      total: 0,
+      isInvalid: true,
+    });
+    expect(res.page).toEqual({
+      pageNum: 1,
+      pageSize: 20,
+      total: 2,
+    });
+  });
+
+  it('maps subscription detail videos into playable cards with invalid fallbacks', async () => {
+    globalThis.fetch = mock((url) => {
+      if (String(url).includes('/x/web-interface/nav')) {
+        return Promise.resolve({
+          headers: { get: () => 'application/json' },
+          json: async () => ({
+            data: {
+              wbi_img: {
+                img_url: 'https://i/a12345678901234567890123456789012.png',
+                sub_url: 'https://i/b12345678901234567890123456789012.png',
+              },
+            },
+          }),
+        });
+      }
+
+      return Promise.resolve({
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          code: 0,
+          data: {
+            archives: [
+              {
+                aid: 7,
+                bvid: 'BV1X',
+                cid: 8,
+                title: '第一集',
+                pic: 'pic-a',
+                duration: 61,
+                pubdate: 123,
+                owner: { name: 'UP' },
+                stat: { view: 9 },
+              },
+              {
+                bvid: '',
+                title: '',
+                pic: '',
+              },
+            ],
+            meta: { name: '连载合集', season_id: 11, mid: 22, total: 2 },
+            page: { page_num: 1, total: 2 },
+          },
+        }),
+      });
+    });
+
+    const res = await getSubscriptionVideos({
+      mid: 22,
+      seasonId: 11,
+      pageNum: 1,
+      pageSize: 30,
+    });
+
+    expect(res.items[0]).toMatchObject({
+      aid: 7,
+      bvid: 'BV1X',
+      cid: 8,
+      title: '第一集',
+      pic: 'pic-a',
+      duration: 61,
+      pubdate: 123,
+      owner: { name: 'UP' },
+      stat: { view: 9 },
+      isInvalid: false,
+    });
+    expect(res.items[1]).toMatchObject({
+      bvid: '',
+      title: '视频已失效',
+      pic: '',
+      duration: 0,
+      owner: { name: '未知UP主' },
+      stat: { view: 0 },
+      isInvalid: true,
+    });
+    expect(res.page).toEqual({
+      pageNum: 1,
+      pageSize: 30,
+      total: 2,
+    });
   });
 
   it('covers wrapper APIs and luna fallback/error branches', async () => {
