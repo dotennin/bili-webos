@@ -250,6 +250,7 @@ describe('page rendering', () => {
       items: Array.from({ length: 15 }, (_, index) => ({
         id: `collected-folder-${index + 1}`,
         mediaId: index + 1,
+        seasonId: index + 1,
         ownerMid: 100,
         title: `订阅 ${index + 1}`,
         cover: `cover-${index + 1}`,
@@ -300,7 +301,7 @@ describe('page rendering', () => {
     await flush();
 
     expect(api.getSubscriptionVideos).toHaveBeenCalledWith({
-      mediaId: 15,
+      seasonId: 15,
       pageNum: 1,
       pageSize: 30,
     });

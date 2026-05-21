@@ -333,20 +333,6 @@ describe('api client integration paths', () => {
 
   it('maps subscription detail videos into playable cards with invalid fallbacks', async () => {
     globalThis.fetch = mock((url) => {
-      if (String(url).includes('/x/web-interface/nav')) {
-        return Promise.resolve({
-          headers: { get: () => 'application/json' },
-          json: async () => ({
-            data: {
-              wbi_img: {
-                img_url: 'https://i/a12345678901234567890123456789012.png',
-                sub_url: 'https://i/b12345678901234567890123456789012.png',
-              },
-            },
-          }),
-        });
-      }
-
       return Promise.resolve({
         headers: { get: () => 'application/json' },
         json: async () => ({
@@ -379,9 +365,9 @@ describe('api client integration paths', () => {
     });
 
     const res = await getSubscriptionVideos({
-      mediaId: 11,
+      seasonId: 11,
       pageNum: 1,
-      pageSize: 30,
+      pageSize: 40,
     });
 
     expect(res.items[0]).toMatchObject({

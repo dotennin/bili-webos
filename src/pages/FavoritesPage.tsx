@@ -236,7 +236,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
       setSubscriptionsError('');
       try {
         const res = await getSubscriptionVideos({
-          mediaId: selectedSubscription.mediaId,
+          seasonId: selectedSubscription.seasonId || selectedSubscription.mediaId,
           pageNum: 1,
           pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
         });
@@ -382,7 +382,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
       try {
         const nextPage = (subscriptionVideosPage.pageNum || 1) + 1;
         const res = await getSubscriptionVideos({
-          mediaId: selectedSubscription.mediaId,
+          seasonId: selectedSubscription.seasonId || selectedSubscription.mediaId,
           pageNum: nextPage,
           pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
         });

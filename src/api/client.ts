@@ -437,6 +437,7 @@ function normalizeSubscriptionRow(item) {
   return {
     id: `collected-folder-${mediaId || 'invalid'}`,
     mediaId,
+    seasonId: mediaId,
     ownerMid,
     title: rawTitle || '未命名订阅',
     cover,
@@ -501,16 +502,26 @@ export async function getMySubscriptions(userMid, pn, ps) {
 }
 
 export async function getSubscriptionVideos(params) {
-  const res = await getFavList(params.mediaId, params.pageNum, params.pageSize);
+  const res = await apiFetch('/x/space/fav/season/list', {
+    season_id: params.seasonId || params.mediaId,
+    pn: params.pageNum || 1,
+    ps: params.pageSize || 40,
+    web_location: '333.1387',
+  });
 
   return {
-    meta: res?.data?.info || {},
-    items: (res?.data?.medias || []).map(normalizeSubscriptionVideo),
+    meta: res?.data?.info || res?.data?.meta || {},
+    items: (res?.data?.medias || res?.data?.archives || []).map(
+      normalizeSubscriptionVideo,
+    ),
     page: {
       pageNum: Number(res?.data?.pn || params.pageNum || 1),
-      pageSize: Number(res?.data?.ps || params.pageSize || 30),
+      pageSize: Number(res?.data?.ps || params.pageSize || 40),
       total: Number(
-        res?.data?.info?.media_count || res?.data?.count || res?.data?.total || 0,
+        res?.data?.info?.media_count ||
+          res?.data?.count ||
+          res?.data?.total ||
+          0,
       ),
     },
   };
