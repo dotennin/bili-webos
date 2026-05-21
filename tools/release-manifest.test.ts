@@ -5,8 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   expectedIpkName,
+  findExpectedIpk,
   generateReleaseManifest,
   renderReleaseManifest,
+  sha256File,
 } from './release-manifest.ts';
 
 const tempDirs = [];
@@ -30,6 +32,15 @@ describe('release manifest helpers', () => {
     ).toBe('com.biliwebos.app_1.2.3_all.ipk');
   });
 
+  it('rejects missing app id or version when deriving ipk names', () => {
+    expect(() => expectedIpkName({ appId: '', version: '1.2.3' })).toThrow(
+      'appId and version are required',
+    );
+    expect(() =>
+      expectedIpkName({ appId: 'com.biliwebos.app', version: '' }),
+    ).toThrow('appId and version are required');
+  });
+
   it('renders the final manifest by replacing the version placeholder and injecting the hash', () => {
     const rendered = renderReleaseManifest({
       template: {
@@ -50,6 +61,61 @@ describe('release manifest helpers', () => {
         sha256: 'abc123',
       },
     });
+  });
+
+  it('validates release manifest inputs before rendering', () => {
+    expect(() =>
+      renderReleaseManifest({
+        template: null,
+        sha256: 'abc123',
+      }),
+    ).toThrow('manifest template object is required');
+    expect(() =>
+      renderReleaseManifest({
+        template: {
+          id: 'com.biliwebos.app',
+          ipkUrl: 'https://example.com/app_{version}.ipk',
+        },
+        sha256: 'abc123',
+      }),
+    ).toThrow('Manifest template must include a version');
+    expect(() =>
+      renderReleaseManifest({
+        template: {
+          id: 'com.biliwebos.app',
+          version: '1.2.3',
+          ipkUrl: 'https://example.com/app.ipk',
+        },
+        sha256: 'abc123',
+      }),
+    ).toThrow('ipkUrl must include a {version} placeholder');
+    expect(() =>
+      renderReleaseManifest({
+        template: {
+          id: 'com.biliwebos.app',
+          version: '1.2.3',
+          ipkUrl: 'https://example.com/app_{version}.ipk',
+        },
+        sha256: '',
+      }),
+    ).toThrow('SHA-256 digest is required');
+  });
+
+  it('finds an expected ipk and hashes its contents', async () => {
+    const dir = makeTempDir();
+    const distDir = path.join(dir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    const ipkPath = path.join(distDir, 'com.biliwebos.app_1.2.3_all.ipk');
+    fs.writeFileSync(ipkPath, 'release-binary');
+
+    expect(
+      findExpectedIpk({
+        distDir,
+        appId: 'com.biliwebos.app',
+        version: '1.2.3',
+      }),
+    ).toBe(ipkPath);
+    expect(await sha256File(ipkPath)).toHaveLength(64);
   });
 
   it('writes a final manifest from the template and packaged ipk', async () => {
@@ -119,5 +185,20 @@ describe('release manifest helpers', () => {
         outputPath: path.join(dir, 'manifest.final.json'),
       }),
     ).rejects.toThrow('Expected packaged IPK');
+  });
+
+  it('lists available ipks when the expected package name is missing', () => {
+    const dir = makeTempDir();
+    const distDir = path.join(dir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'other-package.ipk'), 'x');
+
+    expect(() =>
+      findExpectedIpk({
+        distDir,
+        appId: 'com.biliwebos.app',
+        version: '1.2.3',
+      }),
+    ).toThrow('found: other-package.ipk');
   });
 });
