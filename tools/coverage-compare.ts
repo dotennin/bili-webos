@@ -8,6 +8,10 @@ function metricLabel(metric) {
   return metric[0].toUpperCase() + metric.slice(1);
 }
 
+function pickCoverageSection(summary) {
+  return summary?.average ?? summary?.total ?? {};
+}
+
 export function formatPct(value) {
   return `${Number(value).toFixed(2)}%`;
 }
@@ -28,8 +32,8 @@ export function buildCoverageReport(
   baseSummary,
   threshold = 80,
 ) {
-  const currentTotal = currentSummary?.total ?? {};
-  const baseTotal = baseSummary?.total ?? null;
+  const currentTotal = pickCoverageSection(currentSummary);
+  const baseTotal = baseSummary ? pickCoverageSection(baseSummary) : null;
   const rows = METRICS.map((metric) => {
     const currentPct = Number(currentTotal?.[metric]?.pct ?? 0);
     const basePct =

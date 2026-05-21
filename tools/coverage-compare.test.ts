@@ -53,6 +53,54 @@ describe('coverage compare', () => {
     ]);
   });
 
+  it('prefers average coverage when summaries provide both average and total sections', () => {
+    const report = buildCoverageReport(
+      {
+        average: {
+          lines: { pct: 92 },
+          statements: { pct: 92 },
+          functions: { pct: 91 },
+          branches: { pct: 100 },
+        },
+        total: {
+          lines: { pct: 81 },
+          statements: { pct: 81 },
+          functions: { pct: 80 },
+          branches: { pct: 100 },
+        },
+      },
+      {
+        average: {
+          lines: { pct: 90 },
+          statements: { pct: 90 },
+          functions: { pct: 89 },
+          branches: { pct: 100 },
+        },
+        total: {
+          lines: { pct: 70 },
+          statements: { pct: 70 },
+          functions: { pct: 69 },
+          branches: { pct: 100 },
+        },
+      },
+      90,
+    );
+
+    expect(report.failed).toBe(false);
+    expect(report.rows[0]).toEqual({
+      metric: 'Lines',
+      current: '92.00%',
+      main: '90.00%',
+      delta: '+2.00%',
+    });
+    expect(report.rows[2]).toEqual({
+      metric: 'Functions',
+      current: '91.00%',
+      main: '89.00%',
+      delta: '+2.00%',
+    });
+  });
+
   it('flags below-threshold weighted metrics and renders warning text', () => {
     const report = buildCoverageReport(
       {

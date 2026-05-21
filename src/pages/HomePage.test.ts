@@ -62,6 +62,67 @@ test('fetchByMode(live) maps room fields', async () => {
   ]);
 });
 
+test('fetchByMode(live) falls back to recommend rooms and watched counts', async () => {
+  const fetchByMode = fetchByModeFactory(
+    async () => ({}),
+    async () => ({}),
+    async () => ({}),
+    async () => ({}),
+    async () => ({
+      data: {
+        recommend_room_list: [
+          {
+            roomid: 9,
+            title: '推荐直播',
+            system_cover: 'fallback-cover',
+            uname: '主播2',
+            watched_show: { num: 77 },
+          },
+        ],
+      },
+    }),
+    20,
+  );
+  await expect(fetchByMode('live', 2)).resolves.toEqual([
+    {
+      bvid: 'live-9',
+      title: '推荐直播',
+      pic: 'fallback-cover',
+      owner: { name: '主播2' },
+      stat: { view: 77 },
+      isLive: true,
+      roomid: 9,
+    },
+  ]);
+});
+
+test('fetchByMode(partition) uses a random region id and returns archives', async () => {
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0;
+    const getRegionDynamic = async (rid, pn, pageSize) => ({
+      rid,
+      pn,
+      pageSize,
+      data: { archives: [{ bvid: `region-${rid}` }] },
+    });
+    const fetchByMode = fetchByModeFactory(
+      async () => ({}),
+      async () => ({}),
+      getRegionDynamic,
+      async () => ({}),
+      async () => ({}),
+      20,
+    );
+
+    await expect(fetchByMode('partition', 3)).resolves.toEqual([
+      { bvid: 'region-1' },
+    ]);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
 test('fetchByMode(follow) filters invalid items and maps archive shape', async () => {
   const fetchByMode = fetchByModeFactory(
     async () => ({}),
