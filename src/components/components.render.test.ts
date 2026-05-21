@@ -260,12 +260,15 @@ describe('rendered components', () => {
           {
             id: 'season-1-100',
             title: '订阅 1',
+            cover: 'https://example.com/one.jpg',
+            ownerName: 'UP 主 1',
             total: 12,
             isInvalid: false,
           },
           {
             id: 'season-2-100',
             title: '视频已失效',
+            cover: '',
             total: 0,
             isInvalid: true,
           },
@@ -275,13 +278,17 @@ describe('rendered components', () => {
     );
 
     const rows = Array.from(
-      renderer.container.querySelectorAll('.subscription-row'),
+      renderer.container.querySelectorAll('.subscription-card'),
     );
     expect(rows).toHaveLength(2);
     expect(rows[0].getAttribute('data-focus-id')).toBe('subscription-0-0');
     expect(rows[1].className).toContain('invalid');
     expect(textOf(renderer.toJSON())).toContain('订阅 1');
+    expect(textOf(renderer.toJSON())).toContain('UP主: UP 主 1');
     expect(textOf(renderer.toJSON())).toContain('暂无可用视频');
+    expect(textOf(renderer.toJSON())).toContain('合集');
+    expect(rows[0].querySelector('img')).not.toBeNull();
+    expect(rows[1].querySelector('.subscription-card-thumb-placeholder')).not.toBeNull();
 
     rows[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(selected).toEqual([['season-2-100', 1]]);

@@ -553,39 +553,91 @@ body,
 .subscription-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   padding: 0 60px 32px;
 }
 
-.subscription-row {
+.subscription-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 88px;
-  padding: 0 28px;
+  align-items: stretch;
+  gap: 22px;
+  min-height: 170px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: rgba(18, 22, 44, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #f6f8ff;
+}
+
+.subscription-card-thumb {
+  position: relative;
+  width: 300px;
+  min-width: 300px;
+  height: 168px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.subscription-card-thumb img,
+.subscription-card-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.subscription-card-thumb-placeholder {
+  background:
+    linear-gradient(135deg, rgba(37, 44, 75, 0.95), rgba(20, 24, 44, 0.95));
+}
+
+.subscription-card-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 6px 14px;
   border-radius: 12px;
-  background: rgba(25, 28, 52, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #f2f5ff;
+  background: #0b8f4f;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
-.subscription-row-title {
+.subscription-card-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding-right: 10px;
+}
+
+.subscription-card-title {
+  font-size: 34px;
+  line-height: 1.2;
+  color: #f6f8ff;
+  word-break: break-word;
+}
+
+.subscription-card-meta {
   font-size: 24px;
-  font-weight: 600;
+  color: #a9b2d4;
 }
 
-.subscription-row-meta {
-  font-size: 18px;
-  color: #9ca3c7;
-}
-
-.subscription-row.focused {
+.subscription-card.focused {
   background: #102e38;
   border-color: rgba(0, 161, 214, 0.7);
-  transform: scale(1.01);
+  transform: scale(1.015);
 }
 
-.subscription-row.invalid .subscription-row-title {
+.subscription-card.focused .subscription-card-title {
+  color: #ffffff;
+}
+
+.subscription-card.invalid .subscription-card-title {
   color: #c7c9d9;
 }
 
