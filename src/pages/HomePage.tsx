@@ -17,7 +17,7 @@ async function fetchByMode(mode, pn) {
     const res = await getPopular(pn, FETCH_SIZE);
     return res?.data?.list || [];
   } else if (mode === 'live') {
-    const res: any = await getLiveList(pn, FETCH_SIZE);
+    const res = await getLiveList(pn, FETCH_SIZE);
     const items = res?.data?.list || res?.data?.recommend_room_list || [];
     return items.map((item) => ({
       bvid: `live-${item.roomid}`,

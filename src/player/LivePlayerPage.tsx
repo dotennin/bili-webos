@@ -7,7 +7,7 @@ function getMpegtsModule(mod) {
   return mod?.default || mod;
 }
 
-function configureShakaForLive(player: any) {
+function configureShakaForLive(player) {
   player.configure({
     streaming: {
       lowLatencyMode: true,

@@ -365,7 +365,10 @@ export async function getFollowFeed(page, ps) {
 
 // ============ Live ============
 
-export async function getLiveList(page?: number, pageSize?: number) {
+export async function getLiveList(
+  page?: number,
+  pageSize?: number,
+): Promise<any> {
   // Try followed streamers first
   var followed: any = await smartFetch(
     'api.live.bilibili.com',
