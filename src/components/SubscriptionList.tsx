@@ -38,7 +38,7 @@ function SubscriptionCard({ item, index, cols, onSelect }) {
   return (
     <div
       {...props}
-      className={`subscription-card ${item.isInvalid ? 'invalid' : ''}`}
+      className={`subscription-card card-focus-unified ${item.isInvalid ? 'invalid' : ''}`}
     >
       <div className="subscription-card-thumb">
         {thumbUrl ? (
