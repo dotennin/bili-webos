@@ -24,6 +24,21 @@ const SUBSCRIPTION_DETAIL_VIEW = 'detail';
 const SUBSCRIPTIONS_PAGE_SIZE = 50;
 const SUBSCRIPTION_DETAIL_PAGE_SIZE = 30;
 
+function getSubscriptionFocusId(index, cols) {
+  const row = Math.floor(index / cols);
+  const col = index % cols;
+  return `subscription-${row}-${col}`;
+}
+
+function parseSubscriptionFocusId(focusId) {
+  const match = /^subscription-(\d+)-(\d+)$/.exec(focusId || '');
+  if (!match) return null;
+  return {
+    row: Number(match[1]),
+    col: Number(match[2]),
+  };
+}
+
 function mapFavoriteVideo(item) {
   return {
     bvid: item.bvid,
@@ -79,6 +94,9 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
   const isSubscriptionsMode = mode === SUBSCRIPTIONS_MODE;
   const isSubscriptionDetail =
     isSubscriptionsMode && subscriptionView === SUBSCRIPTION_DETAIL_VIEW;
+  const hasFavoriteFolders = folders.length > 0;
+  const isFavoriteFoldersLoading = favoritesLoading && !hasFavoriteFolders;
+  const isFavoriteVideosLoading = favoritesLoading && hasFavoriteFolders;
 
   const pageTitle = useMemo(() => {
     if (isSubscriptionDetail && selectedSubscription?.title) {
@@ -236,7 +254,8 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
       setSubscriptionsError('');
       try {
         const res = await getSubscriptionVideos({
-          seasonId: selectedSubscription.seasonId || selectedSubscription.mediaId,
+          seasonId:
+            selectedSubscription.seasonId || selectedSubscription.mediaId,
           pageNum: 1,
           pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
         });
@@ -314,11 +333,12 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
     const nextFocusId =
       lastFocusedSubscriptionId &&
       subscriptions.some(
-        (_, index) => `subscription-${index}-0` === lastFocusedSubscriptionId,
+        (_, index) =>
+          getSubscriptionFocusId(index, gridCols) === lastFocusedSubscriptionId,
       )
         ? lastFocusedSubscriptionId
         : subscriptions.length > 0
-          ? 'subscription-0-0'
+          ? getSubscriptionFocusId(0, gridCols)
           : 'content-0-1';
 
     setFocus(nextFocusId);
@@ -382,7 +402,8 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
       try {
         const nextPage = (subscriptionVideosPage.pageNum || 1) + 1;
         const res = await getSubscriptionVideos({
-          seasonId: selectedSubscription.seasonId || selectedSubscription.mediaId,
+          seasonId:
+            selectedSubscription.seasonId || selectedSubscription.mediaId,
           pageNum: nextPage,
           pageSize: SUBSCRIPTION_DETAIL_PAGE_SIZE,
         });
@@ -429,9 +450,10 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
         subscriptionView === SUBSCRIPTION_LIST_VIEW &&
         focusId?.startsWith('subscription-')
       ) {
-        const index = Number(focusId.split('-')[1] || -1);
+        const coords = parseSubscriptionFocusId(focusId);
+        const index = coords ? coords.row * gridCols + coords.col : -1;
         if (
-          index >= subscriptions.length - 2 &&
+          index >= subscriptions.length - gridCols &&
           subscriptions.length < subscriptionsPage.total
         ) {
           loadMoreSubscriptions();
@@ -512,10 +534,13 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
 
       if (event.key === 'ArrowUp') {
         if (focusId?.startsWith('subscription-')) {
-          event.preventDefault();
-          event.stopPropagation();
-          setFocus('content-0-1');
-          return true;
+          const coords = parseSubscriptionFocusId(focusId);
+          if (coords?.row === 0) {
+            event.preventDefault();
+            event.stopPropagation();
+            setFocus('content-0-1');
+            return true;
+          }
         }
         if (focusId?.startsWith('content-2-')) {
           event.preventDefault();
@@ -562,14 +587,16 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
     subscriptions,
   ]);
 
-  function handleSubscriptionSelect(item, index) {
+  function handleSubscriptionSelect(item, index, focusId) {
     setSelectedSubscription(item);
-    setLastFocusedSubscriptionId(`subscription-${index}-0`);
+    setLastFocusedSubscriptionId(
+      focusId || getSubscriptionFocusId(index, gridCols),
+    );
     setSubscriptionView(SUBSCRIPTION_DETAIL_VIEW);
   }
 
   function renderFavoritesContent() {
-    if (favoritesLoading) {
+    if (isFavoriteFoldersLoading) {
       return (
         <div className="loading">
           <div className="loading-spinner" />
@@ -584,28 +611,37 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
 
     return (
       <>
-        <div className="tabs sub-tabs">
-          {folders.map((folder, index) => (
-            <FocusableTab
-              key={folder.id}
-              id={`content-1-${index}`}
-              row={1}
-              col={index}
-              group="content"
-              label={folder.title || folder.name || `收藏夹 ${index + 1}`}
-              active={folder.id === selectedFolderId}
-              variant="sub"
-              onSelect={() => setSelectedFolderId(folder.id)}
-            />
-          ))}
-        </div>
-        <VideoGrid
-          videos={favoriteVideos}
-          group="content"
-          startRow={2}
-          cols={gridCols}
-          onSelect={onPlayVideo}
-        />
+        {hasFavoriteFolders ? (
+          <div className="tabs tabs-secondary">
+            {folders.map((folder, index) => (
+              <FocusableTab
+                key={folder.id}
+                id={`content-1-${index}`}
+                row={1}
+                col={index}
+                group="content"
+                label={folder.title || folder.name || `收藏夹 ${index + 1}`}
+                active={folder.id === selectedFolderId}
+                variant="secondary"
+                onSelect={() => setSelectedFolderId(folder.id)}
+              />
+            ))}
+          </div>
+        ) : null}
+        {isFavoriteVideosLoading ? (
+          <div className="loading">
+            <div className="loading-spinner" />
+            加载中...
+          </div>
+        ) : (
+          <VideoGrid
+            videos={favoriteVideos}
+            group="content"
+            startRow={2}
+            cols={gridCols}
+            onSelect={onPlayVideo}
+          />
+        )}
       </>
     );
   }
@@ -652,6 +688,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
     return (
       <SubscriptionList
         items={subscriptions}
+        cols={gridCols}
         onSelect={handleSubscriptionSelect}
       />
     );
@@ -669,7 +706,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
   return (
     <div>
       <div className="page-title">{pageTitle}</div>
-      <div className="tabs mode-tabs">
+      <div className="tabs tabs-primary">
         <FocusableTab
           id="content-0-0"
           row={0}
@@ -677,7 +714,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           group="content"
           label="收藏夹"
           active={isFavoritesMode}
-          variant="mode"
+          variant="primary"
           onSelect={() => {
             setMode(FAVORITES_MODE);
             setSubscriptionView(SUBSCRIPTION_LIST_VIEW);
@@ -690,7 +727,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           group="content"
           label="我的订阅"
           active={isSubscriptionsMode}
-          variant="mode"
+          variant="primary"
           onSelect={() => {
             setMode(SUBSCRIPTIONS_MODE);
             setSubscriptionView(SUBSCRIPTION_LIST_VIEW);

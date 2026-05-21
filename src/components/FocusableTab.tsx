@@ -16,7 +16,7 @@ export default React.memo(function FocusableTab({
   return (
     <div
       {...props}
-      className={`tab tab-${variant} ${active ? 'active' : ''}`}
+      className={`tab tab-focus-unified tab-${variant} ${active ? 'active' : ''}`}
     >
       {label}
     </div>

@@ -58,7 +58,7 @@ describe('rendered components', () => {
     );
 
     const tab = renderer.container.querySelector('div');
-    expect(tab.className).toBe('tab tab-default active');
+    expect(tab.className).toBe('tab tab-focus-unified tab-default active');
     expect(textOf(tab)).toBe('推荐');
     expect(focusConfigs.at(-1).onSelect).toBe(onSelect);
     tab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -273,6 +273,7 @@ describe('rendered components', () => {
             isInvalid: true,
           },
         ],
+        cols: 4,
         onSelect: (item, index) => selected.push([item.id, index]),
       }),
     );
@@ -282,6 +283,7 @@ describe('rendered components', () => {
     );
     expect(rows).toHaveLength(2);
     expect(rows[0].getAttribute('data-focus-id')).toBe('subscription-0-0');
+    expect(rows[1].getAttribute('data-focus-id')).toBe('subscription-0-1');
     expect(rows[1].className).toContain('invalid');
     expect(textOf(renderer.toJSON())).toContain('订阅 1');
     expect(textOf(renderer.toJSON())).toContain('UP主: UP 主 1');

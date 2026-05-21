@@ -13,13 +13,22 @@ function proxyImg(url) {
   }
 }
 
-function SubscriptionRow({ item, index, onSelect }) {
+function getSubscriptionFocusId(index, cols) {
+  const row = Math.floor(index / cols);
+  const col = index % cols;
+  return `subscription-${row}-${col}`;
+}
+
+function SubscriptionCard({ item, index, cols, onSelect }) {
+  const row = Math.floor(index / cols);
+  const col = index % cols;
+  const focusId = getSubscriptionFocusId(index, cols);
   const { props } = useFocusable({
-    id: `subscription-${index}-0`,
-    row: index,
-    col: 0,
+    id: focusId,
+    row,
+    col,
     group: 'subscription',
-    onSelect: () => onSelect(item, index),
+    onSelect: () => onSelect(item, index, focusId),
   });
 
   const thumbUrl = proxyImg(item.cover);
@@ -48,18 +57,22 @@ function SubscriptionRow({ item, index, onSelect }) {
   );
 }
 
-export default function SubscriptionList({ items, onSelect }) {
+export default function SubscriptionList({ items, onSelect, cols = 3 }) {
   if (!items || items.length === 0) {
     return <div className="empty-state">暂无订阅内容</div>;
   }
 
   return (
-    <div className="subscription-list">
+    <div
+      className="subscription-list"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
       {items.map((item, index) => (
-        <SubscriptionRow
+        <SubscriptionCard
           key={item.id || `subscription-${index}`}
           item={item}
           index={index}
+          cols={cols}
           onSelect={onSelect}
         />
       ))}

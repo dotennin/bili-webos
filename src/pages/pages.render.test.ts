@@ -239,6 +239,87 @@ describe('page rendering', () => {
     expect(setFocusCalls.at(-1)).toBe('content-1-1');
   });
 
+  test('FavoritesPage keeps folder tabs visible while switching favorite folder content', async () => {
+    const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
+
+    let resolveFirstList;
+    let resolveSecondList;
+
+    api.getFavFolders.mockImplementationOnce(async () => ({
+      data: { list: [{ id: 7, title: '默认收藏夹' }, { id: 8, title: '动画' }] },
+    }));
+    api.getFavList
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstList = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecondList = resolve;
+          }),
+      );
+
+    const page = await render(
+      React.createElement(FavoritesPage, { userMid: 1, onPlayVideo() {} }),
+    );
+    await flush();
+
+    expect(textOf(page.toJSON())).toContain('默认收藏夹');
+    expect(textOf(page.toJSON())).toContain('动画');
+    expect(textOf(page.toJSON())).toContain('加载中');
+
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'content-1-1').onSelect(),
+    );
+    await flush();
+
+    expect(textOf(page.toJSON())).toContain('默认收藏夹');
+    expect(textOf(page.toJSON())).toContain('动画');
+    expect(textOf(page.toJSON())).toContain('加载中');
+
+    await interact(() =>
+      resolveSecondList({
+        data: {
+          medias: [
+            {
+              bvid: 'BV2',
+              title: '动画合集',
+              cover: 'q',
+              duration: 25,
+              upper: { name: '作者2' },
+              cnt_info: { play: 8 },
+            },
+          ],
+        },
+      }),
+    );
+    await flush();
+
+    expect(textOf(page.toJSON())).toContain('动画合集');
+
+    await interact(() =>
+      resolveFirstList({
+        data: {
+          medias: [
+            {
+              bvid: 'BV1',
+              title: '旧收藏夹结果',
+              cover: 'p',
+              duration: 12,
+              upper: { name: 'UP' },
+              cnt_info: { play: 99 },
+            },
+          ],
+        },
+      }),
+    );
+
+    page.unmount();
+  });
+
   test('FavoritesPage supports subscriptions list, detail, and focus restoration', async () => {
     const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
 
@@ -296,7 +377,7 @@ describe('page rendering', () => {
     expect(textOf(page.toJSON())).toContain('订阅 15');
 
     await interact(() =>
-      focusConfigs.find((config) => config.id === 'subscription-14-0').onSelect(),
+      focusConfigs.find((config) => config.id === 'subscription-3-2').onSelect(),
     );
     await flush();
 
@@ -325,7 +406,7 @@ describe('page rendering', () => {
     await flush();
 
     expect(textOf(page.toJSON())).toContain('订阅 15');
-    expect(setFocusCalls.at(-1)).toBe('subscription-14-0');
+    expect(setFocusCalls.at(-1)).toBe('subscription-3-2');
 
     await interact(() =>
       focusConfigs.find((config) => config.id === 'content-0-0').onSelect(),
@@ -341,11 +422,58 @@ describe('page rendering', () => {
     expect(api.getMySubscriptions).toHaveBeenCalledTimes(1);
 
     await interact(() =>
-      focusConfigs.find((config) => config.id === 'subscription-14-0').onSelect(),
+      focusConfigs.find((config) => config.id === 'subscription-3-2').onSelect(),
     );
     await flush();
 
     expect(api.getSubscriptionVideos).toHaveBeenCalledTimes(1);
+  });
+
+  test('FavoritesPage keeps ArrowUp inside subscription grid until the first row', async () => {
+    const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
+
+    api.getFavFolders.mockImplementationOnce(async () => ({
+      data: { list: [{ id: 7, title: '默认收藏夹' }] },
+    }));
+    api.getFavList.mockImplementationOnce(async () => ({ data: { medias: [] } }));
+    api.getMySubscriptions.mockImplementationOnce(async () => ({
+      items: Array.from({ length: 8 }, (_, index) => ({
+        id: `collected-folder-${index + 1}`,
+        mediaId: index + 1,
+        seasonId: index + 1,
+        ownerMid: 100,
+        title: `订阅 ${index + 1}`,
+        cover: `cover-${index + 1}`,
+        total: 3,
+        isInvalid: false,
+      })),
+      page: { pageNum: 1, pageSize: 20, total: 8 },
+    }));
+
+    const page = await render(
+      React.createElement(FavoritesPage, { userMid: 1, onPlayVideo() {} }),
+    );
+    await flush();
+
+    await interact(() =>
+      focusConfigs.find((config) => config.id === 'content-0-1').onSelect(),
+    );
+    await flush();
+
+    currentFocusId = 'subscription-1-0';
+    const upEvent = {
+      key: 'ArrowUp',
+      preventDefault() {},
+      stopPropagation() {},
+    };
+
+    expect(customKeyHandler(upEvent)).toBe(false);
+
+    currentFocusId = 'subscription-0-0';
+    expect(customKeyHandler(upEvent)).toBe(true);
+    expect(setFocusCalls.at(-1)).toBe('content-0-1');
+
+    page.unmount();
   });
 
   test('HistoryPage handles login errors, api errors, and successful mapping', async () => {
