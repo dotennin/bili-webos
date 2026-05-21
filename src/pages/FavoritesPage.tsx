@@ -21,7 +21,7 @@ const FAVORITES_MODE = 'favorites';
 const SUBSCRIPTIONS_MODE = 'subscriptions';
 const SUBSCRIPTION_LIST_VIEW = 'list';
 const SUBSCRIPTION_DETAIL_VIEW = 'detail';
-const SUBSCRIPTIONS_PAGE_SIZE = 20;
+const SUBSCRIPTIONS_PAGE_SIZE = 50;
 const SUBSCRIPTION_DETAIL_PAGE_SIZE = 30;
 
 function mapFavoriteVideo(item) {
@@ -584,7 +584,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
 
     return (
       <>
-        <div className="tabs">
+        <div className="tabs sub-tabs">
           {folders.map((folder, index) => (
             <FocusableTab
               key={folder.id}
@@ -594,6 +594,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
               group="content"
               label={folder.title || folder.name || `收藏夹 ${index + 1}`}
               active={folder.id === selectedFolderId}
+              variant="sub"
               onSelect={() => setSelectedFolderId(folder.id)}
             />
           ))}
@@ -668,7 +669,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
   return (
     <div>
       <div className="page-title">{pageTitle}</div>
-      <div className="tabs">
+      <div className="tabs mode-tabs">
         <FocusableTab
           id="content-0-0"
           row={0}
@@ -676,6 +677,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           group="content"
           label="收藏夹"
           active={isFavoritesMode}
+          variant="mode"
           onSelect={() => {
             setMode(FAVORITES_MODE);
             setSubscriptionView(SUBSCRIPTION_LIST_VIEW);
@@ -688,6 +690,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           group="content"
           label="我的订阅"
           active={isSubscriptionsMode}
+          variant="mode"
           onSelect={() => {
             setMode(SUBSCRIPTIONS_MODE);
             setSubscriptionView(SUBSCRIPTION_LIST_VIEW);

@@ -487,6 +487,58 @@ body,
   color: #00a1d6;
 }
 
+.mode-tabs {
+  gap: 28px;
+  margin-bottom: 34px;
+}
+
+.tab-mode {
+  padding: 0 2px 10px;
+  font-size: 20px;
+  color: #7f88ab;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+}
+
+.tab-mode.focused {
+  background: transparent;
+  color: #f4f7ff;
+  border-bottom-color: rgba(0, 161, 214, 0.55);
+  transform: none;
+}
+
+.tab-mode.active {
+  color: #00a1d6;
+  border-bottom-color: #00a1d6;
+}
+
+.sub-tabs {
+  gap: 14px;
+  margin-bottom: 26px;
+}
+
+.tab-sub {
+  padding: 12px 22px;
+  font-size: 18px;
+  color: #9198b8;
+  background: rgba(20, 24, 44, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+.tab-sub.focused {
+  background: #16343f;
+  color: #fff;
+  border-color: rgba(0, 161, 214, 0.7);
+  transform: scale(1.02);
+}
+
+.tab-sub.active {
+  color: #eaf8ff;
+  background: rgba(0, 161, 214, 0.2);
+  border-color: rgba(0, 161, 214, 0.45);
+}
+
 /* ===== Empty State ===== */
 .empty-state {
   display: flex;

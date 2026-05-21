@@ -275,23 +275,7 @@ describe('api client integration paths', () => {
   });
 
   it('maps subscribed channel directory items into safe subscription rows', async () => {
-    let navCalls = 0;
     globalThis.fetch = mock((url) => {
-      if (String(url).includes('/x/web-interface/nav')) {
-        navCalls += 1;
-        return Promise.resolve({
-          headers: { get: () => 'application/json' },
-          json: async () => ({
-            data: {
-              wbi_img: {
-                img_url: 'https://i/a12345678901234567890123456789012.png',
-                sub_url: 'https://i/b12345678901234567890123456789012.png',
-              },
-            },
-          }),
-        });
-      }
-
       return Promise.resolve({
         headers: { get: () => 'application/json' },
         json: async () => ({
@@ -322,7 +306,6 @@ describe('api client integration paths', () => {
 
     const res = await getMySubscriptions(100, 1, 20);
 
-    expect(navCalls).toBe(1);
     expect(res.items[0]).toMatchObject({
       id: 'collected-folder-11',
       mediaId: 11,

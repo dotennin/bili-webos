@@ -291,7 +291,7 @@ describe('page rendering', () => {
     );
     await flush();
 
-    expect(api.getMySubscriptions).toHaveBeenCalledWith(1, 1, 20);
+    expect(api.getMySubscriptions).toHaveBeenCalledWith(1, 1, 50);
     expect(textOf(page.toJSON())).toContain('订阅 15');
 
     await interact(() =>

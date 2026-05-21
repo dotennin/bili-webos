@@ -58,7 +58,7 @@ describe('rendered components', () => {
     );
 
     const tab = renderer.container.querySelector('div');
-    expect(tab.className).toBe('tab active');
+    expect(tab.className).toBe('tab tab-default active');
     expect(textOf(tab)).toBe('推荐');
     expect(focusConfigs.at(-1).onSelect).toBe(onSelect);
     tab.dispatchEvent(new MouseEvent('click', { bubbles: true }));

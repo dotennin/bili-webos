@@ -480,10 +480,12 @@ function normalizeSubscriptionVideo(archive) {
 }
 
 export async function getMySubscriptions(userMid, pn, ps) {
-  const res = await wbiFetch('/x/v3/fav/folder/collected/list', {
-    mid: userMid,
+  const res = await apiFetch('/x/v3/fav/folder/collected/list', {
+    up_mid: userMid,
     pn: pn || 1,
-    ps: ps || 20,
+    ps: ps || 50,
+    platform: 'web',
+    web_location: '333.1387',
   });
   const data = res?.data || {};
   const items = data?.list || data?.items || [];
@@ -492,7 +494,7 @@ export async function getMySubscriptions(userMid, pn, ps) {
     items: items.map(normalizeSubscriptionRow),
     page: {
       pageNum: Number(data?.pn || pn || 1),
-      pageSize: Number(data?.ps || ps || 20),
+      pageSize: Number(data?.ps || ps || 50),
       total: Number(data?.count || data?.total || items.length || 0),
     },
   };
