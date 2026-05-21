@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import {
   getPopular,
@@ -18,7 +17,7 @@ async function fetchByMode(mode, pn) {
     const res = await getPopular(pn, FETCH_SIZE);
     return res?.data?.list || [];
   } else if (mode === 'live') {
-    const res = await getLiveList(pn, FETCH_SIZE);
+    const res: any = await getLiveList(pn, FETCH_SIZE);
     const items = res?.data?.list || res?.data?.recommend_room_list || [];
     return items.map((item) => ({
       bvid: `live-${item.roomid}`,
@@ -57,11 +56,17 @@ async function fetchByMode(mode, pn) {
   }
 }
 
+type HomePageProps = {
+  onPlayVideo?: (video: any) => void;
+  refreshKey?: number;
+  mode?: string;
+};
+
 export default function HomePage({
   onPlayVideo,
   refreshKey,
   mode = 'recommend',
-}) {
+}: HomePageProps) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [focusRow, setFocusRow] = useState(0);

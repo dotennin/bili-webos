@@ -2,7 +2,7 @@
 
 ## Summary
 
-Implement `WEN-49` as a single repo-wide pass that removes all `// @ts-nocheck` directives from source and test files, adds lint enforcement for TypeScript suppression comments that Biome can natively block, and adds a repo-level guard that specifically fails when `@ts-nocheck` appears again.
+Implement `WEN-49` as a single repo-wide pass that removes all `// @ts-nocheck` directives from source and test files, keeps Biome enforcement limited to rules that are verified to exist in the installed version, and adds a repo-level guard that specifically fails when `@ts-nocheck` appears again.
 
 ## Goals
 
@@ -33,7 +33,7 @@ This means the repo does not currently depend on `@ts-nocheck` to pass `tsc`, so
 
 ### Option 1: Repo-wide removal plus layered enforcement
 
-Remove all `@ts-nocheck` directives in one pass, enable the closest relevant Biome rule for TypeScript suppression comments, and add a dedicated repository check that fails on `@ts-nocheck`.
+Remove all `@ts-nocheck` directives in one pass, enable only Biome rules that are verified locally to support the policy, and add a dedicated repository check that fails on `@ts-nocheck`.
 
 Pros:
 - Fully satisfies the acceptance criteria.
@@ -41,7 +41,7 @@ Pros:
 - Separates general suppression enforcement from the exact `@ts-nocheck` policy.
 
 Cons:
-- Requires one small custom repository check because Biome does not appear to provide a native `@ts-nocheck`-specific rule.
+- Requires one small custom repository check because the installed Biome version does not expose a verified native `@ts-nocheck`-specific rule.
 
 ### Option 2: Repo-wide removal plus Biome-only enforcement
 
@@ -70,8 +70,8 @@ Use Option 1.
 
 The implementation will make one repo-wide content cleanup and then enforce the policy in two layers:
 
-1. Biome configuration will reject TypeScript suppression comments it can natively police.
-2. A lightweight repository check will explicitly fail on `@ts-nocheck`.
+1. Biome configuration will only be changed when a relevant rule is verified to exist in the installed Biome version.
+2. A lightweight repository check will explicitly fail on `@ts-nocheck` and serves as the source of truth for this policy.
 
 This design satisfies both the functional requirement and the long-term maintenance requirement without introducing runtime changes or a new lint toolchain.
 
@@ -88,10 +88,10 @@ No other edits should be made unless formatting requires them.
 
 ### Biome configuration
 
-- Update `biome.json` to enable the most relevant built-in rule for TypeScript suppression comments.
+- Update `biome.json` only if a relevant built-in rule is verified locally in the installed Biome version.
 - Keep the rest of the lint configuration intact.
 
-If Biome's rule naming or grouping differs from expectation, use the official supported rule shape that errors on TypeScript ignore-style directives and document that choice inline in the commit message or PR body.
+Do not add unverified rule names to `biome.json`. If no suitable rule is available, leave Biome unchanged and rely on the repository guard for exact `@ts-nocheck` enforcement.
 
 ### Verification script or package workflow
 
@@ -163,8 +163,8 @@ Covered by:
 ### Acceptance criterion: "add a no-`ts-nocheck` rule to Biome rules"
 
 Covered by:
-- enabling Biome's closest built-in suppression-related rule where supported
-- documenting the exact gap if Biome cannot target `@ts-nocheck` literally
+- enabling a verified built-in Biome rule only if one actually exists in the installed version
+- otherwise leaving Biome unchanged rather than adding unsupported config
 - backing the exact prohibition with the repository guard
 
 ## Open Decisions Resolved
