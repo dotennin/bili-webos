@@ -44,6 +44,11 @@ beforeEach(() => {
     getSubscriptionVideos: mock(
       async () => ({ items: [], page: { pageNum: 1, pageSize: 30, total: 0 } }),
     ),
+    getPopular: mock(async () => ({ data: { list: [] } })),
+    getRecommend: mock(async () => ({ data: { item: [] } })),
+    getRegionDynamic: mock(async () => ({ data: { archives: [] } })),
+    getFollowFeed: mock(async () => ({ data: { items: [] } })),
+    getLiveList: mock(async () => ({ data: { list: [] } })),
     getHistory: mock(async () => ({ data: { list: [] } })),
     searchVideo: mock(async () => ({ data: { result: [] } })),
     qrCodeGenerate: mock(async () => ({
@@ -387,6 +392,7 @@ describe('page rendering', () => {
 
     expect(api.getMySubscriptions).toHaveBeenCalledWith(1, 1, 50);
     expect(textOf(page.toJSON())).toContain('订阅 15');
+    expect(setFocusCalls.at(-1)).toBe('subscription-0-0');
 
     await interact(() =>
       focusConfigs.find((config) => config.id === 'subscription-3-2').onSelect(),
@@ -699,6 +705,53 @@ describe('page rendering', () => {
     );
     await interact(() => timeouts.at(-1).fn());
     expect(textOf(timeoutRenderer.toJSON())).toContain('加载超时');
+  });
+
+  test('HomePage moves focus to the first video card after sidebar tab activation', async () => {
+    const { default: HomePage } = await importFresh('./HomePage.tsx');
+
+    currentFocusId = 'sidebar-1-0';
+    api.getPopular.mockImplementationOnce(async () => ({
+      data: {
+        list: [{ bvid: 'BV-HOT-1', title: '热门视频 1' }],
+      },
+    }));
+
+    await render(
+      React.createElement(HomePage, { mode: 'hot', onPlayVideo() {} }),
+    );
+    await flush();
+    await interact(() => timeouts.at(-1)?.fn());
+
+    expect(setFocusCalls.at(-1)).toBe('content-0-0');
+  });
+
+  test('HistoryPage moves focus to the first video card after sidebar tab activation', async () => {
+    const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
+
+    currentFocusId = 'sidebar-5-0';
+    api.getHistory.mockImplementationOnce(async () => ({
+      data: {
+        list: [
+          {
+            history: { bvid: 'BV-HISTORY-1', cid: 11 },
+            title: '历史视频 1',
+            cover: 'history-cover',
+            duration: 55,
+            progress: 12,
+            author_name: '作者',
+          },
+        ],
+      },
+    }));
+
+    await render(
+      React.createElement(HistoryPage, { onPlayVideo() {} }),
+    );
+    await flush();
+    await interact(() => timeouts.at(-1)?.fn());
+
+    expect(setFocusCalls.at(-1)).toBe('content-0-0');
   });
 
   test('LoginPage renders QR, handles scanned, success, expired, and error states', async () => {

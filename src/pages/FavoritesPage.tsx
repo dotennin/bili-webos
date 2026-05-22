@@ -104,6 +104,14 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
     return '我的收藏';
   }, [isSubscriptionDetail, selectedSubscription]);
 
+  function handleModeSelect(nextMode) {
+    setMode(nextMode);
+    if (nextMode === SUBSCRIPTIONS_MODE) {
+      setSubscriptionView(SUBSCRIPTION_LIST_VIEW);
+      setShouldRestoreSubscriptionFocus(true);
+    }
+  }
+
   useEffect(() => {
     if (!userMid) {
       setFolders([]);
@@ -329,6 +337,10 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
       return;
     }
 
+    if (!subscriptionsLoaded || subscriptionsLoading) {
+      return;
+    }
+
     const nextFocusId =
       lastFocusedSubscriptionId &&
       subscriptions.some(
@@ -347,6 +359,8 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
     lastFocusedSubscriptionId,
     shouldRestoreSubscriptionFocus,
     subscriptionView,
+    subscriptionsLoaded,
+    subscriptionsLoading,
     subscriptions,
   ]);
 
@@ -488,13 +502,6 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
   ]);
 
   useEffect(() => {
-    function handleModeSelect(nextMode) {
-      setMode(nextMode);
-      if (nextMode === SUBSCRIPTIONS_MODE) {
-        setSubscriptionView(SUBSCRIPTION_LIST_VIEW);
-      }
-    }
-
     function handleKey(event) {
       const focusId = getCurrentFocusId();
 
@@ -727,10 +734,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           label="我的订阅"
           active={isSubscriptionsMode}
           variant="primary"
-          onSelect={() => {
-            setMode(SUBSCRIPTIONS_MODE);
-            setSubscriptionView(SUBSCRIPTION_LIST_VIEW);
-          }}
+          onSelect={() => handleModeSelect(SUBSCRIPTIONS_MODE)}
         />
       </div>
       {isFavoritesMode
