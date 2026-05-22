@@ -146,7 +146,7 @@ test('HomePage loads by mode, dedupes items, focuses first content, and loads mo
     { bvid: 'BV1', title: '热门1' },
   ]);
   expect(videoGridCalls.at(-1).cols).toBe(4);
-  timers[0].fn();
+  timers[0]?.fn();
   expect(setFocusCalls).toEqual(['content-0-0']);
 
   api.getPopular.mockResolvedValueOnce({
@@ -159,6 +159,7 @@ test('HomePage loads by mode, dedupes items, focuses first content, and loads mo
   ]);
   expect(videoGridCalls.at(-1).focusRow).toBe(0);
 
+  setFocusCalls = [];
   focusId = 'sidebar-0-0';
   const recommendRenderer = await render(
     React.createElement(HomePage, {
@@ -168,7 +169,7 @@ test('HomePage loads by mode, dedupes items, focuses first content, and loads mo
     }),
   );
   await flush();
-  timers.at(-1).fn();
+  timers.at(-1)?.fn();
   expect(api.getRecommend).toHaveBeenCalledWith(4, 20);
   expect(setFocusCalls).toEqual(['content-0-0']);
 

@@ -81,5 +81,6 @@ In Dev: Web App ──HTTP──────▶ Vite Dev Server (/proxy) ──H
 ## Development Workflow
 - Use `semantic-release` commit message format for automatic changelog and versioning, also when creating pull requests. Example: `feat: add search page` or `fix: correct video duration format`.
 - Run `bun format` and `bun lint` before committing to ensure consistent code style.
+- Run `bun run test:coverage` to verify that new code is covered by tests and overall coverage remains above 90% before creating a pull request.
 - For frontend and hook tests, avoid test designs that depend on shared global `window`/`document` event dispatch, cross-file DOM mutation order, or timing-sensitive React effect registration. Prefer pure helpers, explicit test seams, and direct handler invocation over global event simulation when validating unit behavior.
 - Also avoid assertions that depend on module-singleton mutable state staying isolated across the full Bun coverage run. If a singleton seam test cannot be made hermetic, delete it and recover coverage through stable behavior tests elsewhere.

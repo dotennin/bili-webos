@@ -17,10 +17,14 @@ export function scheduleDefaultGridFocus({
     setFocus(targetId);
   }
 
-  const timer = window.setTimeout(() => {
+  if (getCurrentFocusId() === targetId) {
+    return;
+  }
+
+  const timer = globalThis.setTimeout(() => {
     if (getCurrentFocusId() === targetId) return;
     setFocus(targetId);
   }, delayMs);
 
-  return () => window.clearTimeout(timer);
+  return () => globalThis.clearTimeout(timer);
 }
