@@ -7,7 +7,8 @@ import {
   getLiveList,
 } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
-import { getCurrentFocusId, setFocus, onFocusChange } from '../hooks/useFocus';
+import { onFocusChange } from '../hooks/useFocus';
+import { scheduleDefaultGridFocus } from './pageFocus';
 import { storage } from '../utils/storage';
 
 const FETCH_SIZE = 20;
@@ -90,13 +91,6 @@ export default function HomePage({
         setVideos(dedupe(items));
         setLoading(false);
         pageRef.current = 2;
-        // Only focus content if not currently in sidebar
-        setTimeout(() => {
-          const cur = getCurrentFocusId();
-          if (!cur || !cur.startsWith('sidebar-')) {
-            setFocus('content-0-0');
-          }
-        }, 50);
       })
       .catch(() => {
         if (!cancelled) setLoading(false);
@@ -106,6 +100,12 @@ export default function HomePage({
       cancelled = true;
     };
   }, [refreshKey, mode]);
+
+  useEffect(() => {
+    return scheduleDefaultGridFocus({
+      enabled: !loading && videos.length > 0,
+    });
+  }, [loading, videos.length]);
 
   function dedupe(items) {
     return items.filter((v) => {

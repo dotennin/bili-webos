@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getHistory } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
 import { storage } from '../utils/storage';
+import { scheduleDefaultGridFocus } from './pageFocus';
 
 export default function HistoryPage({ onPlayVideo }) {
   const [videos, setVideos] = useState([]);
@@ -50,6 +51,12 @@ export default function HistoryPage({ onPlayVideo }) {
       clearTimeout(timeout);
     };
   }, []);
+
+  useEffect(() => {
+    return scheduleDefaultGridFocus({
+      enabled: !loading && !error && videos.length > 0,
+    });
+  }, [error, loading, videos.length]);
 
   if (loading)
     return (
