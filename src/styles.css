@@ -148,14 +148,12 @@ body,
   border-radius: 12px;
   overflow: hidden;
   background: #12122a;
-  border: 1px solid rgba(255, 255, 255, 0.05);
   cursor: pointer;
   outline: none;
   contain: content;
   content-visibility: auto;
   transform: scale(1);
-  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s
-    ease;
+  transition: transform 0.15s ease;
 }
 .video-card.focused,
 .subscription-card.focused {
@@ -562,11 +560,8 @@ body,
   min-width: 0;
   border-radius: 16px;
   background: #12122a;
-  border: 1px solid rgba(255, 255, 255, 0.05);
   color: #f6f8ff;
   transform: scale(1);
-  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s
-    ease;
 }
 
 .subscription-card-thumb {
