@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.10.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.9.1...bili-webos-tv-v1.10.0) (2026-05-22)
+
+
+### Features
+
+* add subscriptions mode under favorites ([#100](https://github.com/dotennin/bili-webos/issues/100)) ([6725533](https://github.com/dotennin/bili-webos/commit/672553326ba55ff49921c083ee0a993693197cfa))
+
+
+### Bug Fixes
+
+* allow subscription cover proxy on webos ([#105](https://github.com/dotennin/bili-webos/issues/105)) ([48ee01e](https://github.com/dotennin/bili-webos/commit/48ee01eba1e332cbc694bedcf930d7f884e23567))
+* default focus to first video after tab selection ([#106](https://github.com/dotennin/bili-webos/issues/106)) ([d02824c](https://github.com/dotennin/bili-webos/commit/d02824c606385ac59da640c9c1c121edd8eb2b20))
+* unify video card focus styles ([#104](https://github.com/dotennin/bili-webos/issues/104)) ([fd6de4f](https://github.com/dotennin/bili-webos/commit/fd6de4f2efb65c33ba89b10d319e07cac912e9a4))
+
 ## [1.9.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.9.0...bili-webos-tv-v1.9.1) (2026-05-19)
 
 
