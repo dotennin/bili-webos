@@ -61,14 +61,26 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
 
   function togglePlay() {
     if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      videoRef.current.play();
-      setPlaying(true);
-      castReportState({ playState: 'playing' }).catch(() => {});
-    } else {
+    if (playing) {
       videoRef.current.pause();
       setPlaying(false);
       castReportState({ playState: 'paused' }).catch(() => {});
+    } else {
+      videoRef.current.play();
+      setPlaying(true);
+      castReportState({ playState: 'playing' }).catch(() => {});
+    }
+  }
+
+  function handleControlPress(control) {
+    if (control === 'play') {
+      togglePlay();
+      showLiveControls();
+      return;
+    }
+    if (control === 'danmaku') {
+      setDanmakuEnabled((prev) => !prev);
+      showLiveControls();
     }
   }
 
@@ -217,10 +229,13 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
       castReportState({ playState: 'loading' }).catch(() => {});
     const onPause = () => {
       if (videoRef.current?.ended) return;
+      setPlaying(false);
       castReportState({ playState: 'paused' }).catch(() => {});
     };
-    const onEnded = () =>
+    const onEnded = () => {
+      setPlaying(false);
       castReportState({ playState: 'stop' }).catch(() => {});
+    };
 
     if (video) {
       video.addEventListener('playing', onPlaying);
@@ -372,7 +387,7 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
     };
     setCustomKeyHandler(handler);
     return () => setCustomKeyHandler(null);
-  }, [focusIdx, onBack, showControls]);
+  }, [focusIdx, onBack, playing, showControls]);
 
   return (
     <div className="player-page">
@@ -413,6 +428,7 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
         playing={playing}
         danmakuEnabled={danmakuEnabled}
         focusedIndex={focusIdx}
+        onControlPress={handleControlPress}
       />
 
       <div

@@ -10,6 +10,7 @@ type PlayerControllerOverlayProps = {
   danmakuEnabled: boolean;
   focusedIndex: number;
   controls?: ControllerButton[];
+  onControlPress?: (control: ControllerButton) => void;
 };
 
 export default function PlayerControllerOverlay({
@@ -20,6 +21,7 @@ export default function PlayerControllerOverlay({
   danmakuEnabled,
   focusedIndex,
   controls = ['play', 'danmaku'],
+  onControlPress,
 }: PlayerControllerOverlayProps) {
   return (
     <div className={`player-controls ${visible ? '' : 'hidden'}`}>
@@ -34,6 +36,8 @@ export default function PlayerControllerOverlay({
           <button
             key={btn}
             className={`player-btn ${focusedIndex === i ? 'focused' : ''}`}
+            onClick={() => onControlPress?.(btn)}
+            onMouseUp={() => onControlPress?.(btn)}
           >
             {btn === 'play'
               ? playing

@@ -1380,6 +1380,16 @@ describe('LivePlayerPage', () => {
     video.readyState = 2;
     await interact(() => video.dispatch('playing'));
     expect(api.castReportState).toHaveBeenCalledWith({ playState: 'playing' });
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    expect(
+      renderer.container.querySelector('.player-btn.focused')?.textContent,
+    ).toContain('暂停');
+    await interact(() =>
+      renderer.container.querySelector('.player-btn.focused')?.click(),
+    );
+    expect(
+      renderer.container.querySelector('.player-btn.focused')?.textContent,
+    ).toContain('播放');
 
     await interact(() =>
       eventTarget.dispatchEvent(
