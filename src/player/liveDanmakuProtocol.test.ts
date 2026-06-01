@@ -1,4 +1,4 @@
-import { beforeEach, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 
 import {
   buildLiveDanmakuAuthPacket,
@@ -7,6 +7,16 @@ import {
   getPreferredLiveDanmakuProtover,
   parseLiveDanmakuMessages,
 } from './liveDanmakuProtocol.ts';
+
+const originalLocalStorage = globalThis.localStorage;
+
+function restoreLocalStorage() {
+  if (typeof originalLocalStorage === 'undefined') {
+    delete globalThis.localStorage;
+    return;
+  }
+  globalThis.localStorage = originalLocalStorage;
+}
 
 beforeEach(() => {
   globalThis.localStorage = {
@@ -17,6 +27,10 @@ beforeEach(() => {
     setItem: () => {},
     removeItem: () => {},
   };
+});
+
+afterEach(() => {
+  restoreLocalStorage();
 });
 
 function header(buffer) {

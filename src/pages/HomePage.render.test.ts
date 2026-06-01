@@ -20,6 +20,19 @@ const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
 const realApi = await import(apiPath);
 const realHooks = await import(hooksPath);
 const realStorage = await import(storagePath);
+const originalGlobals = {
+  window: globalThis.window,
+  setTimeout: globalThis.setTimeout,
+  clearTimeout: globalThis.clearTimeout,
+};
+
+function restoreGlobal(name, value) {
+  if (typeof value === 'undefined') {
+    delete globalThis[name];
+    return;
+  }
+  globalThis[name] = value;
+}
 
 async function importFresh() {
   return import(`./HomePage.tsx?t=${Date.now()}-${Math.random()}`);
@@ -128,6 +141,9 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
+  for (const [name, value] of Object.entries(originalGlobals)) {
+    restoreGlobal(name, value);
+  }
 });
 
 test('HomePage loads by mode, dedupes items, focuses first content, and loads more near bottom', async () => {

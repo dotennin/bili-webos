@@ -25,6 +25,21 @@ const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
 const realApi = await import(apiPath);
 const realHooks = await import(hooksPath);
 const realStorage = await import(storagePath);
+const originalGlobals = {
+  localStorage: globalThis.localStorage,
+  setInterval: globalThis.setInterval,
+  clearInterval: globalThis.clearInterval,
+  setTimeout: globalThis.setTimeout,
+  clearTimeout: globalThis.clearTimeout,
+};
+
+function restoreGlobal(name, value) {
+  if (typeof value === 'undefined') {
+    delete globalThis[name];
+    return;
+  }
+  globalThis[name] = value;
+}
 
 async function importFresh(pathname) {
   return import(`${pathname}?t=${Date.now()}-${Math.random()}`);
@@ -176,6 +191,9 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
+  for (const [name, value] of Object.entries(originalGlobals)) {
+    restoreGlobal(name, value);
+  }
 });
 
 describe('page rendering', () => {

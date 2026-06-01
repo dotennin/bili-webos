@@ -43,6 +43,22 @@ const realStorage = await import(storagePath);
 const realProxy = await import(proxyPath);
 const realHooks = await import(hooksPath);
 const NativeURL = globalThis.URL;
+const originalGlobals = {
+  window: globalThis.window,
+  document: globalThis.document,
+  setTimeout: globalThis.setTimeout,
+  clearTimeout: globalThis.clearTimeout,
+  setInterval: globalThis.setInterval,
+  clearInterval: globalThis.clearInterval,
+};
+
+function restoreGlobal(name, value) {
+  if (typeof value === 'undefined') {
+    delete globalThis[name];
+    return;
+  }
+  globalThis[name] = value;
+}
 
 async function importFresh(pathname) {
   return import(`${pathname}?fixture=player-render`);
@@ -350,6 +366,9 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
+  for (const [name, value] of Object.entries(originalGlobals)) {
+    restoreGlobal(name, value);
+  }
   globalThis.URL = NativeURL;
   console.error = originalConsoleError;
   Date.now = originalDateNow;
