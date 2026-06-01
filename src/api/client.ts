@@ -186,10 +186,14 @@ export async function apiFetch(
 }
 
 // API fetch with WBI signature
-export async function wbiFetch(path: string, params?: Record<string, any>) {
+export async function wbiFetch(
+  path: string,
+  params?: Record<string, any>,
+  options?: { host?: string },
+) {
   var keys = await getWbiKeys(apiFetch);
   var signedQuery = signWbi(params || {}, keys.imgKey, keys.subKey);
-  return smartFetch(API_HOST, path + '?' + signedQuery);
+  return smartFetch(options?.host || API_HOST, path + '?' + signedQuery);
 }
 
 // Raw fetch for special cases (returns Response or Luna result)
@@ -425,6 +429,14 @@ export async function getLiveStreamSource(roomId) {
     res.data.playurl_info.playurl &&
     res.data.playurl_info.playurl.stream;
   return selectLiveStreamSource(streams);
+}
+
+export async function getLiveDanmakuInfo(roomId) {
+  return wbiFetch(
+    '/xlive/web-room/v1/index/getDanmuInfo',
+    { id: roomId, type: 0 },
+    { host: 'api.live.bilibili.com' },
+  );
 }
 
 // ============ Search ============

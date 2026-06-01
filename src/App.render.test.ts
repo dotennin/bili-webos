@@ -22,6 +22,23 @@ let playerProps;
 let eventTarget;
 let timers;
 
+const originalGlobals = {
+  window: globalThis.window,
+  document: globalThis.document,
+  localStorage: globalThis.localStorage,
+  CustomEvent: globalThis.CustomEvent,
+  setTimeout: globalThis.setTimeout,
+  clearTimeout: globalThis.clearTimeout,
+};
+
+function restoreGlobal(name, value) {
+  if (typeof value === 'undefined') {
+    delete globalThis[name];
+    return;
+  }
+  globalThis[name] = value;
+}
+
 beforeEach(() => {
   focusState = { current: null, listeners: [] };
   castSubscription = null;
@@ -149,6 +166,9 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
+  for (const [name, value] of Object.entries(originalGlobals)) {
+    restoreGlobal(name, value);
+  }
 });
 
 test('App loads user info, routes pages, handles cast commands, login, logout, and back behavior', async () => {

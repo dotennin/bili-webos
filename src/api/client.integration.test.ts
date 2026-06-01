@@ -7,6 +7,7 @@ import {
   getLiveList,
   getLiveStreamUrl,
   getLiveStreamSource,
+  getLiveDanmakuInfo,
   getDanmaku,
   getVideoInfo,
   getPlayUrl,
@@ -230,6 +231,46 @@ describe('api client integration paths', () => {
     expect(list.data.list[0].roomid).toBe(1);
     expect(url).toContain('https://h/live.flv');
     expect(source.type).toBe('flv');
+  });
+
+  it('fetches live danmaku auth through signed live host path', async () => {
+    const calls = [];
+    globalThis.fetch = mock((url) => {
+      calls.push(String(url));
+      if (String(url).includes('/x/web-interface/nav')) {
+        return Promise.resolve({
+          headers: { get: () => 'application/json' },
+          json: async () => ({
+            data: {
+              wbi_img: {
+                img_url: 'https://i/a12345678901234567890123456789012.png',
+                sub_url: 'https://i/b12345678901234567890123456789012.png',
+              },
+            },
+          }),
+        });
+      }
+      return Promise.resolve({
+        headers: { get: () => 'application/json' },
+        json: async () => ({ code: 0, data: { token: 'live-token' } }),
+      });
+    });
+
+    const info = await getLiveDanmakuInfo(77);
+
+    expect(info.data.token).toBe('live-token');
+    expect(calls.some((url) => url.includes('/x/web-interface/nav'))).toBe(
+      true,
+    );
+    expect(
+      calls.some(
+        (url) =>
+          url.includes('/proxy/api.live.bilibili.com') &&
+          url.includes('/xlive/web-room/v1/index/getDanmuInfo') &&
+          url.includes('id=77') &&
+          url.includes('w_rid='),
+      ),
+    ).toBe(true);
   });
 
   it('parses danmaku XML and tolerates heartbeat request failures', async () => {

@@ -29,15 +29,36 @@ let mpegtsFeatureList;
 let mpegtsPlayers;
 let currentNow;
 let originalDateNow;
+let liveDanmakuState;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
 const proxyPath = new URL('../utils/proxy.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
+const liveDanmakuHookPath = new URL(
+  './useLiveDanmaku.ts',
+  import.meta.url,
+).pathname;
 const realApi = await import(apiPath);
 const realStorage = await import(storagePath);
 const realProxy = await import(proxyPath);
 const realHooks = await import(hooksPath);
 const NativeURL = globalThis.URL;
+const originalGlobals = {
+  window: globalThis.window,
+  document: globalThis.document,
+  setTimeout: globalThis.setTimeout,
+  clearTimeout: globalThis.clearTimeout,
+  setInterval: globalThis.setInterval,
+  clearInterval: globalThis.clearInterval,
+};
+
+function restoreGlobal(name, value) {
+  if (typeof value === 'undefined') {
+    delete globalThis[name];
+    return;
+  }
+  globalThis[name] = value;
+}
 
 async function importFresh(pathname) {
   return import(`${pathname}?fixture=player-render`);
@@ -163,6 +184,11 @@ beforeEach(() => {
   currentNow = 1_000;
   originalDateNow = Date.now;
   Date.now = () => currentNow;
+  liveDanmakuState = {
+    danmakus: [{ time: 0, text: 'live hello', mode: 1 }],
+    available: true,
+    currentTime: 0,
+  };
 
   globalThis.window = Object.assign(eventTarget, {});
   const domDocument = globalThis.__TEST_DOCUMENT__;
@@ -255,6 +281,12 @@ beforeEach(() => {
       customKeyHandler = handler;
     },
   }));
+  mock.module(liveDanmakuHookPath, () => ({
+    useLiveDanmaku: mock((_roomId, enabled) => ({
+      ...liveDanmakuState,
+      danmakus: enabled ? liveDanmakuState.danmakus : [],
+    })),
+  }));
   mock.module('./DanmakuLayer.tsx', () => ({
     default(props) {
       return React.createElement(
@@ -334,6 +366,13 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
+  mock.module(apiPath, () => realApi);
+  mock.module(storagePath, () => realStorage);
+  mock.module(proxyPath, () => realProxy);
+  mock.module(hooksPath, () => realHooks);
+  for (const [name, value] of Object.entries(originalGlobals)) {
+    restoreGlobal(name, value);
+  }
   globalThis.URL = NativeURL;
   console.error = originalConsoleError;
   Date.now = originalDateNow;
@@ -1364,6 +1403,16 @@ describe('LivePlayerPage', () => {
     video.readyState = 2;
     await interact(() => video.dispatch('playing'));
     expect(api.castReportState).toHaveBeenCalledWith({ playState: 'playing' });
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    expect(
+      renderer.container.querySelector('.player-btn.focused')?.textContent,
+    ).toContain('暂停');
+    await interact(() =>
+      renderer.container.querySelector('.player-btn.focused')?.click(),
+    );
+    expect(
+      renderer.container.querySelector('.player-btn.focused')?.textContent,
+    ).toContain('播放');
 
     await interact(() =>
       eventTarget.dispatchEvent(
@@ -1375,6 +1424,15 @@ describe('LivePlayerPage', () => {
         new CustomEvent('bili-cast-command', { detail: { type: 'resume' } }),
       ),
     );
+    expect(JSON.stringify(renderer.toJSON())).toContain('danmaku-layer');
+    await interact(() =>
+      eventTarget.dispatchEvent(
+        new CustomEvent('bili-cast-command', {
+          detail: { type: 'switchDanmaku', open: false },
+        }),
+      ),
+    );
+    expect(storageState.settings.danmaku).toBe(false);
     video.duration = 100;
     await interact(() =>
       eventTarget.dispatchEvent(
@@ -1393,6 +1451,8 @@ describe('LivePlayerPage', () => {
 
     await interact(() => customKeyHandler(event('MediaPause', 19)));
     await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('Backspace', 461)));
+    expect(onBack).toHaveBeenCalledTimes(1);
     await interact(() => customKeyHandler(event('Backspace', 461)));
     expect(onBack).toHaveBeenCalledTimes(2);
 
@@ -1469,7 +1529,9 @@ describe('LivePlayerPage', () => {
     await interact(() => customKeyHandler(event('MediaFastForward', 417)));
     await interact(() => customKeyHandler(event('ArrowDown')));
     await interact(() => timers.at(-1).fn());
-    expect(JSON.stringify(renderer.toJSON())).not.toContain('HLS 直播间');
+    expect(JSON.stringify(renderer.toJSON())).toContain(
+      'player-controls hidden',
+    );
 
     await act(async () => {
       renderer.unmount();

@@ -2,6 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getLiveStreamSource, castReportState } from '../api/client';
 import { buildProxyUrl, getProxyBase } from '../utils/proxy';
 import { setCustomKeyHandler } from '../hooks/useFocus';
+import { storage } from '../utils/storage';
+import DanmakuLayer from './DanmakuLayer';
+import PlayerControllerOverlay from './PlayerControllerOverlay';
+import { useLiveDanmaku } from './useLiveDanmaku';
+
+const CONTROLS = ['play', 'danmaku'];
 
 function getMpegtsModule(mod) {
   return mod?.default || mod;
@@ -30,9 +36,53 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
   const playerRef = useRef(null);
   const playerKindRef = useRef(null);
   const [loading, setLoading] = useState(true);
-  const [showInfo, setShowInfo] = useState(true);
-  const infoTimer = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [showControls, setShowControls] = useState(false);
+  const [focusIdx, setFocusIdx] = useState(0);
+  const [danmakuEnabled, setDanmakuEnabled] = useState(
+    () => storage.getSettings().danmaku,
+  );
+  const controlsTimer = useRef(null);
   const firstFrameTimer = useRef(null);
+  const { danmakus, currentTime: liveDanmakuTime } = useLiveDanmaku(
+    room.roomid,
+    danmakuEnabled,
+  );
+
+  function hideControlsLater() {
+    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    controlsTimer.current = setTimeout(() => setShowControls(false), 3000);
+  }
+
+  function showLiveControls() {
+    setShowControls(true);
+    hideControlsLater();
+  }
+
+  function togglePlay() {
+    if (!videoRef.current) return;
+    if (playing) {
+      videoRef.current.pause();
+      setPlaying(false);
+      castReportState({ playState: 'paused' }).catch(() => {});
+    } else {
+      videoRef.current.play();
+      setPlaying(true);
+      castReportState({ playState: 'playing' }).catch(() => {});
+    }
+  }
+
+  function handleControlPress(control) {
+    if (control === 'play') {
+      togglePlay();
+      showLiveControls();
+      return;
+    }
+    if (control === 'danmaku') {
+      setDanmakuEnabled((prev) => !prev);
+      showLiveControls();
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -45,8 +95,7 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
         firstFrameTimer.current = null;
       }
       castReportState({ playState: 'playing' }).catch(() => {});
-      if (infoTimer.current) clearTimeout(infoTimer.current);
-      infoTimer.current = setTimeout(() => setShowInfo(false), 3000);
+      setPlaying(true);
     }
 
     function watchFirstFrame() {
@@ -180,10 +229,13 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
       castReportState({ playState: 'loading' }).catch(() => {});
     const onPause = () => {
       if (videoRef.current?.ended) return;
+      setPlaying(false);
       castReportState({ playState: 'paused' }).catch(() => {});
     };
-    const onEnded = () =>
+    const onEnded = () => {
+      setPlaying(false);
       castReportState({ playState: 'stop' }).catch(() => {});
+    };
 
     if (video) {
       video.addEventListener('playing', onPlaying);
@@ -207,14 +259,18 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
         video.removeEventListener('pause', onPause);
         video.removeEventListener('ended', onEnded);
       }
-      if (infoTimer.current) clearTimeout(infoTimer.current);
       if (firstFrameTimer.current) clearInterval(firstFrameTimer.current);
+      if (controlsTimer.current) clearTimeout(controlsTimer.current);
       playerRef.current?.destroy?.();
       playerRef.current = null;
       playerKindRef.current = null;
       castReportState({ playState: 'stop' }).catch(() => {});
     };
   }, [room.roomid]);
+
+  useEffect(() => {
+    storage.setSettings({ ...storage.getSettings(), danmaku: danmakuEnabled });
+  }, [danmakuEnabled]);
 
   useEffect(() => {
     const handleCastCommand = (event) => {
@@ -227,12 +283,18 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
       if (!videoRef.current) return;
       if (command.type === 'pause') {
         videoRef.current.pause();
+        setPlaying(false);
         castReportState({ playState: 'paused' }).catch(() => {});
         return;
       }
       if (command.type === 'resume') {
         videoRef.current.play();
+        setPlaying(true);
         castReportState({ playState: 'playing' }).catch(() => {});
+        return;
+      }
+      if (command.type === 'switchDanmaku') {
+        setDanmakuEnabled(!!command.open);
         return;
       }
       if (command.type === 'seek' && videoRef.current.duration) {
@@ -252,8 +314,6 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
       const isMediaPlay = key === 'MediaPlay' || keyCode === 415;
       const isMediaPause = key === 'MediaPause' || keyCode === 19;
       const isMediaPlayPause = key === 'MediaPlayPause';
-      const isMediaRewind = key === 'MediaRewind' || keyCode === 412;
-      const isMediaFastForward = key === 'MediaFastForward' || keyCode === 417;
 
       if (
         keyCode === 461 ||
@@ -263,50 +323,81 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
       ) {
         e.preventDefault();
         e.stopPropagation();
-        onBack();
-        return true;
-      }
-
-      if (
-        isMediaPause ||
-        isMediaPlay ||
-        isMediaPlayPause ||
-        isMediaRewind ||
-        isMediaFastForward
-      ) {
-        e.preventDefault();
-        setShowInfo(true);
-        if (infoTimer.current) clearTimeout(infoTimer.current);
-        infoTimer.current = setTimeout(() => setShowInfo(false), 3000);
-
-        if (videoRef.current) {
-          if (isMediaPause) {
-            videoRef.current.pause();
-            castReportState({ playState: 'paused' }).catch(() => {});
-          } else {
-            videoRef.current.play();
-            castReportState({ playState: 'playing' }).catch(() => {});
-          }
+        if (showControls) {
+          setShowControls(false);
+          if (controlsTimer.current) clearTimeout(controlsTimer.current);
+        } else {
+          onBack();
         }
         return true;
       }
 
-      if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'Enter') {
+      if (isMediaPause || isMediaPlay || isMediaPlayPause) {
         e.preventDefault();
-        setShowInfo(true);
-        if (infoTimer.current) clearTimeout(infoTimer.current);
-        infoTimer.current = setTimeout(() => setShowInfo(false), 3000);
+        if (videoRef.current) {
+          if (isMediaPause) {
+            videoRef.current.pause();
+            setPlaying(false);
+            castReportState({ playState: 'paused' }).catch(() => {});
+          } else if (isMediaPlay) {
+            videoRef.current.play();
+            setPlaying(true);
+            castReportState({ playState: 'playing' }).catch(() => {});
+          } else {
+            togglePlay();
+          }
+        }
+        showLiveControls();
+        return true;
+      }
+
+      if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        e.preventDefault();
+        setShowControls(true);
+        setFocusIdx((prev) =>
+          key === 'ArrowLeft'
+            ? Math.max(0, prev - 1)
+            : Math.min(CONTROLS.length - 1, prev + 1),
+        );
+        hideControlsLater();
+        return true;
+      }
+
+      if (key === 'ArrowUp' || key === 'ArrowDown') {
+        e.preventDefault();
+        showLiveControls();
+        return true;
+      }
+
+      if (key === 'Enter') {
+        e.preventDefault();
+        if (!showControls) {
+          showLiveControls();
+          return true;
+        }
+        if (CONTROLS[focusIdx] === 'play') {
+          togglePlay();
+        } else {
+          setDanmakuEnabled((prev) => !prev);
+        }
+        hideControlsLater();
         return true;
       }
       return false;
     };
     setCustomKeyHandler(handler);
     return () => setCustomKeyHandler(null);
-  }, [onBack]);
+  }, [focusIdx, onBack, playing, showControls]);
 
   return (
     <div className="player-page">
       <video ref={videoRef} className="player-video" autoPlay />
+
+      <DanmakuLayer
+        danmakus={danmakus}
+        currentTime={liveDanmakuTime}
+        enabled={danmakuEnabled && !loading}
+      />
 
       {loading && (
         <div
@@ -330,27 +421,15 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
         </div>
       )}
 
-      {showInfo && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            background: 'linear-gradient(rgba(0,0,0,0.8), transparent)',
-            padding: '30px 60px',
-            zIndex: 30,
-            transition: 'opacity 0.3s ease',
-          }}
-        >
-          <div style={{ fontSize: 28, color: '#fff', fontWeight: 600 }}>
-            {room.title}
-          </div>
-          <div style={{ fontSize: 20, color: '#aaa', marginTop: 8 }}>
-            {room.owner?.name || ''} · 直播中
-          </div>
-        </div>
-      )}
+      <PlayerControllerOverlay
+        title={room.title}
+        subtitle={`${room.owner?.name || ''}${room.owner?.name ? ' · ' : ''}直播中`}
+        visible={showControls}
+        playing={playing}
+        danmakuEnabled={danmakuEnabled}
+        focusedIndex={focusIdx}
+        onControlPress={handleControlPress}
+      />
 
       <div
         style={{
