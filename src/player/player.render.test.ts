@@ -366,6 +366,10 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
+  mock.module(apiPath, () => realApi);
+  mock.module(storagePath, () => realStorage);
+  mock.module(proxyPath, () => realProxy);
+  mock.module(hooksPath, () => realHooks);
   for (const [name, value] of Object.entries(originalGlobals)) {
     restoreGlobal(name, value);
   }

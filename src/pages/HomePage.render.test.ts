@@ -141,6 +141,9 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
+  mock.module(apiPath, () => realApi);
+  mock.module(hooksPath, () => realHooks);
+  mock.module(storagePath, () => realStorage);
   for (const [name, value] of Object.entries(originalGlobals)) {
     restoreGlobal(name, value);
   }
