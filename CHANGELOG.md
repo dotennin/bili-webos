@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.10.0...bili-webos-tv-v1.11.0) (2026-06-01)
+
+
+### Features
+
+* add live danmaku overlay controls ([#107](https://github.com/dotennin/bili-webos/issues/107)) ([b41f142](https://github.com/dotennin/bili-webos/commit/b41f14260f29427723b75a7b17682c4f6ef9017a))
+
 ## [1.10.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.9.1...bili-webos-tv-v1.10.0) (2026-05-22)
 
 
