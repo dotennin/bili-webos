@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.11.0...bili-webos-tv-v1.11.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* pin webOS CLI for release packaging ([#109](https://github.com/dotennin/bili-webos/issues/109)) ([f7078eb](https://github.com/dotennin/bili-webos/commit/f7078eba36c7a260311291f3410c8c549518e559))
+
 ## [1.11.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.10.0...bili-webos-tv-v1.11.0) (2026-06-01)
 
 
