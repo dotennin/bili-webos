@@ -6,6 +6,9 @@ const bunBin =
 const coverageDir = 'coverage';
 const isolatedCoverageDir = path.join(coverageDir, 'isolated');
 const mainCoverageDir = path.join(coverageDir, 'main');
+// These tests exercise real storage/api/focus modules, but render suites mock the
+// same modules heavily. Running them in a separate Bun process avoids CI-only
+// mock.module leakage while still letting us merge their LCOV into the report.
 const isolatedTests = [
   'src/utils/storage.test.ts',
   'src/api/client.integration.test.ts',
