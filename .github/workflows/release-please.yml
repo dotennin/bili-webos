@@ -47,7 +47,9 @@ jobs:
 
       - name: Install webOS CLI
         if: steps.release.outputs.release_created == 'true'
-        run: npm install --global @webos-tools/cli
+        # @webos-tools/cli 3.2.4 pulls rimraf 6 but still calls the legacy
+        # function API, which breaks ares-package during release packaging.
+        run: npm install --global @webos-tools/cli@3.2.3
 
       - name: Package release IPK
         if: steps.release.outputs.release_created == 'true'
