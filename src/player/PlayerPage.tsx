@@ -29,6 +29,9 @@ const RESUME_REWIND_SEC = 2;
 const RELATED_GRID_COLS = 4;
 const PLAYBACK_SPEEDS = [2, 1.5, 1.25, 1, 0.75, 0.5, 0.25];
 const PLAYBACK_RATE_SYNC_DELAY_MS = 1200;
+const STALL_WATCH_INTERVAL_MS = 1000;
+const STALL_RECOVERY_AFTER_MS = 6000;
+const STALL_RECOVERY_SEEK_SEC = 0.05;
 const WEBOS_BROWSER_APP_ID = 'com.webos.app.browser';
 
 function getSeekProfile(durationSec) {
@@ -109,6 +112,9 @@ export default function PlayerPage({
   const committedSeekTargetRef = useRef(null);
   const persistResumeFromPlayerRef = useRef(() => {});
   const playbackRateSyncTimerRef = useRef(null);
+  const bufferingSinceRef = useRef(null);
+  const lastPlaybackProgressRef = useRef({ at: Date.now(), time: 0 });
+  const lastStallRecoveryAtRef = useRef(0);
 
   const pendingSeekRef = useRef(null);
   const endedRef = useRef(false);
@@ -418,9 +424,13 @@ export default function PlayerPage({
       });
       await player.attach(videoRef.current);
       shakaRef.current = player;
-      player.addEventListener('error', (e) =>
-        console.error('Shaka error:', e.detail),
-      );
+      player.addEventListener('error', (e) => {
+        console.error('Shaka error:', e.detail);
+        castReportState({
+          playState: 'error',
+          error: e.detail?.message || 'shaka-error',
+        }).catch(() => {});
+      });
       if (mounted) loadVideo(player);
     }
     init();
@@ -598,7 +608,15 @@ export default function PlayerPage({
     const el = videoRef.current;
     if (!el) return;
 
+    const markPlaybackProgress = () => {
+      lastPlaybackProgressRef.current = {
+        at: Date.now(),
+        time: Number(el.currentTime) || 0,
+      };
+      bufferingSinceRef.current = null;
+    };
     const handlePlay = () => {
+      markPlaybackProgress();
       syncPlaybackRate();
       schedulePlaybackRateSync();
       setPlaying(true);
@@ -610,11 +628,13 @@ export default function PlayerPage({
       schedulePlaybackRateSync();
     };
     const handleCanPlay = () => {
+      markPlaybackProgress();
       flushPendingSeek();
       syncPlaybackRate();
       schedulePlaybackRateSync();
     };
     const handleLoadedData = () => {
+      markPlaybackProgress();
       syncPlaybackRate();
       schedulePlaybackRateSync();
       setFirstFrameReady(true);
@@ -637,20 +657,45 @@ export default function PlayerPage({
       if (!ended) castReportState({ playState: 'paused' }).catch(() => {});
       setPlaying(false);
     };
+    const handlePlaying = () => {
+      markPlaybackProgress();
+      setLoading(false);
+      setPlaying(true);
+      castReportState({ playState: 'playing' }).catch(() => {});
+    };
+    const handleWaiting = () => {
+      bufferingSinceRef.current = bufferingSinceRef.current || Date.now();
+      setLoading(true);
+      castReportState({ playState: 'loading' }).catch(() => {});
+    };
+    const handleError = () => {
+      castReportState({
+        playState: 'error',
+        error: el.error?.message || 'media-error',
+      }).catch(() => {});
+    };
 
     el.addEventListener('play', handlePlay);
+    el.addEventListener('playing', handlePlaying);
     el.addEventListener('pause', handlePause);
     el.addEventListener('loadedmetadata', handleLoadedMetadata);
     el.addEventListener('canplay', handleCanPlay);
     el.addEventListener('loadeddata', handleLoadedData);
     el.addEventListener('ratechange', handleRateChange);
+    el.addEventListener('waiting', handleWaiting);
+    el.addEventListener('stalled', handleWaiting);
+    el.addEventListener('error', handleError);
     return () => {
       el.removeEventListener('play', handlePlay);
+      el.removeEventListener('playing', handlePlaying);
       el.removeEventListener('pause', handlePause);
       el.removeEventListener('loadedmetadata', handleLoadedMetadata);
       el.removeEventListener('canplay', handleCanPlay);
       el.removeEventListener('loadeddata', handleLoadedData);
       el.removeEventListener('ratechange', handleRateChange);
+      el.removeEventListener('waiting', handleWaiting);
+      el.removeEventListener('stalled', handleWaiting);
+      el.removeEventListener('error', handleError);
     };
   }, [
     ended,
@@ -660,6 +705,40 @@ export default function PlayerPage({
     syncPlaybackRate,
     syncTimelineFromPlayer,
   ]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const el = videoRef.current;
+      if (!el || el.paused || endedRef.current) return;
+
+      const now = Date.now();
+      const current = Number(el.currentTime) || 0;
+      const last = lastPlaybackProgressRef.current;
+      if (Math.abs(current - last.time) > 0.05) {
+        lastPlaybackProgressRef.current = { at: now, time: current };
+        bufferingSinceRef.current = null;
+        return;
+      }
+
+      const stalledSince = bufferingSinceRef.current || last.at;
+      if (now - stalledSince < STALL_RECOVERY_AFTER_MS) return;
+      if (now - lastStallRecoveryAtRef.current < STALL_RECOVERY_AFTER_MS) {
+        return;
+      }
+
+      lastStallRecoveryAtRef.current = now;
+      const retried = shakaRef.current?.retryStreaming?.();
+      if (!retried && Number.isFinite(el.duration) && el.duration > 0) {
+        const max = Math.max(0, el.duration - 0.2);
+        el.currentTime = Math.min(max, current + STALL_RECOVERY_SEEK_SEC);
+      }
+      el.play?.().catch?.(() => {});
+    }, STALL_WATCH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     syncPlaybackRate();
