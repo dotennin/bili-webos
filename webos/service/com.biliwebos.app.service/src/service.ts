@@ -88,6 +88,8 @@ function serializeCookies(cookies) {
 
 export { rewriteHlsPlaylist };
 
+const UPSTREAM_REQUEST_TIMEOUT_MS = 20_000;
+
 export function isAllowedHost(host) {
   const allowed = [
     'api.bilibili.com',
@@ -138,7 +140,18 @@ function makeRequest(parsedUrl, method, body, contentType, range, callback) {
     rejectUnauthorized: false,
   };
 
+  let completed = false;
+  const finish = (err, res?) => {
+    if (completed) return;
+    completed = true;
+    callback(err, res);
+  };
+
   const req = https.request(options, (res) => {
+    completed = true;
+    res.setTimeout?.(UPSTREAM_REQUEST_TIMEOUT_MS, () => {
+      res.destroy?.(new Error('Response timeout'));
+    });
     const setCookieHeaders = res.headers['set-cookie'];
     if (setCookieHeaders) {
       setCookieHeaders.forEach((sc) => {
@@ -156,7 +169,11 @@ function makeRequest(parsedUrl, method, body, contentType, range, callback) {
   });
 
   req.on('error', (err) => {
-    callback(err);
+    finish(err);
+  });
+  req.setTimeout?.(UPSTREAM_REQUEST_TIMEOUT_MS, () => {
+    req.destroy();
+    finish(new Error('Request timeout'));
   });
   if (body) req.write(body);
   req.end();
@@ -347,6 +364,18 @@ export function createLocalProxyHandler({
           Object.keys(proxyRes.headers).forEach((key) => {
             const value = proxyRes.headers[key];
             if (value != null) res.setHeader(key, value);
+          });
+          proxyRes.on('error', (proxyError) => {
+            console.error('[LocalProxy] response failed:', proxyError.message);
+            if (!res.headersSent) {
+              res.writeHead(502, { 'Content-Type': 'text/plain' });
+              res.end('Bad Gateway');
+              return;
+            }
+            res.destroy?.(proxyError);
+          });
+          res.on?.('close', () => {
+            proxyRes.destroy?.();
           });
           res.writeHead(proxyRes.statusCode || 200);
           proxyRes.pipe(res);

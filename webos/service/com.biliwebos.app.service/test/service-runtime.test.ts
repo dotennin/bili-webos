@@ -217,6 +217,43 @@ test('service handlers cover fetch errors, cookie mutations, and cast reporting 
   });
 });
 
+test('fetch fails hung upstream requests after the service timeout', async () => {
+  const handlers = serviceModule.service.handlers;
+  let timeoutHandler;
+  let destroyed = false;
+
+  https.request = function (_options, _cb) {
+    const req = new EventEmitter();
+    req.write = mock(() => {});
+    req.end = mock(() => {});
+    req.destroy = mock(() => {
+      destroyed = true;
+    });
+    req.setTimeout = mock((_ms, handler) => {
+      timeoutHandler = handler;
+      return req;
+    });
+    return req;
+  };
+
+  const responsePromise = new Promise((resolve) =>
+    handlers.fetch({
+      payload: { url: 'https://api.bilibili.com/x/hung', method: 'GET' },
+      respond: resolve,
+    }),
+  );
+
+  expect(timeoutHandler).toBeTypeOf('function');
+  timeoutHandler();
+  const result = await responsePromise;
+
+  expect(destroyed).toBe(true);
+  expect(result).toEqual({
+    returnValue: false,
+    error: 'Request timeout',
+  });
+});
+
 test('createLocalProxyHandler rejects forbidden hosts and rewrites HLS playlists', async () => {
   const handler = serviceModule.createLocalProxyHandler({
     localProxyPort: 7654,
