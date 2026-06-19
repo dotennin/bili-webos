@@ -344,6 +344,9 @@ export default function PlayerPage({
     };
     img.onerror = () => {
       spriteCacheRef.current.delete(url);
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[Player] Sprite load failed:', url);
+      }
     };
     img.src = url;
     spriteCacheRef.current.set(url, img);
@@ -614,6 +617,9 @@ export default function PlayerPage({
 
         if (storyboardVideoKeyRef.current !== videoKey) return;
         storyboardRef.current = storyboardData;
+        if (!storyboardData && typeof console !== 'undefined') {
+          console.warn('[Player] No storyboard data for', video.bvid, cid);
+        }
 
         await player.load(mpdUrl);
         URL.revokeObjectURL(mpdUrl);
