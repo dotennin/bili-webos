@@ -29,6 +29,9 @@ const RESUME_REWIND_SEC = 2;
 const RELATED_GRID_COLS = 4;
 const PLAYBACK_SPEEDS = [2, 1.5, 1.25, 1, 0.75, 0.5, 0.25];
 const PLAYBACK_RATE_SYNC_DELAY_MS = 1200;
+const STALL_WATCH_INTERVAL_MS = 1000;
+const STALL_RECOVERY_AFTER_MS = 6000;
+const STALL_RECOVERY_SEEK_SEC = 0.05;
 const WEBOS_BROWSER_APP_ID = 'com.webos.app.browser';
 
 function getSeekProfile(durationSec) {
@@ -86,6 +89,7 @@ export default function PlayerPage({
   const [danmakuEnabled, setDanmakuEnabled] = useState(true);
   const [videoTitle, setVideoTitle] = useState(video?.title || '');
   const [loading, setLoading] = useState(true);
+  const [buffering, setBuffering] = useState(false);
   const [firstFrameReady, setFirstFrameReady] = useState(false);
   const [ended, setEnded] = useState(false);
   const [relatedVideos, setRelatedVideos] = useState([]);
@@ -109,6 +113,12 @@ export default function PlayerPage({
   const committedSeekTargetRef = useRef(null);
   const persistResumeFromPlayerRef = useRef(() => {});
   const playbackRateSyncTimerRef = useRef(null);
+
+  const bufferingRef = useRef(false);
+  const bufferingSinceRef = useRef(null);
+  const lastPlaybackProgressRef = useRef({ at: Date.now(), time: 0 });
+  const lastStallRecoveryAtRef = useRef(0);
+  const suppressedBufferingRef = useRef(false);
 
   const pendingSeekRef = useRef(null);
   const endedRef = useRef(false);
@@ -306,6 +316,10 @@ export default function PlayerPage({
     lastSeekDirectionRef.current = 0;
     seekMultiplierRef.current = 1;
     blockedSeekDirectionRef.current = 0;
+    if (suppressedBufferingRef.current) {
+      suppressedBufferingRef.current = false;
+      setBuffering(true);
+    }
   }, [clearSeekCommitTimer, getSeekBounds, renderTimelinePreview]);
 
   const scheduleSeekCommit = useCallback(() => {
@@ -411,9 +425,12 @@ export default function PlayerPage({
       const player = new shaka.Player();
       player.configure({
         streaming: {
-          bufferingGoal: 5,
-          rebufferingGoal: 1,
-          bufferBehind: 20,
+          bufferingGoal: 15,
+          rebufferingGoal: 5,
+          bufferBehind: 30,
+        },
+        abr: {
+          defaultBandwidthEstimate: 2_000_000,
         },
       });
       await player.attach(videoRef.current);
@@ -598,7 +615,18 @@ export default function PlayerPage({
     const el = videoRef.current;
     if (!el) return;
 
+    const markPlaybackProgress = () => {
+      lastPlaybackProgressRef.current = {
+        at: Date.now(),
+        time: Number(el.currentTime) || 0,
+      };
+      bufferingSinceRef.current = null;
+      bufferingRef.current = false;
+      suppressedBufferingRef.current = false;
+    };
+
     const handlePlay = () => {
+      markPlaybackProgress();
       syncPlaybackRate();
       schedulePlaybackRateSync();
       setPlaying(true);
@@ -610,11 +638,15 @@ export default function PlayerPage({
       schedulePlaybackRateSync();
     };
     const handleCanPlay = () => {
+      markPlaybackProgress();
+      setBuffering(false);
       flushPendingSeek();
       syncPlaybackRate();
       schedulePlaybackRateSync();
     };
     const handleLoadedData = () => {
+      markPlaybackProgress();
+      setBuffering(false);
       syncPlaybackRate();
       schedulePlaybackRateSync();
       setFirstFrameReady(true);
@@ -638,19 +670,42 @@ export default function PlayerPage({
       setPlaying(false);
     };
 
+    const handlePlaying = () => {
+      markPlaybackProgress();
+      setBuffering(false);
+      setPlaying(true);
+      castReportState({ playState: 'playing' }).catch(() => {});
+    };
+    const handleWaiting = () => {
+      bufferingSinceRef.current = bufferingSinceRef.current || Date.now();
+      bufferingRef.current = true;
+      if (scrubActiveRef.current) {
+        suppressedBufferingRef.current = true;
+        return;
+      }
+      setBuffering(true);
+      castReportState({ playState: 'loading' }).catch(() => {});
+    };
+
     el.addEventListener('play', handlePlay);
+    el.addEventListener('playing', handlePlaying);
     el.addEventListener('pause', handlePause);
     el.addEventListener('loadedmetadata', handleLoadedMetadata);
     el.addEventListener('canplay', handleCanPlay);
     el.addEventListener('loadeddata', handleLoadedData);
     el.addEventListener('ratechange', handleRateChange);
+    el.addEventListener('waiting', handleWaiting);
+    el.addEventListener('stalled', handleWaiting);
     return () => {
       el.removeEventListener('play', handlePlay);
+      el.removeEventListener('playing', handlePlaying);
       el.removeEventListener('pause', handlePause);
       el.removeEventListener('loadedmetadata', handleLoadedMetadata);
       el.removeEventListener('canplay', handleCanPlay);
       el.removeEventListener('loadeddata', handleLoadedData);
       el.removeEventListener('ratechange', handleRateChange);
+      el.removeEventListener('waiting', handleWaiting);
+      el.removeEventListener('stalled', handleWaiting);
     };
   }, [
     ended,
@@ -660,6 +715,43 @@ export default function PlayerPage({
     syncPlaybackRate,
     syncTimelineFromPlayer,
   ]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const videoEl = videoRef.current;
+      if (!videoEl || videoEl.paused || endedRef.current) return;
+
+      const now = Date.now();
+      const current = Number(videoEl.currentTime) || 0;
+      const last = lastPlaybackProgressRef.current;
+      if (Math.abs(current - last.time) > 0.05) {
+        lastPlaybackProgressRef.current = { at: now, time: current };
+        bufferingSinceRef.current = null;
+        return;
+      }
+
+      const stalledSince = bufferingSinceRef.current || last.at;
+      if (now - stalledSince < STALL_RECOVERY_AFTER_MS) return;
+      if (now - lastStallRecoveryAtRef.current < STALL_RECOVERY_AFTER_MS)
+        return;
+
+      lastStallRecoveryAtRef.current = now;
+      const retried = shakaRef.current?.retryStreaming?.();
+      if (
+        !retried &&
+        Number.isFinite(videoEl.duration) &&
+        videoEl.duration > 0
+      ) {
+        const max = Math.max(0, videoEl.duration - 0.2);
+        videoEl.currentTime = Math.min(max, current + STALL_RECOVERY_SEEK_SEC);
+      }
+      videoEl.play?.().catch?.();
+    }, STALL_WATCH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     syncPlaybackRate();
@@ -1341,6 +1433,15 @@ export default function PlayerPage({
           <div className="loading">
             <div className="loading-spinner" />
             加载中...
+          </div>
+        </div>
+      )}
+
+      {buffering && !loading && (
+        <div className="buffering-overlay">
+          <div className="loading">
+            <div className="loading-spinner" />
+            缓冲中...
           </div>
         </div>
       )}
