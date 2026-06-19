@@ -752,7 +752,13 @@ export default function PlayerPage({
   useEffect(() => {
     const timer = setInterval(() => {
       const videoEl = videoRef.current;
-      if (!videoEl || videoEl.paused || endedRef.current) return;
+      if (
+        !videoEl ||
+        videoEl.paused ||
+        endedRef.current ||
+        scrubActiveRef.current
+      )
+        return;
 
       const now = Date.now();
       const current = Number(videoEl.currentTime) || 0;

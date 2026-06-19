@@ -1725,6 +1725,48 @@ describe('LivePlayerPage', () => {
     });
   });
 
+  test('suppresses buffering overlay during active seeking and recovers after commit', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-SEEK-BUFFER', cid: 34, title: '搜索缓冲' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 120;
+    video.readyState = 2;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowRight')));
+
+    await interact(() => video.dispatch('waiting'));
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('buffering');
+
+    const commitTimer = timers.find(
+      (item) => item.delay === 250 && !item.cleared,
+    );
+    expect(commitTimer).toBeTruthy();
+    await interact(() => commitTimer.fn());
+    expect(JSON.stringify(renderer.toJSON())).toContain('buffering');
+
+    await interact(() => video.dispatch('playing'));
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('buffering');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test('persists resume progress on exit and clears it after playback ends', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();
