@@ -320,10 +320,14 @@ export default function PlayerPage({
     renderTimelinePreview(nextTime, nextDuration);
   }, [duration, getStablePlaybackTime, renderTimelinePreview]);
 
-  function ensureSpriteLoaded(url) {
+  function ensureSpriteLoaded(url, minW = 16, minH = 9) {
     const cached = spriteCacheRef.current.get(url);
     if (cached) {
-      return cached.complete && cached.naturalWidth > 0;
+      return (
+        cached.complete &&
+        cached.naturalWidth >= minW &&
+        cached.naturalHeight >= minH
+      );
     }
 
     const currentVideoKey = storyboardVideoKeyRef.current;
@@ -894,6 +898,9 @@ export default function PlayerPage({
       if (video?.bvid && !endedRef.current) {
         persistResumeFromPlayerRef.current();
       }
+      hideScrubThumbnail();
+      storyboardRef.current = null;
+      spriteCacheRef.current.clear();
       castReportState({ playState: 'stop' }).catch(() => {});
     };
   }, [resetSeekController, video?.bvid]);

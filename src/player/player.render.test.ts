@@ -1526,6 +1526,202 @@ describe('scrub preview thumbnail', () => {
     globalThis.Image = OrigImage;
     await act(async () => { renderer.unmount(); });
   });
+
+  test('edge clamp keeps thumbnail inside progress bar at 0% scrub position', async () => {
+    const storyboardData = {
+      imageUrls: ['https://test/sprite-clamp.jpg'],
+      cols: 10,
+      rows: 10,
+      tileW: 160,
+      tileH: 90,
+      interval: 60,
+    };
+    api.getStoryboard.mockResolvedValueOnce(storyboardData);
+
+    const testImages = [];
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class {
+      constructor() { this.complete = true; this.naturalWidth = 1600; this.naturalHeight = 900; this._onload = null; testImages.push(this); }
+      set onload(h) { this._onload = h; }
+      get onload() { return this._onload; }
+      set src(_url) { this._src = _url; }
+      get src() { return this._src; }
+    };
+
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    let currentTimeValue = 0;
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true, get: () => currentTimeValue, set: (v) => { currentTimeValue = v; },
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-CLAMP0', cid: 101, title: 'Clamp 0' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => { await flush(); await flush(); await flush(); });
+
+    video.duration = 300;
+    video.readyState = 2;
+    video.currentTime = 0;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    const thumb = renderer.container.querySelector('.player-scrub-thumb');
+    const progressBar = renderer.container.querySelector('.player-progress-bar');
+    Object.defineProperty(progressBar, 'clientWidth', { value: 800, configurable: true });
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+
+    for (const img of testImages) {
+      if (img._onload) img._onload();
+    }
+    await act(async () => { await flush(); });
+
+    expect(thumb.style.display).toBe('block');
+    expect(thumb.style.left).not.toBe('0%');
+    expect(Number(thumb.style.left.replace('%', ''))).toBeGreaterThan(0);
+
+    globalThis.Image = OrigImage;
+    await act(async () => { renderer.unmount(); });
+  });
+
+  test('edge clamp keeps thumbnail inside progress bar at 100% scrub position', async () => {
+    const storyboardData = {
+      imageUrls: ['https://test/sprite-clamp100.jpg'],
+      cols: 10,
+      rows: 10,
+      tileW: 160,
+      tileH: 90,
+      interval: 60,
+    };
+    api.getStoryboard.mockResolvedValueOnce(storyboardData);
+
+    const testImages = [];
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class {
+      constructor() { this.complete = true; this.naturalWidth = 1600; this.naturalHeight = 900; this._onload = null; testImages.push(this); }
+      set onload(h) { this._onload = h; }
+      get onload() { return this._onload; }
+      set src(_url) { this._src = _url; }
+      get src() { return this._src; }
+    };
+
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    let currentTimeValue = 0;
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true, get: () => currentTimeValue, set: (v) => { currentTimeValue = v; },
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-CLAMP100', cid: 102, title: 'Clamp 100' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => { await flush(); await flush(); await flush(); });
+
+    video.duration = 300;
+    video.readyState = 2;
+    video.currentTime = 300;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    const thumb = renderer.container.querySelector('.player-scrub-thumb');
+    const progressBar = renderer.container.querySelector('.player-progress-bar');
+    Object.defineProperty(progressBar, 'clientWidth', { value: 800, configurable: true });
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowRight')));
+
+    for (const img of testImages) {
+      if (img._onload) img._onload();
+    }
+    await act(async () => { await flush(); });
+
+    expect(thumb.style.display).toBe('block');
+    expect(thumb.style.left).not.toBe('100%');
+    expect(Number(thumb.style.left.replace('%', ''))).toBeLessThan(100);
+
+    globalThis.Image = OrigImage;
+    await act(async () => { renderer.unmount(); });
+  });
+
+  test('sprite load pending shows hidden thumbnail, onload reveals it', async () => {
+    const storyboardData = {
+      imageUrls: ['https://test/sprite-pending.jpg'],
+      cols: 10,
+      rows: 10,
+      tileW: 160,
+      tileH: 90,
+      interval: 60,
+    };
+    api.getStoryboard.mockResolvedValueOnce(storyboardData);
+
+    let spriteLoaded = false;
+    let spriteNaturalWidth = 0;
+    let spriteNaturalHeight = 0;
+    let spriteOnload = null;
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class {
+      get complete() { return spriteLoaded; }
+      get naturalWidth() { return spriteNaturalWidth; }
+      get naturalHeight() { return spriteNaturalHeight; }
+      set onload(h) { spriteOnload = h; }
+      get onload() { return spriteOnload; }
+      set src(_url) { this._src = _url; }
+      get src() { return this._src; }
+    };
+
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    let currentTimeValue = 0;
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true, get: () => currentTimeValue, set: (v) => { currentTimeValue = v; },
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-PEND', cid: 103, title: 'Pending' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => { await flush(); await flush(); await flush(); });
+
+    video.duration = 300;
+    video.readyState = 2;
+    video.currentTime = 150;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    const thumb = renderer.container.querySelector('.player-scrub-thumb');
+    const progressBar = renderer.container.querySelector('.player-progress-bar');
+    Object.defineProperty(progressBar, 'clientWidth', { value: 800, configurable: true });
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowRight')));
+
+    expect(thumb.style.display).toBe('none');
+
+    spriteLoaded = true;
+    spriteNaturalWidth = 1600;
+    spriteNaturalHeight = 900;
+    if (spriteOnload) spriteOnload();
+    await act(async () => { await flush(); });
+
+    expect(thumb.style.display).toBe('block');
+    expect(thumb.style.backgroundImage).toContain('sprite-pending.jpg');
+
+    globalThis.Image = OrigImage;
+    await act(async () => { renderer.unmount(); });
+  });
 });
 
 describe('LivePlayerPage', () => {

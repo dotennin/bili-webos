@@ -697,6 +697,7 @@ export async function getStoryboard(
   cid: number | string,
 ): Promise<StoryboardTile | null> {
   const res = await wbiFetch('/x/player/videolike', { bvid, cid });
+  if (res?.code !== 0) return null;
   const first = res?.data?.storyboard?.[0];
 
   const isPositiveNumber = (v: unknown): v is number =>
