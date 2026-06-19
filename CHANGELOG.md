@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.2](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.11.1...bili-webos-tv-v1.11.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* cast subscription recovery ([#111](https://github.com/dotennin/bili-webos/issues/111)) ([52b1899](https://github.com/dotennin/bili-webos/commit/52b1899dca500a5ff46448bf0d024fda16e88c22))
+* improve video playback stability with larger buffers, stall recovery, and buffering UI ([#114](https://github.com/dotennin/bili-webos/issues/114)) ([d55e53c](https://github.com/dotennin/bili-webos/commit/d55e53cc8ebd32f346e57b8255e51c3e4cb88411))
+* stalled video playback recovery ([#112](https://github.com/dotennin/bili-webos/issues/112)) ([1dcc7bb](https://github.com/dotennin/bili-webos/commit/1dcc7bb20019e53fc4a5834ff641ce5e84091f63))
+
 ## [1.11.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.11.0...bili-webos-tv-v1.11.1) (2026-06-01)
 
 
