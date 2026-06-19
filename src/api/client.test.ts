@@ -77,7 +77,7 @@ describe('getStoryboard', () => {
   test('returns null for malformed storyboard (missing fields)', async () => {
     setupMocks({
       code: 0,
-      data: { storyboard: [{ image: ['a.jpg'], avg_time: 0 }] },
+      data: { img_x_len: 0, img_y_len: 0, img_x_size: 0, img_y_size: 0, image: [] },
     });
     const result = await getStoryboard('BV1xx', 456);
     expect(result).toBeNull();
@@ -87,19 +87,15 @@ describe('getStoryboard', () => {
     setupMocks({
       code: 0,
       data: {
-        storyboard: [
-          {
-            img_x_len: 10,
-            img_y_len: 10,
-            img_x_size: 160,
-            img_y_size: 90,
-            image: [
-              'https://i0.hdslb.com/bfs/storyboard/xxx_1.jpg',
-              'https://i0.hdslb.com/bfs/storyboard/xxx_2.jpg',
-            ],
-            avg_time: 60,
-          },
+        img_x_len: 10,
+        img_y_len: 10,
+        img_x_size: 160,
+        img_y_size: 90,
+        image: [
+          '//i0.hdslb.com/bfs/videoshot/xxx_1.jpg',
+          '//i0.hdslb.com/bfs/videoshot/xxx_2.jpg',
         ],
+        pvdata: '//i0.hdslb.com/bfs/videoshot/xxx.bin',
       },
     });
 
@@ -109,7 +105,7 @@ describe('getStoryboard', () => {
     expect(result!.rows).toBe(10);
     expect(result!.tileW).toBe(160);
     expect(result!.tileH).toBe(90);
-    expect(result!.interval).toBe(60);
+    expect(result!.interval).toBeGreaterThan(0);
     expect(result!.imageUrls).toHaveLength(2);
     expect(result!.imageUrls[0]).toContain('/proxy/');
   });
@@ -117,44 +113,10 @@ describe('getStoryboard', () => {
   test('returns null for empty image array', async () => {
     setupMocks({
       code: 0,
-      data: {
-        storyboard: [{ img_x_len: 10, img_y_len: 10, img_x_size: 160, img_y_size: 90, image: [], avg_time: 60 }],
-      },
+      data: { img_x_len: 10, img_y_len: 10, img_x_size: 160, img_y_size: 90, image: [] },
     });
     const result = await getStoryboard('BV1xx', 888);
     expect(result).toBeNull();
-  });
-
-  test('picks level with smallest interval when multiple levels exist', async () => {
-    setupMocks({
-      code: 0,
-      data: {
-        storyboard: [
-          {
-            img_x_len: 5,
-            img_y_len: 5,
-            img_x_size: 320,
-            img_y_size: 180,
-            image: ['https://i0.hdslb.com/bfs/storyboard/large.jpg'],
-            avg_time: 120,
-          },
-          {
-            img_x_len: 10,
-            img_y_len: 10,
-            img_x_size: 160,
-            img_y_size: 90,
-            image: ['https://i0.hdslb.com/bfs/storyboard/small.jpg'],
-            avg_time: 60,
-          },
-        ],
-      },
-    });
-
-    const result = await getStoryboard('BV1xx', 101);
-    expect(result).not.toBeNull();
-    expect(result!.interval).toBe(60);
-    expect(result!.cols).toBe(10);
-    expect(result!.tileW).toBe(160);
   });
 
   describe('existing API functions', () => {

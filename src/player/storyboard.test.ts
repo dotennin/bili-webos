@@ -114,4 +114,49 @@ describe('getStoryboardFrame', () => {
     expect(frame!.bgX).toBe(-160);
     expect(frame!.bgY).toBe(-90);
   });
+
+  test('uses frameTimes for precise positioning when available', () => {
+    const tile = makeTile({
+      imageUrls: ['sprites.jpg'],
+      cols: 10,
+      rows: 10,
+      interval: 5,
+      frameTimes: [0, 5, 10, 15, 20, 25, 30, 35, 40, 45],
+    });
+    // timeSec=12 -> closest frame is at 10 (index 2)
+    const frame = getStoryboardFrame(tile, 12, 300);
+    expect(frame).not.toBeNull();
+    // index 2 => spriteIdx=0, localIdx=2, col=2%10=2, row=0
+    expect(frame!.bgX).toBe(-320);
+    expect(frame!.bgY).toBe(0);
+  });
+
+  test('frameTimes: clamps to first frame when timeSec is before first timestamp', () => {
+    const tile = makeTile({
+      imageUrls: ['sprites.jpg'],
+      cols: 10,
+      rows: 10,
+      interval: 5,
+      frameTimes: [5, 10, 15],
+    });
+    // timeSec=0 -> closest is first frame (index 0)
+    const frame = getStoryboardFrame(tile, 0, 300);
+    expect(frame).not.toBeNull();
+    expect(frame!.bgX).toBe(0);
+  });
+
+  test('frameTimes: clamps to last frame when timeSec is after last timestamp', () => {
+    const tile = makeTile({
+      imageUrls: ['sprites.jpg'],
+      cols: 10,
+      rows: 10,
+      interval: 5,
+      frameTimes: [0, 5, 10],
+    });
+    // timeSec=999 -> closest is last frame (index 2)
+    const frame = getStoryboardFrame(tile, 999, 300);
+    expect(frame).not.toBeNull();
+    // index 2 => localIdx=2, col=2, row=0
+    expect(frame!.bgX).toBe(-320);
+  });
 });

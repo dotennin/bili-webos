@@ -1587,14 +1587,6 @@ export default function PlayerPage({
 
       {/* Controls bar */}
       <div className={`player-controls ${showControls ? '' : 'hidden'}`}>
-        <div className="player-title">{videoTitle}</div>
-        {video?.owner?.name && (
-          <div style={{ fontSize: 18, color: '#999', marginBottom: 4 }}>
-            {video.owner.name}
-            {video.pubdate &&
-              ` · ${new Date(video.pubdate * 1000).toLocaleDateString('zh-CN')}`}
-          </div>
-        )}
         <div
           ref={progressBarRef}
           className={`player-progress-bar ${focusArea === 'timeline' ? 'focused' : ''}`}
@@ -1606,102 +1598,112 @@ export default function PlayerPage({
           />
           <div ref={previewThumbRef} className="player-scrub-thumb" />
         </div>
-        <div className="player-btns">
-          {CONTROLS.map((btn, i) => (
-            <button
-              key={btn}
-              className={`player-btn ${focusArea === 'controls' && focusIdx === i ? 'focused' : ''}`}
-            >
-              {btn === 'play'
-                ? playing
-                  ? '⏸ 暂停'
-                  : '▶ 播放'
-                : btn === 'danmaku'
-                  ? danmakuEnabled
-                    ? '弹幕 开'
-                    : '弹幕 关'
-                  : btn === 'quality'
-                    ? QUALITY_MAP[currentQuality] || `${currentQuality}`
-                    : playbackSpeedSupported
-                      ? `${playbackRate}x`
-                      : '倍速'}
-            </button>
-          ))}
-          <span ref={timeTextRef} className="player-time">
-            {formatDuration(currentTime)} / {formatDuration(duration)}
-          </span>
-        </div>
+        <div className="player-controls-scroll">
+          <div className="player-title">{videoTitle}</div>
+          {video?.owner?.name && (
+            <div style={{ fontSize: 18, color: '#999', marginBottom: 4 }}>
+              {video.owner.name}
+              {video.pubdate &&
+                ` · ${new Date(video.pubdate * 1000).toLocaleDateString('zh-CN')}`}
+            </div>
+          )}
+          <div className="player-btns">
+            {CONTROLS.map((btn, i) => (
+              <button
+                key={btn}
+                className={`player-btn ${focusArea === 'controls' && focusIdx === i ? 'focused' : ''}`}
+              >
+                {btn === 'play'
+                  ? playing
+                    ? '⏸ 暂停'
+                    : '▶ 播放'
+                  : btn === 'danmaku'
+                    ? danmakuEnabled
+                      ? '弹幕 开'
+                      : '弹幕 关'
+                    : btn === 'quality'
+                      ? QUALITY_MAP[currentQuality] || `${currentQuality}`
+                      : playbackSpeedSupported
+                        ? `${playbackRate}x`
+                        : '倍速'}
+              </button>
+            ))}
+            <span ref={timeTextRef} className="player-time">
+              {formatDuration(currentTime)} / {formatDuration(duration)}
+            </span>
+          </div>
 
-        {/* Related videos panel (4-column grid below controls) */}
-        {showRelated && relatedVideos.length > 0 && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 14,
-              marginTop: 16,
-              paddingBottom: 10,
-            }}
-          >
-            {relatedVideos.map((rv, i) => {
-              const thumb = (rv.pic || '').startsWith('//')
-                ? 'https:' + rv.pic
-                : rv.pic;
-              return (
-                <div
-                  key={rv.bvid || i}
-                  className="related-card"
-                  onClick={() => onPlayNext?.(rv)}
-                  style={{
-                    cursor: 'pointer',
-                    outline:
-                      focusArea === 'related' && focusIdx === i
-                        ? '4px solid #00a1d6'
-                        : 'none',
-                    borderRadius: 6,
-                    overflow: 'hidden',
-                  }}
-                >
+          {/* Related videos panel (4-column grid below controls) */}
+          {showRelated && relatedVideos.length > 0 && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 14,
+                marginTop: 16,
+                paddingBottom: 10,
+              }}
+            >
+              {relatedVideos.map((rv, i) => {
+                const thumb = (rv.pic || '').startsWith('//')
+                  ? 'https:' + rv.pic
+                  : rv.pic;
+                return (
                   <div
+                    key={rv.bvid || i}
+                    className="related-card"
+                    onClick={() => onPlayNext?.(rv)}
                     style={{
-                      width: '100%',
-                      aspectRatio: '16/9',
-                      background: '#1a1a2e',
+                      cursor: 'pointer',
+                      outline:
+                        focusArea === 'related' && focusIdx === i
+                          ? '4px solid #00a1d6'
+                          : 'none',
                       borderRadius: 6,
                       overflow: 'hidden',
                     }}
                   >
-                    {thumb && (
-                      <img
-                        src={thumb}
-                        alt=""
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                        }}
-                      />
-                    )}
+                    <div
+                      style={{
+                        width: '100%',
+                        aspectRatio: '16/9',
+                        background: '#1a1a2e',
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {thumb && (
+                        <img
+                          src={thumb}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        padding: '6px 4px',
+                        fontSize: 18,
+                        color: '#ccc',
+                        lineHeight: 1.3,
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 1,
+                        WebkitBoxOrient: 'vertical',
+                      }}
+                    >
+                      {rv.title}
+                    </div>
                   </div>
-                  <div
-                    style={{
-                      padding: '6px 4px',
-                      fontSize: 18,
-                      color: '#ccc',
-                      lineHeight: 1.3,
-                      overflow: 'hidden',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 1,
-                      WebkitBoxOrient: 'vertical',
-                    }}
-                  >
-                    {rv.title}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Quality panel */}

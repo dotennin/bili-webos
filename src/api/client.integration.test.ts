@@ -594,19 +594,15 @@ describe('api client integration paths', () => {
         json: async () => ({
           code: 0,
           data: {
-            storyboard: [
-              {
-                img_x_len: 10,
-                img_y_len: 10,
-                img_x_size: 160,
-                img_y_size: 90,
-                image: [
-                  'https://i0.hdslb.com/bfs/storyboard/xxx_1.jpg',
-                  'https://i0.hdslb.com/bfs/storyboard/xxx_2.jpg',
-                ],
-                avg_time: 60,
-              },
+            img_x_len: 10,
+            img_y_len: 10,
+            img_x_size: 160,
+            img_y_size: 90,
+            image: [
+              '//i0.hdslb.com/bfs/videoshot/xxx_1.jpg',
+              '//i0.hdslb.com/bfs/videoshot/xxx_2.jpg',
             ],
+            pvdata: '//i0.hdslb.com/bfs/videoshot/xxx.bin',
           },
         }),
       });
@@ -618,7 +614,7 @@ describe('api client integration paths', () => {
     expect(result!.rows).toBe(10);
     expect(result!.tileW).toBe(160);
     expect(result!.tileH).toBe(90);
-    expect(result!.interval).toBe(60);
+    expect(result!.interval).toBeGreaterThan(0);
     expect(result!.imageUrls).toHaveLength(2);
     expect(result!.imageUrls[0]).toContain('/proxy/');
   });
@@ -642,18 +638,7 @@ describe('api client integration paths', () => {
         headers: { get: () => 'application/json' },
         json: async () => ({
           code: 0,
-          data: {
-            storyboard: [
-              {
-                img_x_len: 0,
-                img_y_len: 0,
-                img_x_size: 0,
-                img_y_size: 0,
-                image: [],
-                avg_time: 0,
-              },
-            ],
-          },
+          data: { img_x_len: 0, img_y_len: 0, img_x_size: 0, img_y_size: 0, image: [] },
         }),
       });
     });

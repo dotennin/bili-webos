@@ -366,7 +366,6 @@ body,
   left: 0;
   right: 0;
   max-height: 50%;
-  overflow-y: auto;
   background: linear-gradient(
     transparent 0%,
     rgba(0, 0, 0, 0.85) 15%,
@@ -377,6 +376,9 @@ body,
   flex-direction: column;
   gap: 16px;
   transition: opacity 0.3s ease;
+}
+.player-controls-scroll {
+  overflow-y: auto;
 }
 .player-controls.hidden {
   opacity: 0;
