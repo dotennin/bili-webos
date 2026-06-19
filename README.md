@@ -24,9 +24,9 @@ A third-party Bilibili client built for LG webOS TVs.
 | --- | --- |
 | ![Home screen](docs/screenshots/home.jpg) | ![Player screen](docs/screenshots/player.jpg) |
 
-| Search | QR login |
+| Search | Scrub Preview |
 | --- | --- |
-| ![Search screen](docs/screenshots/search.png) | ![QR login screen](docs/screenshots/login.png) |
+| ![Search screen](docs/screenshots/search.png) | ![Scrub preview thumbnails](docs/screenshots/scrub-preview.png) |
 
 ## Architecture
 
