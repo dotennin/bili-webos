@@ -127,12 +127,6 @@ export default function PlayerPage({
   const progressBarRef = useRef(null);
   const storyboardVideoKeyRef = useRef(null);
 
-  const bufferingRef = useRef(false);
-  const bufferingSinceRef = useRef(null);
-  const lastPlaybackProgressRef = useRef({ at: Date.now(), time: 0 });
-  const lastStallRecoveryAtRef = useRef(0);
-  const suppressedBufferingRef = useRef(false);
-
   const pendingSeekRef = useRef(null);
   const endedRef = useRef(false);
 
@@ -806,23 +800,6 @@ export default function PlayerPage({
         playState: 'error',
         error: el.error?.message || 'media-error',
       }).catch(() => {});
-    };
-
-    const handlePlaying = () => {
-      markPlaybackProgress();
-      setBuffering(false);
-      setPlaying(true);
-      castReportState({ playState: 'playing' }).catch(() => {});
-    };
-    const handleWaiting = () => {
-      bufferingSinceRef.current = bufferingSinceRef.current || Date.now();
-      bufferingRef.current = true;
-      if (scrubActiveRef.current) {
-        suppressedBufferingRef.current = true;
-        return;
-      }
-      setBuffering(true);
-      castReportState({ playState: 'loading' }).catch(() => {});
     };
 
     el.addEventListener('play', handlePlay);

@@ -30,6 +30,7 @@ import {
   getRanking,
   getRelated,
   reportHeartbeat,
+  getStoryboard,
 } from './client.ts';
 
 const originalWindow = globalThis.window;
@@ -564,8 +565,100 @@ describe('api client integration paths', () => {
     const danmaku = await getDanmaku(1234);
     expect(Array.isArray(danmaku)).toBe(true);
     expect(danmaku.length).toBe(0);
+
+    const sb = await getStoryboard('BV1xx', 123);
+    expect(sb).toBeNull();
+
     const auth = JSON.parse(localStorage.getItem('bili_auth'));
     expect(auth.SESSDATA).toBe('abc');
     expect(requests.some((r) => r.method === 'castReportState')).toBe(true);
+  });
+
+  it('getStoryboard returns StoryboardTile with proxied URLs when API returns valid storyboard data', async () => {
+    globalThis.fetch = mock((url) => {
+      if (String(url).includes('/x/web-interface/nav')) {
+        return Promise.resolve({
+          headers: { get: () => 'application/json' },
+          json: async () => ({
+            data: {
+              wbi_img: {
+                img_url: 'https://i/a12345678901234567890123456789012.png',
+                sub_url: 'https://i/b12345678901234567890123456789012.png',
+              },
+            },
+          }),
+        });
+      }
+      return Promise.resolve({
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          code: 0,
+          data: {
+            storyboard: [
+              {
+                img_x_len: 10,
+                img_y_len: 10,
+                img_x_size: 160,
+                img_y_size: 90,
+                image: [
+                  'https://i0.hdslb.com/bfs/storyboard/xxx_1.jpg',
+                  'https://i0.hdslb.com/bfs/storyboard/xxx_2.jpg',
+                ],
+                avg_time: 60,
+              },
+            ],
+          },
+        }),
+      });
+    });
+
+    const result = await getStoryboard('BV1xx', 456);
+    expect(result).not.toBeNull();
+    expect(result!.cols).toBe(10);
+    expect(result!.rows).toBe(10);
+    expect(result!.tileW).toBe(160);
+    expect(result!.tileH).toBe(90);
+    expect(result!.interval).toBe(60);
+    expect(result!.imageUrls).toHaveLength(2);
+    expect(result!.imageUrls[0]).toContain('/proxy/');
+  });
+
+  it('getStoryboard returns null for malformed storyboard data', async () => {
+    globalThis.fetch = mock((url) => {
+      if (String(url).includes('/x/web-interface/nav')) {
+        return Promise.resolve({
+          headers: { get: () => 'application/json' },
+          json: async () => ({
+            data: {
+              wbi_img: {
+                img_url: 'https://i/a12345678901234567890123456789012.png',
+                sub_url: 'https://i/b12345678901234567890123456789012.png',
+              },
+            },
+          }),
+        });
+      }
+      return Promise.resolve({
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          code: 0,
+          data: {
+            storyboard: [
+              {
+                img_x_len: 0,
+                img_y_len: 0,
+                img_x_size: 0,
+                img_y_size: 0,
+                image: [],
+                avg_time: 0,
+              },
+            ],
+          },
+        }),
+      });
+    });
+
+    const result = await getStoryboard('BV1xx', 789);
+    expect(result).toBeNull();
   });
 });

@@ -703,7 +703,7 @@ export async function getStoryboard(
     typeof v === 'number' && Number.isFinite(v) && v > 0;
 
   const isPositiveInteger = (v: unknown): v is number =>
-    Number.isInteger(v) && v > 0;
+    typeof v === 'number' && Number.isInteger(v) && v > 0;
 
   if (
     !first ||
