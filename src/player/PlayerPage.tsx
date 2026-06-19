@@ -282,7 +282,8 @@ export default function PlayerPage({
     const safeDuration =
       Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 0;
     const rawTime = Math.max(0, Number(timeSec) || 0);
-    const safeTime = safeDuration > 0 ? Math.min(rawTime, safeDuration) : rawTime;
+    const safeTime =
+      safeDuration > 0 ? Math.min(rawTime, safeDuration) : rawTime;
     displayTimeRef.current = safeTime;
 
     if (progressFillRef.current) {
@@ -299,7 +300,11 @@ export default function PlayerPage({
       return;
     }
 
-    const frame = getStoryboardFrame(storyboardRef.current, safeTime, safeDuration);
+    const frame = getStoryboardFrame(
+      storyboardRef.current,
+      safeTime,
+      safeDuration,
+    );
     if (!frame) {
       hideScrubThumbnail();
       return;
@@ -599,7 +604,9 @@ export default function PlayerPage({
         const relatedPromise = getRelated(video.bvid).catch(() => ({
           data: [],
         }));
-        const storyboardPromise = getStoryboard(video.bvid, cid).catch(() => null);
+        const storyboardPromise = getStoryboard(video.bvid, cid).catch(
+          () => null,
+        );
 
         const [danmakuData, relatedRes, storyboardData] = await Promise.all([
           danmakuPromise,

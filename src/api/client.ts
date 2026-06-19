@@ -709,7 +709,9 @@ export async function getStoryboard(
     !first ||
     !Array.isArray(first.image) ||
     first.image.length === 0 ||
-    !first.image.every((url: any) => typeof url === 'string' && url.length > 0) ||
+    !first.image.every(
+      (url: any) => typeof url === 'string' && url.length > 0,
+    ) ||
     !isPositiveInteger(first.img_x_len) ||
     !isPositiveInteger(first.img_y_len) ||
     !isPositiveInteger(first.img_x_size) ||
@@ -719,9 +721,10 @@ export async function getStoryboard(
     return null;
   }
 
-  const level = (res?.data?.storyboard ?? [])
-    .filter((l: any) => l && l.image?.length && l.avg_time > 0)
-    .sort((a: any, b: any) => a.avg_time - b.avg_time)[0] ?? first;
+  const level =
+    (res?.data?.storyboard ?? [])
+      .filter((l: any) => l && l.image?.length && l.avg_time > 0)
+      .sort((a: any, b: any) => a.avg_time - b.avg_time)[0] ?? first;
 
   return {
     imageUrls: level.image.map((url: string) => buildProxyUrl(url)),
