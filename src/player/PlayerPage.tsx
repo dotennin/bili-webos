@@ -113,11 +113,10 @@ export default function PlayerPage({
   const committedSeekTargetRef = useRef(null);
   const persistResumeFromPlayerRef = useRef(() => {});
   const playbackRateSyncTimerRef = useRef(null);
-
-  const bufferingRef = useRef(false);
   const bufferingSinceRef = useRef(null);
   const lastPlaybackProgressRef = useRef({ at: Date.now(), time: 0 });
   const lastStallRecoveryAtRef = useRef(0);
+  const bufferingRef = useRef(false);
   const suppressedBufferingRef = useRef(false);
 
   const pendingSeekRef = useRef(null);
@@ -435,9 +434,13 @@ export default function PlayerPage({
       });
       await player.attach(videoRef.current);
       shakaRef.current = player;
-      player.addEventListener('error', (e) =>
-        console.error('Shaka error:', e.detail),
-      );
+      player.addEventListener('error', (e) => {
+        console.error('Shaka error:', e.detail);
+        castReportState({
+          playState: 'error',
+          error: e.detail?.message || 'shaka-error',
+        }).catch(() => {});
+      });
       if (mounted) loadVideo(player);
     }
     init();
@@ -624,7 +627,6 @@ export default function PlayerPage({
       bufferingRef.current = false;
       suppressedBufferingRef.current = false;
     };
-
     const handlePlay = () => {
       markPlaybackProgress();
       syncPlaybackRate();
@@ -669,10 +671,10 @@ export default function PlayerPage({
       if (!ended) castReportState({ playState: 'paused' }).catch(() => {});
       setPlaying(false);
     };
-
     const handlePlaying = () => {
       markPlaybackProgress();
       setBuffering(false);
+      setLoading(false);
       setPlaying(true);
       castReportState({ playState: 'playing' }).catch(() => {});
     };
@@ -686,6 +688,12 @@ export default function PlayerPage({
       setBuffering(true);
       castReportState({ playState: 'loading' }).catch(() => {});
     };
+    const handleError = () => {
+      castReportState({
+        playState: 'error',
+        error: el.error?.message || 'media-error',
+      }).catch(() => {});
+    };
 
     el.addEventListener('play', handlePlay);
     el.addEventListener('playing', handlePlaying);
@@ -696,6 +704,7 @@ export default function PlayerPage({
     el.addEventListener('ratechange', handleRateChange);
     el.addEventListener('waiting', handleWaiting);
     el.addEventListener('stalled', handleWaiting);
+    el.addEventListener('error', handleError);
     return () => {
       el.removeEventListener('play', handlePlay);
       el.removeEventListener('playing', handlePlaying);
@@ -706,6 +715,7 @@ export default function PlayerPage({
       el.removeEventListener('ratechange', handleRateChange);
       el.removeEventListener('waiting', handleWaiting);
       el.removeEventListener('stalled', handleWaiting);
+      el.removeEventListener('error', handleError);
     };
   }, [
     ended,

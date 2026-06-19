@@ -304,6 +304,7 @@ beforeEach(() => {
         this.config = null;
         this.errorHandler = null;
         this.requestFilter = null;
+        this.retryCalls = 0;
         shakaPlayers.push(this);
       }
       static isBrowserSupported() {
@@ -329,6 +330,10 @@ beforeEach(() => {
       }
       async destroy() {
         shakaDestroyed += 1;
+      }
+      retryStreaming() {
+        this.retryCalls += 1;
+        return true;
       }
     },
   }));
@@ -612,11 +617,13 @@ describe('PlayerPage', () => {
     timers.at(-1).fn();
     expect(JSON.stringify(renderer.toJSON())).toContain('播放结束');
 
-    intervals[0].fn();
+    intervals.find((item) => item.delay === 500)?.fn();
     expect(api.castReportProgress).toHaveBeenCalled();
 
     video.paused = false;
-    intervals[2].fn();
+    for (const interval of intervals.filter((item) => item.delay === 15000)) {
+      interval.fn();
+    }
     expect(api.reportHeartbeat).toHaveBeenCalled();
 
     await act(async () => {
@@ -1366,6 +1373,38 @@ describe('PlayerPage', () => {
     await act(async () => {
       longRenderer.unmount();
     });
+  });
+
+  test('retries shaka streaming when on-demand playback stalls without progress', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+
+    await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-STALL', cid: 27, title: '卡顿视频' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 120;
+    video.readyState = 2;
+    video.currentTime = 10;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+    await interact(() => video.dispatch('waiting'));
+
+    currentNow += 7_000;
+    const stallTimer = intervals.find((item) => item.delay === 1000);
+    expect(stallTimer).toBeTruthy();
+    await interact(() => stallTimer.fn());
+
+    expect(shakaPlayers.at(-1).retryCalls).toBe(1);
+    expect(api.castReportState).toHaveBeenCalledWith({ playState: 'loading' });
   });
 });
 
