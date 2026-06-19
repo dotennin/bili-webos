@@ -680,3 +680,55 @@ function parseDanmakuXml(xml) {
 export async function getRelated(bvid) {
   return wbiFetch('/x/web-interface/archive/related', { bvid: bvid });
 }
+
+// ============ Storyboard ============
+
+export type StoryboardTile = {
+  imageUrls: string[];
+  cols: number;
+  rows: number;
+  tileW: number;
+  tileH: number;
+  interval: number;
+};
+
+export async function getStoryboard(
+  bvid: string,
+  cid: number | string,
+): Promise<StoryboardTile | null> {
+  const res = await wbiFetch('/x/player/videolike', { bvid, cid });
+  const first = res?.data?.storyboard?.[0];
+
+  const isPositiveNumber = (v: unknown): v is number =>
+    typeof v === 'number' && Number.isFinite(v) && v > 0;
+
+  const isPositiveInteger = (v: unknown): v is number =>
+    Number.isInteger(v) && v > 0;
+
+  if (
+    !first ||
+    !Array.isArray(first.image) ||
+    first.image.length === 0 ||
+    !first.image.every((url: any) => typeof url === 'string' && url.length > 0) ||
+    !isPositiveInteger(first.img_x_len) ||
+    !isPositiveInteger(first.img_y_len) ||
+    !isPositiveInteger(first.img_x_size) ||
+    !isPositiveInteger(first.img_y_size) ||
+    !isPositiveNumber(first.avg_time)
+  ) {
+    return null;
+  }
+
+  const level = (res?.data?.storyboard ?? [])
+    .filter((l: any) => l && l.image?.length && l.avg_time > 0)
+    .sort((a: any, b: any) => a.avg_time - b.avg_time)[0] ?? first;
+
+  return {
+    imageUrls: level.image.map((url: string) => buildProxyUrl(url)),
+    cols: level.img_x_len,
+    rows: level.img_y_len,
+    tileW: level.img_x_size,
+    tileH: level.img_y_size,
+    interval: level.avg_time,
+  };
+}
