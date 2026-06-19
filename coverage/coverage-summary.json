@@ -16,7 +16,7 @@
       "total": 39,
       "covered": 39,
       "skipped": 0,
-      "pct": 90.45
+      "pct": 90.47
     },
     "branches": {
       "total": 39,
@@ -27,22 +27,22 @@
   },
   "total": {
     "lines": {
-      "total": 6489,
-      "covered": 5707,
+      "total": 6518,
+      "covered": 5736,
       "skipped": 0,
-      "pct": 87.95
+      "pct": 88
     },
     "statements": {
-      "total": 6489,
-      "covered": 5707,
+      "total": 6518,
+      "covered": 5736,
       "skipped": 0,
-      "pct": 87.95
+      "pct": 88
     },
     "functions": {
       "total": 702,
-      "covered": 596,
+      "covered": 597,
       "skipped": 0,
-      "pct": 84.9
+      "pct": 85.04
     },
     "branches": {
       "total": 0,
