@@ -160,6 +160,7 @@ beforeEach(() => {
       type: 'flv',
       url: 'https://live.test/stream.flv',
     })),
+    getStoryboard: mock(async () => null),
   };
   storageState = {
     settings: { danmaku: true, quality: 80 },
@@ -240,6 +241,7 @@ beforeEach(() => {
     castReportProgress: (...args) => api.castReportProgress(...args),
     castReportState: (...args) => api.castReportState(...args),
     getLiveStreamSource: (...args) => api.getLiveStreamSource(...args),
+    getStoryboard: (...args) => api.getStoryboard(...args),
   }));
   mock.module(storagePath, () => ({
     ...realStorage,
@@ -1405,6 +1407,124 @@ describe('PlayerPage', () => {
 
     expect(shakaPlayers.at(-1).retryCalls).toBe(1);
     expect(api.castReportState).toHaveBeenCalledWith({ playState: 'loading' });
+  });
+});
+
+describe('scrub preview thumbnail', () => {
+  test('hides thumbnail when storyboard data is null', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    let currentTimeValue = 0;
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get: () => currentTimeValue,
+      set: (v) => { currentTimeValue = v; },
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-NOSB', cid: 99, title: '无分镜视频' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush(); await flush(); await flush();
+    });
+
+    video.duration = 300;
+    video.readyState = 2;
+    video.currentTime = 40;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    const previewThumb = renderer.container.querySelector('.player-scrub-thumb');
+    expect(previewThumb).toBeTruthy();
+    expect(previewThumb.style.display).toBe('none');
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+
+    expect(previewThumb.style.display).toBe('none');
+
+    await act(async () => { renderer.unmount(); });
+  });
+
+  test('shows thumbnail with correct background properties when storyboard is available', async () => {
+    const storyboardData = {
+      imageUrls: ['https://test/sprite1.jpg'],
+      cols: 10,
+      rows: 10,
+      tileW: 160,
+      tileH: 90,
+      interval: 60,
+    };
+    api.getStoryboard.mockResolvedValueOnce(storyboardData);
+
+    const testImages = [];
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class {
+      constructor() {
+        this.complete = true;
+        this.naturalWidth = 1600;
+        this.naturalHeight = 900;
+        this._onload = null;
+        testImages.push(this);
+      }
+      set onload(h) { this._onload = h; }
+      get onload() { return this._onload; }
+      set src(_url) { this._src = _url; }
+      get src() { return this._src; }
+    };
+
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    let currentTimeValue = 0;
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get: () => currentTimeValue,
+      set: (v) => { currentTimeValue = v; },
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-SB', cid: 100, title: '分镜视频' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush(); await flush(); await flush();
+    });
+
+    video.duration = 300;
+    video.readyState = 2;
+    video.currentTime = 0;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    const thumb = renderer.container.querySelector('.player-scrub-thumb');
+    expect(thumb).toBeTruthy();
+    expect(thumb.style.display).toBe('none');
+
+    const progressBar = renderer.container.querySelector('.player-progress-bar');
+    Object.defineProperty(progressBar, 'clientWidth', {
+      value: 800,
+      configurable: true,
+    });
+
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    currentNow += 50;
+    await interact(() => customKeyHandler(event('ArrowRight')));
+
+    for (const img of testImages) {
+      if (img._onload) img._onload();
+    }
+    await act(async () => { await flush(); });
+
+    expect(thumb.style.display).toBe('block');
+    expect(thumb.style.backgroundImage).toContain('sprite1.jpg');
+
+    globalThis.Image = OrigImage;
+    await act(async () => { renderer.unmount(); });
   });
 });
 
