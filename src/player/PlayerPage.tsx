@@ -5,9 +5,12 @@ import {
   getVideoInfo,
   reportHeartbeat,
   getRelated,
+  getStoryboard,
   castReportProgress,
   castReportState,
+  type StoryboardTile,
 } from '../api/client';
+import { getStoryboardFrame, type StoryboardFrame } from './storyboard';
 import { formatDuration, QUALITY_MAP } from '../utils/format';
 import { getProxyBase } from '../utils/proxy';
 import { setCustomKeyHandler } from '../hooks/useFocus';
@@ -118,6 +121,11 @@ export default function PlayerPage({
   const lastStallRecoveryAtRef = useRef(0);
   const bufferingRef = useRef(false);
   const suppressedBufferingRef = useRef(false);
+  const storyboardRef = useRef(null);
+  const spriteCacheRef = useRef(new Map());
+  const previewThumbRef = useRef(null);
+  const progressBarRef = useRef(null);
+  const storyboardVideoKeyRef = useRef(null);
 
   const bufferingRef = useRef(false);
   const bufferingSinceRef = useRef(null);
@@ -273,14 +281,36 @@ export default function PlayerPage({
   const renderTimelinePreview = useCallback((timeSec, durationSec) => {
     const safeDuration =
       Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 0;
-    const safeTime = Math.max(0, Number(timeSec) || 0);
+    const rawTime = Math.max(0, Number(timeSec) || 0);
+    const safeTime = safeDuration > 0 ? Math.min(rawTime, safeDuration) : rawTime;
     displayTimeRef.current = safeTime;
+
     if (progressFillRef.current) {
       const progress = safeDuration > 0 ? (safeTime / safeDuration) * 100 : 0;
       progressFillRef.current.style.width = `${progress}%`;
     }
+
     if (timeTextRef.current) {
       timeTextRef.current.textContent = `${formatDuration(safeTime)} / ${formatDuration(safeDuration)}`;
+    }
+
+    if (!storyboardRef.current || safeDuration <= 0) {
+      hideScrubThumbnail();
+      return;
+    }
+
+    const frame = getStoryboardFrame(storyboardRef.current, safeTime, safeDuration);
+    if (!frame) {
+      hideScrubThumbnail();
+      return;
+    }
+
+    const loaded = ensureSpriteLoaded(frame.spriteUrl);
+    if (loaded) {
+      const percent = (safeTime / safeDuration) * 100;
+      updateScrubThumbnail(frame, percent);
+    } else {
+      hideScrubThumbnail();
     }
   }, []);
 
@@ -290,6 +320,63 @@ export default function PlayerPage({
     const nextDuration = Number(videoRef.current?.duration) || duration || 0;
     renderTimelinePreview(nextTime, nextDuration);
   }, [duration, getStablePlaybackTime, renderTimelinePreview]);
+
+  function ensureSpriteLoaded(url) {
+    const cached = spriteCacheRef.current.get(url);
+    if (cached) {
+      return cached.complete && cached.naturalWidth > 0;
+    }
+
+    const currentVideoKey = storyboardVideoKeyRef.current;
+    const img = new Image();
+    img.onload = () => {
+      if (storyboardVideoKeyRef.current !== currentVideoKey) return;
+      spriteCacheRef.current.set(url, img);
+      if (scrubActiveRef.current && displayTimeRef.current != null) {
+        const dur = videoRef.current?.duration || 0;
+        if (dur > 0) {
+          renderTimelinePreview(displayTimeRef.current, dur);
+        }
+      }
+    };
+    img.onerror = () => {
+      spriteCacheRef.current.delete(url);
+    };
+    img.src = url;
+    spriteCacheRef.current.set(url, img);
+    return false;
+  }
+
+  function hideScrubThumbnail() {
+    if (previewThumbRef.current) {
+      previewThumbRef.current.style.display = 'none';
+    }
+  }
+
+  function updateScrubThumbnail(frame, percent) {
+    const thumb = previewThumbRef.current;
+    if (!thumb) return;
+
+    const progressBarWidth = progressBarRef.current?.clientWidth ?? 0;
+    if (!progressBarWidth) return;
+
+    thumb.style.display = 'block';
+    thumb.style.backgroundImage = `url("${frame.spriteUrl}")`;
+    thumb.style.backgroundPosition = `${frame.bgX}px ${frame.bgY}px`;
+    thumb.style.backgroundSize = `${frame.spriteW}px ${frame.spriteH}px`;
+    thumb.style.width = `${frame.tileW}px`;
+    thumb.style.height = `${frame.tileH}px`;
+
+    if (progressBarWidth <= frame.tileW) {
+      thumb.style.left = '50%';
+    } else {
+      const clampMargin = Math.min(
+        50,
+        (frame.tileW / 2 / progressBarWidth) * 100,
+      );
+      thumb.style.left = `${Math.max(clampMargin, Math.min(percent, 100 - clampMargin))}%`;
+    }
+  }
 
   const commitPreviewSeek = useCallback(() => {
     const bounds = getSeekBounds();
@@ -325,6 +412,7 @@ export default function PlayerPage({
       suppressedBufferingRef.current = false;
       setBuffering(true);
     }
+    hideScrubThumbnail();
   }, [clearSeekCommitTimer, getSeekBounds, renderTimelinePreview]);
 
   const scheduleSeekCommit = useCallback(() => {
@@ -475,6 +563,12 @@ export default function PlayerPage({
         if (!cid) return;
         cidRef.current = cid;
 
+        const videoKey = `${video.bvid}:${cid}`;
+        storyboardRef.current = null;
+        spriteCacheRef.current.clear();
+        hideScrubThumbnail();
+        storyboardVideoKeyRef.current = videoKey;
+
         const settings = storage.getSettings();
         const res = await getPlayUrl(video, cid, settings.quality || 80);
         const dash = res?.data?.dash;
@@ -505,6 +599,16 @@ export default function PlayerPage({
         const relatedPromise = getRelated(video.bvid).catch(() => ({
           data: [],
         }));
+        const storyboardPromise = getStoryboard(video.bvid, cid).catch(() => null);
+
+        const [danmakuData, relatedRes, storyboardData] = await Promise.all([
+          danmakuPromise,
+          relatedPromise,
+          storyboardPromise,
+        ]);
+
+        if (storyboardVideoKeyRef.current !== videoKey) return;
+        storyboardRef.current = storyboardData;
 
         await player.load(mpdUrl);
         URL.revokeObjectURL(mpdUrl);
@@ -534,12 +638,8 @@ export default function PlayerPage({
           castReportState({ playState: 'end' }).catch(() => {});
         });
 
-        const [danmakuData, rel] = await Promise.all([
-          danmakuPromise,
-          relatedPromise,
-        ]);
         setDanmakus(danmakuData);
-        setRelatedVideos((rel?.data || []).slice(0, 12));
+        setRelatedVideos((relatedRes?.data || []).slice(0, 12));
       } catch (err) {
         console.error('Load video error:', err);
         setLoading(false);
@@ -842,6 +942,7 @@ export default function PlayerPage({
     controlsTimer.current = setTimeout(() => {
       if (!endedRef.current) {
         commitPreviewSeek();
+        hideScrubThumbnail();
         setShowControls(false);
         setShowRelated(false);
         setShowQuality(false);
@@ -1165,6 +1266,8 @@ export default function PlayerPage({
         }
         if (key === 'Enter') {
           e.preventDefault();
+          commitPreviewSeek();
+          hideScrubThumbnail();
           hideControlsLater();
           return true;
         }
@@ -1496,6 +1599,7 @@ export default function PlayerPage({
           </div>
         )}
         <div
+          ref={progressBarRef}
           className={`player-progress-bar ${focusArea === 'timeline' ? 'focused' : ''}`}
         >
           <div
@@ -1503,6 +1607,7 @@ export default function PlayerPage({
             className="player-progress-fill"
             style={{ width: `${progress}%` }}
           />
+          <div ref={previewThumbRef} className="player-scrub-thumb" />
         </div>
         <div className="player-btns">
           {CONTROLS.map((btn, i) => (
