@@ -578,6 +578,7 @@ describe('api client integration paths', () => {
     globalThis.fetch = mock((url) => {
       if (String(url).includes('/x/web-interface/nav')) {
         return Promise.resolve({
+          ok: true,
           headers: { get: () => 'application/json' },
           json: async () => ({
             data: {
@@ -589,7 +590,20 @@ describe('api client integration paths', () => {
           }),
         });
       }
+      if (String(url).includes('.bin')) {
+        const buf = new ArrayBuffer(6);
+        const view = new DataView(buf);
+        view.setUint16(0, 0, false);
+        view.setUint16(2, 5, false);
+        view.setUint16(4, 10, false);
+        return Promise.resolve({
+          ok: true,
+          headers: { get: () => 'application/octet-stream' },
+          arrayBuffer: async () => buf,
+        });
+      }
       return Promise.resolve({
+        ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({
           code: 0,
@@ -614,9 +628,10 @@ describe('api client integration paths', () => {
     expect(result!.rows).toBe(10);
     expect(result!.tileW).toBe(160);
     expect(result!.tileH).toBe(90);
-    expect(result!.interval).toBeGreaterThan(0);
+    expect(result!.interval).toBe(5);
     expect(result!.imageUrls).toHaveLength(2);
     expect(result!.imageUrls[0]).toContain('/proxy/');
+    expect(result!.frameTimes).toEqual([0, 5, 10]);
   });
 
   it('getStoryboard returns null for malformed storyboard data', async () => {

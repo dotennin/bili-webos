@@ -713,7 +713,9 @@ function parsePvdata(buf: ArrayBuffer): number[] {
 
 async function fetchPvdata(pvdataUrl: string): Promise<number[] | null> {
   try {
-    const url = buildProxyUrl('https:' + pvdataUrl);
+    const url = buildProxyUrl(
+      pvdataUrl.startsWith('//') ? 'https:' + pvdataUrl : pvdataUrl,
+    );
     const res = await fetch(url);
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();

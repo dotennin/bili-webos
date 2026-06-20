@@ -31,6 +31,7 @@ function setupMocks(responseData?: any) {
   globalThis.fetch = mock((url: string) => {
     if (String(url).includes('/x/web-interface/nav')) {
       return Promise.resolve({
+        ok: true,
         headers: { get: () => 'application/json' },
         json: async () => ({
           data: {
@@ -42,7 +43,20 @@ function setupMocks(responseData?: any) {
         }),
       });
     }
+    if (String(url).includes('.bin')) {
+      const buf = new ArrayBuffer(6);
+      const view = new DataView(buf);
+      view.setUint16(0, 0, false);
+      view.setUint16(2, 5, false);
+      view.setUint16(4, 10, false);
+      return Promise.resolve({
+        ok: true,
+        headers: { get: () => 'application/octet-stream' },
+        arrayBuffer: async () => buf,
+      });
+    }
     return Promise.resolve({
+      ok: true,
       headers: { get: () => 'application/json' },
       json: async () => responseData ?? { code: 0, data: {} },
     });
@@ -105,9 +119,10 @@ describe('getStoryboard', () => {
     expect(result!.rows).toBe(10);
     expect(result!.tileW).toBe(160);
     expect(result!.tileH).toBe(90);
-    expect(result!.interval).toBeGreaterThan(0);
+    expect(result!.interval).toBe(5);
     expect(result!.imageUrls).toHaveLength(2);
     expect(result!.imageUrls[0]).toContain('/proxy/');
+    expect(result!.frameTimes).toEqual([0, 5, 10]);
   });
 
   test('returns null for empty image array', async () => {

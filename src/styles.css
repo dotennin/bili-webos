@@ -375,14 +375,16 @@ body,
   display: flex;
   flex-direction: column;
   gap: 16px;
-  transition: opacity 0.3s ease;
 }
 .player-controls-scroll {
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 .player-controls.hidden {
   opacity: 0;
   pointer-events: none;
+  transition: opacity 0.3s ease;
 }
 .player-title {
   font-size: 28px;
