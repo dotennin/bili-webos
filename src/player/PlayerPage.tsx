@@ -18,7 +18,7 @@ import { storage } from '../utils/storage';
 import DanmakuLayer from './DanmakuLayer';
 
 const SEEK_BASE_STEP_SEC = 5;
-const SEEK_IDLE_RESET_MS = 250;
+const SEEK_IDLE_RESET_MS = 500;
 const SEEK_MIN_EVENT_GAP_MS = 10;
 const SEEK_MULTIPLIER_INCREMENT = 0.5;
 const SEEK_MAX_MULTIPLIER = 6;
@@ -384,47 +384,62 @@ export default function PlayerPage({
     }
   }
 
-  const commitPreviewSeek = useCallback(() => {
-    const bounds = getSeekBounds();
-    clearSeekCommitTimer();
-    if (!scrubActiveRef.current) return;
+  const commitPreviewSeek = useCallback(
+    (hideControlsAfterCommit = false) => {
+      const bounds = getSeekBounds();
+      clearSeekCommitTimer();
+      if (!scrubActiveRef.current) return;
 
-    if (bounds && videoRef.current) {
-      const target = Math.min(
-        bounds.max,
-        Math.max(0, Number(displayTimeRef.current) || 0),
-      );
-      if (
-        Math.abs((Number(videoRef.current.currentTime) || 0) - target) >
-        SEEK_EPSILON
-      ) {
-        videoRef.current.currentTime = target;
+      if (bounds && videoRef.current) {
+        const target = Math.min(
+          bounds.max,
+          Math.max(0, Number(displayTimeRef.current) || 0),
+        );
+        if (
+          Math.abs((Number(videoRef.current.currentTime) || 0) - target) >
+          SEEK_EPSILON
+        ) {
+          videoRef.current.currentTime = target;
+        }
+        committedSeekTargetRef.current = {
+          target,
+          protectedUntil: Date.now() + SEEK_COMMIT_ANCHOR_MS,
+        };
+        setCurrentTime(target);
+        setDuration(bounds.duration);
+        renderTimelinePreview(target, bounds.duration);
       }
-      committedSeekTargetRef.current = {
-        target,
-        protectedUntil: Date.now() + SEEK_COMMIT_ANCHOR_MS,
-      };
-      setCurrentTime(target);
-      setDuration(bounds.duration);
-      renderTimelinePreview(target, bounds.duration);
-    }
 
-    scrubActiveRef.current = false;
-    lastSeekEventAtRef.current = 0;
-    lastSeekDirectionRef.current = 0;
-    seekMultiplierRef.current = 1;
-    blockedSeekDirectionRef.current = 0;
-    if (suppressedBufferingRef.current) {
-      suppressedBufferingRef.current = false;
-      setBuffering(true);
-    }
-    hideScrubThumbnail();
-  }, [clearSeekCommitTimer, getSeekBounds, renderTimelinePreview]);
+      scrubActiveRef.current = false;
+      lastSeekEventAtRef.current = 0;
+      lastSeekDirectionRef.current = 0;
+      seekMultiplierRef.current = 1;
+      blockedSeekDirectionRef.current = 0;
+      if (suppressedBufferingRef.current) {
+        suppressedBufferingRef.current = false;
+        setBuffering(true);
+      }
+      hideScrubThumbnail();
+
+      if (hideControlsAfterCommit) {
+        if (controlsTimer.current) {
+          clearTimeout(controlsTimer.current);
+          controlsTimer.current = null;
+        }
+        setShowControls(false);
+        setShowRelated(false);
+        setShowQuality(false);
+        setShowSpeed(false);
+        setFocusArea('none');
+      }
+    },
+    [clearSeekCommitTimer, getSeekBounds, renderTimelinePreview],
+  );
 
   const scheduleSeekCommit = useCallback(() => {
     clearSeekCommitTimer();
     seekCommitTimerRef.current = setTimeout(() => {
-      commitPreviewSeek();
+      commitPreviewSeek(true);
     }, SEEK_IDLE_RESET_MS);
   }, [clearSeekCommitTimer, commitPreviewSeek]);
 

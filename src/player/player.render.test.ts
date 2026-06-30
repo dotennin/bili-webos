@@ -477,10 +477,9 @@ describe('PlayerPage', () => {
     expect(JSON.stringify(renderer.toJSON())).toContain('player-progress-bar focused');
     expect(video.currentTime).toBe(30);
     await interact(() =>
-      timers.find((item) => item.delay === 250 && !item.cleared)?.fn(),
+      timers.find((item) => item.delay === 500 && !item.cleared)?.fn(),
     );
     expect(video.currentTime).toBe(35);
-    await interact(() => customKeyHandler(event('ArrowUp')));
     expect(JSON.stringify(renderer.toJSON())).toContain('player-controls hidden');
 
     video.paused = true;
@@ -490,14 +489,14 @@ describe('PlayerPage', () => {
     await interact(() => customKeyHandler(event('MediaRewind', 412)));
     expect(video.currentTime).toBe(35);
     await interact(() =>
-      timers.find((item) => item.delay === 250 && !item.cleared)?.fn(),
+      timers.find((item) => item.delay === 500 && !item.cleared)?.fn(),
     );
     expect(video.currentTime).toBe(30);
     video.duration = 35;
     await interact(() => customKeyHandler(event('MediaFastForward', 417)));
     expect(video.currentTime).toBe(30);
     await interact(() =>
-      timers.find((item) => item.delay === 250 && !item.cleared)?.fn(),
+      timers.find((item) => item.delay === 500 && !item.cleared)?.fn(),
     );
     expect(video.currentTime).toBe(34);
     await interact(() => customKeyHandler(event('MediaPause', 19)));
@@ -506,6 +505,7 @@ describe('PlayerPage', () => {
     await interact(() => customKeyHandler(event('MediaPlayPause')));
     expect(video.pauseCalls).toBeGreaterThan(1);
 
+    await interact(() => customKeyHandler(event('ArrowDown')));
     await interact(() => customKeyHandler(event('ArrowDown')));
     expect(JSON.stringify(renderer.toJSON())).toContain('▶ 播放');
     await interact(() => customKeyHandler(event('Enter')));
@@ -1133,6 +1133,45 @@ describe('PlayerPage', () => {
     expect(video.currentTime).toBeCloseTo(47.5, 3);
   });
 
+  test('hides player controls when preview seek debounce commits', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-SCRUB-CLOSE', cid: 35, title: '关闭预览' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.duration = 120;
+    video.readyState = 2;
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    expect(JSON.stringify(renderer.toJSON())).not.toContain(
+      'player-controls hidden',
+    );
+
+    const commitTimer = timers.find(
+      (item) => item.delay === 500 && !item.cleared,
+    );
+    expect(commitTimer).toBeTruthy();
+
+    await interact(() => commitTimer.fn());
+    expect(JSON.stringify(renderer.toJSON())).toContain(
+      'player-controls hidden',
+    );
+    expect(timers.some((item) => item.delay === 5000 && !item.cleared)).toBe(
+      false,
+    );
+  });
+
   test('caps accelerated scrubbing, ignores flood events, and suppresses redundant clamp writes', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();
@@ -1177,7 +1216,7 @@ describe('PlayerPage', () => {
     expect(timeText.textContent).toContain('7:42 / 16:40');
     expect(currentTimeWrites).toBe(0);
 
-    timers.find((item) => item.delay === 250 && !item.cleared)?.fn();
+    timers.find((item) => item.delay === 500 && !item.cleared)?.fn();
     expect(video.currentTime).toBeCloseTo(462.5, 3);
     expect(currentTimeWrites).toBe(1);
 
@@ -1193,7 +1232,7 @@ describe('PlayerPage', () => {
     expect(currentTimeWrites).toBe(0);
     expect(timeText.textContent).toContain('0:00 / 2:00');
     expect(
-      timers.filter((item) => item.delay === 250 && !item.cleared),
+      timers.filter((item) => item.delay === 500 && !item.cleared),
     ).toHaveLength(0);
 
     currentNow += 15;
@@ -1269,7 +1308,7 @@ describe('PlayerPage', () => {
     currentNow += 50;
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() =>
-      timers.find((item) => item.delay === 250 && !item.cleared)?.fn(),
+      timers.find((item) => item.delay === 500 && !item.cleared)?.fn(),
     );
     expect(video.currentTime).toBeCloseTo(112.5, 3);
 
@@ -2069,7 +2108,7 @@ describe('LivePlayerPage', () => {
     expect(JSON.stringify(renderer.toJSON())).not.toContain('buffering');
 
     const commitTimer = timers.find(
-      (item) => item.delay === 250 && !item.cleared,
+      (item) => item.delay === 500 && !item.cleared,
     );
     expect(commitTimer).toBeTruthy();
     await interact(() => commitTimer.fn());
