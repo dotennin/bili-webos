@@ -607,7 +607,10 @@ export default function PlayerPage({
 
   const loadVideo = useCallback(
     async (player) => {
-      if (!video?.bvid && !video?.aid) return;
+      if (!video?.bvid && !video?.aid) {
+        if (!video?.title && video?.fromCast) setVideoTitle('投屏视频');
+        return;
+      }
       setLoading(true);
       setFirstFrameReady(false);
       setEnded(false);
@@ -618,11 +621,27 @@ export default function PlayerPage({
       castReportState({ playState: 'loading' }).catch(() => {});
       try {
         let cid = video.cid;
+        let titleNeedsResolution = !video?.title && video?.fromCast;
         if (!cid) {
           const info = await getVideoInfo(video);
           cid = info?.data?.cid;
-          if (info?.data?.title) setVideoTitle(info.data.title);
+          if (info?.data?.title) {
+            setVideoTitle(info.data.title);
+            titleNeedsResolution = false;
+          }
           if (!video.bvid && info?.data?.bvid) video.bvid = info.data.bvid;
+        }
+        if (titleNeedsResolution) {
+          if (video?.bvid || video?.aid) {
+            const info = await getVideoInfo(video);
+            if (info?.data?.title) {
+              setVideoTitle(info.data.title);
+            } else {
+              setVideoTitle('投屏视频');
+            }
+          } else {
+            setVideoTitle('投屏视频');
+          }
         }
         if (!cid) return;
         cidRef.current = cid;
