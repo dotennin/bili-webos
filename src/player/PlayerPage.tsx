@@ -49,6 +49,27 @@ function getActiveSubtitleText(cues, currentTime) {
     .join('\n');
 }
 
+function getPreferredSubtitleIndex(tracks, preferredLanguage) {
+  if (!Array.isArray(tracks) || tracks.length === 0) return -1;
+  if (preferredLanguage === 'off') return -1;
+  if (!preferredLanguage) return 0;
+
+  const exactIndex = tracks.findIndex(
+    (track) => track.lan === preferredLanguage,
+  );
+  if (exactIndex >= 0) return exactIndex;
+
+  const preferredBaseLanguage = String(preferredLanguage)
+    .toLowerCase()
+    .split(/[-_]/)[0];
+  return tracks.findIndex(
+    (track) =>
+      String(track.lan || '')
+        .toLowerCase()
+        .split(/[-_]/)[0] === preferredBaseLanguage,
+  );
+}
+
 function getSeekProfile(durationSec) {
   const safeDuration = Math.max(0, Number(durationSec) || 0);
   if (safeDuration >= SEEK_LONG_VIDEO_SEC) {
@@ -660,11 +681,17 @@ export default function PlayerPage({
         if (storyboardVideoKeyRef.current !== videoKey) return;
         storyboardRef.current = storyboardData;
         setSubtitleTracks(availableSubtitles);
-        if (availableSubtitles.length > 0) {
-          getSubtitleCues(availableSubtitles[0].subtitle_url)
+        const preferredSubtitleIndex = getPreferredSubtitleIndex(
+          availableSubtitles,
+          settings.subtitleLanguage,
+        );
+        if (preferredSubtitleIndex >= 0) {
+          getSubtitleCues(
+            availableSubtitles[preferredSubtitleIndex].subtitle_url,
+          )
             .then((cues) => {
               if (storyboardVideoKeyRef.current !== videoKey) return;
-              setCurrentSubtitleIndex(0);
+              setCurrentSubtitleIndex(preferredSubtitleIndex);
               setSubtitleCues(cues);
             })
             .catch(() => {});
@@ -1120,6 +1147,10 @@ export default function PlayerPage({
       if (index < 0) {
         setCurrentSubtitleIndex(-1);
         setSubtitleCues([]);
+        storage.setSettings({
+          ...storage.getSettings(),
+          subtitleLanguage: 'off',
+        });
         return;
       }
       const track = subtitleTracks[index];
@@ -1128,6 +1159,10 @@ export default function PlayerPage({
         const cues = await getSubtitleCues(track.subtitle_url);
         setCurrentSubtitleIndex(index);
         setSubtitleCues(cues);
+        storage.setSettings({
+          ...storage.getSettings(),
+          subtitleLanguage: track.lan || String(track.id || ''),
+        });
       } catch (error) {
         console.error('Subtitle load error:', error);
       }

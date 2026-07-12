@@ -38,11 +38,17 @@ test('auth/settings helpers roundtrip values', () => {
     storage.setAuth({ token: 'abc' });
     expect(storage.getAuth()).toEqual({ token: 'abc' });
 
-    storage.setSettings({ danmaku: false, quality: 64, videoGridCols: 4 });
+    storage.setSettings({
+      danmaku: false,
+      quality: 64,
+      videoGridCols: 4,
+      subtitleLanguage: 'ja-JP',
+    });
     expect(storage.getSettings()).toEqual({
       danmaku: false,
       quality: 64,
       videoGridCols: 4,
+      subtitleLanguage: 'ja-JP',
     });
 
     storage.clearAuth();
@@ -69,6 +75,7 @@ test('getSettings returns defaults when missing', () => {
       danmaku: true,
       quality: 80,
       videoGridCols: 3,
+      subtitleLanguage: null,
     });
   });
 });
@@ -80,6 +87,7 @@ test('getSettings tolerates invalid stored payloads', () => {
       danmaku: true,
       quality: 80,
       videoGridCols: 3,
+      subtitleLanguage: null,
     });
   });
 });
