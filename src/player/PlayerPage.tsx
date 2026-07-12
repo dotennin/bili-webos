@@ -618,13 +618,26 @@ export default function PlayerPage({
       castReportState({ playState: 'loading' }).catch(() => {});
       try {
         let cid = video.cid;
+        let titleAlreadyResolved = false;
         if (!cid) {
           const info = await getVideoInfo(video);
           cid = info?.data?.cid;
-          if (info?.data?.title) setVideoTitle(info.data.title);
+          if (info?.data?.title) {
+            setVideoTitle(info.data.title);
+            titleAlreadyResolved = true;
+          }
           if (!video.bvid && info?.data?.bvid) video.bvid = info.data.bvid;
         }
         if (!cid) return;
+        if (
+          !titleAlreadyResolved &&
+          !video?.title &&
+          video?.fromCast &&
+          (video?.bvid || video?.aid)
+        ) {
+          const info = await getVideoInfo(video);
+          if (info?.data?.title) setVideoTitle(info.data.title);
+        }
         cidRef.current = cid;
 
         const videoKey = `${video.bvid}:${cid}`;

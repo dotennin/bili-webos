@@ -742,6 +742,92 @@ describe('PlayerPage', () => {
     });
   });
 
+  test('resolves title from getVideoInfo for cast video without cid', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    api.getVideoInfo.mockClear();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-CAST-NO-CID',
+          fromCast: true,
+          owner: { name: '' },
+        },
+        onBack,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    expect(api.getVideoInfo).toHaveBeenCalled();
+    expect(JSON.stringify(renderer.toJSON())).toContain('详情标题');
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test('resolves title from getVideoInfo for cast video with cid but no title', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    api.getVideoInfo.mockClear();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-CAST-CID-NO-TITLE',
+          cid: 5,
+          fromCast: true,
+          owner: { name: '' },
+        },
+        onBack,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    expect(api.getVideoInfo).toHaveBeenCalled();
+    expect(JSON.stringify(renderer.toJSON())).toContain('详情标题');
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test('resolves title from getVideoInfo for cast video with aid but no bvid', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    api.getVideoInfo.mockClear();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          aid: 12345,
+          cid: 6,
+          fromCast: true,
+          owner: { name: '' },
+        },
+        onBack,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    expect(api.getVideoInfo).toHaveBeenCalled();
+    expect(JSON.stringify(renderer.toJSON())).toContain('详情标题');
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test('covers additional player keyboard branches for controls, related grid, and endscreen', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();

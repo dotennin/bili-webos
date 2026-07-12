@@ -136,7 +136,7 @@ export default function App() {
               bvid: command.bvid,
               cid: command.cid,
               epid: command.epid,
-              title: command.title || '投屏视频',
+              title: command.title || '',
               owner: { name: '' },
               fromCast: true,
               progress: Math.max(0, Number(command.seekTs || 0)),
