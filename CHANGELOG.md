@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.12.1...bili-webos-tv-v1.13.0) (2026-07-12)
+
+
+### Features
+
+* add subtitle display and switching ([#121](https://github.com/dotennin/bili-webos/issues/121)) ([fa494d6](https://github.com/dotennin/bili-webos/commit/fa494d6df505e9b868ae3fa7ba69a02f18819cf9))
+
 ## [1.12.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.12.0...bili-webos-tv-v1.12.1) (2026-07-07)
 
 
