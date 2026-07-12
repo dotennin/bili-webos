@@ -42,6 +42,9 @@ const supportsPlaybackSpeedControl = new Function(
 const getActiveSubtitleText = new Function(
   `${extractFunction('getActiveSubtitleText')}; return getActiveSubtitleText;`,
 )();
+const getPreferredSubtitleIndex = new Function(
+  `${extractFunction('getPreferredSubtitleIndex')}; return getPreferredSubtitleIndex;`,
+)();
 
 test('escapeXml encodes xml-sensitive characters', () => {
   expect(escapeXml('a&b<c>"')).toBe('a&amp;b&lt;c&gt;&quot;');
@@ -95,4 +98,17 @@ test('getActiveSubtitleText returns active cues and preserves overlapping lines'
 
   expect(getActiveSubtitleText(cues, 2.5)).toBe('第一行\n第二行');
   expect(getActiveSubtitleText(cues, 4)).toBe('');
+});
+
+test('getPreferredSubtitleIndex restores off and language preferences', () => {
+  const tracks = [
+    { lan: 'zh-CN', lan_doc: '中文' },
+    { lan: 'ja-JP', lan_doc: '日本語' },
+  ];
+
+  expect(getPreferredSubtitleIndex(tracks, null)).toBe(0);
+  expect(getPreferredSubtitleIndex(tracks, 'off')).toBe(-1);
+  expect(getPreferredSubtitleIndex(tracks, 'ja-JP')).toBe(1);
+  expect(getPreferredSubtitleIndex(tracks, 'zh-TW')).toBe(0);
+  expect(getPreferredSubtitleIndex(tracks, 'en-US')).toBe(-1);
 });
