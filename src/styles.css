@@ -1,4 +1,9 @@
 /* ===== Global Reset & TV Base ===== */
+:root {
+  --app-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -10,7 +15,7 @@ body,
   width: 1920px;
   height: 1080px;
   overflow: hidden;
-  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-family);
   background: #0d0d1a;
   color: #e1e1e6;
   -webkit-font-smoothing: antialiased;
@@ -448,18 +453,24 @@ body,
 }
 .player-subtitle {
   position: absolute;
-  left: 12%;
-  right: 12%;
+  left: 50%;
   bottom: 120px;
   z-index: 20;
+  width: max-content;
+  max-width: 76%;
+  padding: 8px 16px 10px;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.68);
+  border-radius: 4px;
   color: #fff;
+  font-family: var(--app-font-family);
   font-size: 36px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.45;
   text-align: center;
   white-space: pre-line;
   pointer-events: none;
-  text-shadow: 0 2px 4px #000, 0 0 8px #000;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 /* ===== Danmaku ===== */
