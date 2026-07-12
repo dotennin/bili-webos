@@ -828,6 +828,92 @@ describe('PlayerPage', () => {
     });
   });
 
+  test('falls back to "投屏视频" when getVideoInfo returns empty title for cast video', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    api.getVideoInfo.mockClear();
+    api.getVideoInfo.mockResolvedValueOnce({ data: { title: '' } });
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-CAST-EMPTY-TITLE',
+          cid: 8,
+          fromCast: true,
+          owner: { name: '' },
+        },
+        onBack,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    expect(JSON.stringify(renderer.toJSON())).toContain('投屏视频');
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test('falls back to "投屏视频" when cast video has no bvid or aid for title lookup', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    api.getVideoInfo.mockClear();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          cid: 9,
+          fromCast: true,
+          owner: { name: '' },
+        },
+        onBack,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    expect(JSON.stringify(renderer.toJSON())).toContain('投屏视频');
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test('uses command title for cast video without extra getVideoInfo call', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    api.getVideoInfo.mockClear();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-CAST-TITLE',
+          cid: 10,
+          title: '命令标题',
+          fromCast: true,
+          owner: { name: '' },
+        },
+        onBack,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    expect(api.getVideoInfo).not.toHaveBeenCalled();
+    expect(JSON.stringify(renderer.toJSON())).toContain('命令标题');
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test('covers additional player keyboard branches for controls, related grid, and endscreen', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();
