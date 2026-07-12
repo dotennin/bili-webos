@@ -5,6 +5,7 @@ const DEFAULT_SETTINGS = {
   danmaku: true,
   quality: 80,
   videoGridCols: 3,
+  subtitleLanguage: null,
 };
 
 function normalizeResumeEntry(entry) {

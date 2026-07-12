@@ -933,11 +933,63 @@ describe('PlayerPage', () => {
     await interact(() => customKeyHandler(event('ArrowUp')));
     await interact(() => customKeyHandler(event('Enter')));
     expect(JSON.stringify(renderer.toJSON())).not.toContain('字幕内容');
+    expect(storageState.settings.subtitleLanguage).toBe('off');
 
     await interact(() => customKeyHandler(event('Enter')));
     await interact(() => customKeyHandler(event('ArrowDown')));
     await interact(() => customKeyHandler(event('Enter')));
     expect(api.getSubtitleCues).toHaveBeenCalledTimes(2);
+    expect(storageState.settings.subtitleLanguage).toBe('zh-CN');
+
+    await act(async () => renderer.unmount());
+  });
+
+  test('restores the preferred subtitle language for another video', async () => {
+    storageState.settings.subtitleLanguage = 'ja-JP';
+    api.getPlayerSubtitles.mockImplementationOnce(async () => [
+      {
+        id: 1,
+        lan: 'zh-CN',
+        lan_doc: '中文',
+        subtitle_url: '//subtitle.test/zh.json',
+      },
+      {
+        id: 2,
+        lan: 'ja-JP',
+        lan_doc: '日本語',
+        subtitle_url: '//subtitle.test/ja.json',
+      },
+    ]);
+    api.getSubtitleCues.mockImplementationOnce(async (url) => [
+      {
+        from: 1,
+        to: 3,
+        content: url.includes('/ja.json') ? '日本語字幕' : '中文字幕',
+      },
+    ]);
+
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-SUBTITLE-PREF', cid: 19, title: '偏好字幕视频' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.currentTime = 2;
+    await interact(() =>
+      intervals.find((item) => item.delay === 500 && !item.cleared)?.fn(),
+    );
+    expect(JSON.stringify(renderer.toJSON())).toContain('日本語字幕');
+    expect(api.getSubtitleCues).toHaveBeenCalledWith(
+      '//subtitle.test/ja.json',
+    );
 
     await act(async () => renderer.unmount());
   });
