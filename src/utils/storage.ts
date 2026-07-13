@@ -40,9 +40,13 @@ function normalizeCastRecentEntry(entry) {
     const number = Number(value);
     return Number.isFinite(number) ? Math.max(0, number) : undefined;
   };
+  const cid =
+    entry.cid == null || entry.cid === ''
+      ? undefined
+      : Number(entry.cid) || entry.cid;
   return {
     bvid: entry.bvid.trim(),
-    cid: entry.cid == null || entry.cid === '' ? undefined : entry.cid,
+    cid,
     title: optionalText(entry.title),
     pic: optionalText(entry.pic),
     ownerName: optionalText(entry.ownerName),

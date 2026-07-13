@@ -29,14 +29,19 @@ function normalizeRemoteItem(item) {
 
 function normalizeLocalEntry(entry) {
   if (!entry?.bvid || !entry.bvid.trim()) return null;
+  const optionalNumber = (value) => {
+    if (value == null || value === '') return undefined;
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(0, number) : undefined;
+  };
   return {
     video: {
       bvid: entry.bvid.trim(),
       cid: entry.cid,
       title: entry.title || undefined,
       pic: entry.pic || undefined,
-      duration: entry.duration,
-      progress: entry.progress,
+      duration: optionalNumber(entry.duration),
+      progress: optionalNumber(entry.progress),
       owner: entry.ownerName ? { name: entry.ownerName } : undefined,
     },
     viewedAt: entry.viewedAt || null,

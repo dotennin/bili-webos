@@ -154,6 +154,12 @@ test('cast recent history helpers roundtrip normalized entries in newest-first o
   });
 });
 
+test('getCastRecentHistory returns empty list when nothing is stored', () => {
+  withMockLocalStorage(() => {
+    expect(storage.getCastRecentHistory()).toEqual([]);
+  });
+});
+
 test('cast recent history replaces duplicate bvid and keeps old valid metadata', () => {
   withMockLocalStorage(() => {
     storage.addCastRecentHistory({
@@ -174,6 +180,27 @@ test('cast recent history replaces duplicate bvid and keeps old valid metadata',
         pic: 'cover',
         ownerName: 'owner',
         viewedAt: 200,
+      }),
+    ]);
+  });
+});
+
+test('cast recent history coerces numeric fields from stored payloads', () => {
+  withMockLocalStorage((items) => {
+    items.set(
+      'bili_cast_recent_history',
+      JSON.stringify({
+        version: 1,
+        entries: [{ bvid: 'BV1', cid: '7', duration: '88', progress: '9', viewedAt: 10 }],
+      }),
+    );
+
+    expect(storage.getCastRecentHistory()).toEqual([
+      expect.objectContaining({
+        bvid: 'BV1',
+        cid: 7,
+        duration: 88,
+        progress: 9,
       }),
     ]);
   });

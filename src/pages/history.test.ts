@@ -61,6 +61,28 @@ test('mergeRecentHistory lets the remote source lead when remote is newer', () =
   );
 });
 
+test('mergeRecentHistory keeps local fields leading when timestamps are equal', () => {
+  const result = mergeRecentHistory(
+    [{
+      history: { bvid: 'BV1', cid: 1 },
+      title: 'remote title',
+      progress: 10,
+      view_at: 20,
+    }],
+    [{ bvid: 'BV1', cid: 2, progress: '20', viewedAt: 20_000 }],
+  );
+
+  expect(result).toEqual([
+    expect.objectContaining({
+      bvid: 'BV1',
+      cid: 2,
+      progress: 20,
+      title: 'remote title',
+      viewedAt: 20_000,
+    }),
+  ]);
+});
+
 test('mergeRecentHistory keeps stable remote order without timestamps', () => {
   expect(
     mergeRecentHistory([

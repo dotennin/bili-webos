@@ -752,6 +752,23 @@ describe('page rendering', () => {
     expect(videoGridCalls.at(-1).videos[0].cid).toBe(2);
   });
 
+  test('HistoryPage shows local history while remote history is loading', async () => {
+    const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
+    storageState.castRecentHistory = [{ bvid: 'BV1', title: 'local video', viewedAt: 100 }];
+    api.getHistory.mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+
+    const rendered = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+    await flush();
+
+    expect(textOf(rendered.toJSON())).toContain('local video');
+    expect(textOf(rendered.toJSON())).toContain('正在加载远程历史');
+    rendered.unmount();
+  });
+
   test('HistoryPage shows local history with a non-blocking logged-out notice', async () => {
     const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
     storageState.castRecentHistory = [{ bvid: 'BV1', title: 'local video', viewedAt: 100 }];

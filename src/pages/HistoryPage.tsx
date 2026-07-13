@@ -90,6 +90,9 @@ export default function HistoryPage({ onPlayVideo, refreshKey }) {
   return (
     <div className="content-scroll">
       <div className="section-title">最近观看</div>
+      {remoteStatus === 'loading' && hasVideos && (
+        <div className="history-notice">正在加载远程历史...</div>
+      )}
       {remoteUnavailable && (
         <div className="history-notice">{remoteMessage}</div>
       )}
