@@ -334,7 +334,9 @@ export default function App() {
             />
           )}
           {page === 'search' && <SearchPage onPlayVideo={handlePlayVideo} />}
-          {page === 'history' && <HistoryPage onPlayVideo={handlePlayVideo} />}
+          {page === 'history' && (
+            <HistoryPage onPlayVideo={handlePlayVideo} refreshKey={refreshKey} />
+          )}
           {page === 'favorites' && (
             <FavoritesPage userMid={user?.mid} onPlayVideo={handlePlayVideo} />
           )}

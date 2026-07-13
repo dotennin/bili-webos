@@ -216,6 +216,20 @@ test('App loads user info, routes pages, handles cast commands, login, logout, a
   );
   expect(pageProps.some((entry) => entry.page === 'HistoryPage')).toBe(true);
 
+  const firstHistory = pageProps
+    .filter((item) => item.page === 'HistoryPage')
+    .at(-1);
+  expect(firstHistory.props.refreshKey).toBe(0);
+
+  await interact(() =>
+    sidebarItems.filter((item) => item.label === '最近观看').at(-1).onSelect(),
+  );
+
+  const refreshedHistory = pageProps
+    .filter((item) => item.page === 'HistoryPage')
+    .at(-1);
+  expect(refreshedHistory.props.refreshKey).toBe(1);
+
   await interact(() =>
     sidebarItems.find((item) => item.label === '我的收藏').onSelect(),
   );
