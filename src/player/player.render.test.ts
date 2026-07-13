@@ -167,6 +167,8 @@ beforeEach(() => {
   storageState = {
     settings: { danmaku: true, quality: 80 },
     resumeProgress: {},
+    castRecentHistory: [],
+    castRecentHistoryWrites: [],
   };
   customKeyHandler = null;
   eventTarget = createEventTarget();
@@ -272,6 +274,12 @@ beforeEach(() => {
       },
       shouldClearResumeProgress(progress, duration) {
         return Number(duration) - Number(progress) <= 3;
+      },
+      addCastRecentHistory(entry) {
+        storageState.castRecentHistoryWrites.push(entry);
+      },
+      getCastRecentHistory() {
+        return storageState.castRecentHistory || [];
       },
     },
   }));
@@ -2445,5 +2453,88 @@ describe('LivePlayerPage', () => {
     await act(async () => {
       renderer.unmount();
     });
+  });
+
+  test('records cast recent history on the first playing event only', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BVX',
+          cid: 7,
+          title: 'cast title',
+          owner: { name: 'owner' },
+          fromCast: true,
+        },
+        onBack,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.currentTime = 8;
+    video.duration = 100;
+    await interact(() => video.dispatch('playing'));
+    await interact(() => video.dispatch('playing'));
+
+    expect(storageState.castRecentHistoryWrites).toEqual([
+      expect.objectContaining({
+        bvid: 'BVX',
+        cid: 7,
+        title: 'cast title',
+        ownerName: 'owner',
+        progress: 8,
+        duration: 100,
+      }),
+    ]);
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test('does not write cast history for non-cast video', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BVY', cid: 5, title: 'app video', owner: { name: 'u' } },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    video.duration = 100;
+    await interact(() => video.dispatch('playing'));
+    expect(storageState.castRecentHistoryWrites).toEqual([]);
+    await act(async () => { renderer.unmount(); });
+  });
+
+  test('does not write cast history without bvid', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { cid: 6, title: 'no-bvid cast', fromCast: true },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    video.duration = 100;
+    await interact(() => video.dispatch('playing'));
+    expect(storageState.castRecentHistoryWrites).toEqual([]);
+    await act(async () => { renderer.unmount(); });
   });
 });

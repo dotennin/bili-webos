@@ -163,9 +163,21 @@ export default function PlayerPage({
   const previewThumbRef = useRef(null);
   const progressBarRef = useRef(null);
   const storyboardVideoKeyRef = useRef(null);
+  const castHistoryWrittenRef = useRef(false);
+  const castHistoryMetadataRef = useRef({
+    title: video?.title,
+    pic: video?.pic,
+    ownerName: video?.owner?.name,
+  });
 
   const pendingSeekRef = useRef(null);
   const endedRef = useRef(false);
+
+  castHistoryMetadataRef.current = {
+    title: video?.title || castHistoryMetadataRef.current.title,
+    pic: video?.pic || castHistoryMetadataRef.current.pic,
+    ownerName: video?.owner?.name || castHistoryMetadataRef.current.ownerName,
+  };
 
   const queueOrApplySeek = useCallback((seekSec) => {
     const target = Math.max(0, Number(seekSec) || 0);
@@ -628,6 +640,12 @@ export default function PlayerPage({
           if (info?.data?.title) {
             setVideoTitle(info.data.title);
             titleNeedsResolution = false;
+            castHistoryMetadataRef.current.title = info.data.title;
+            castHistoryMetadataRef.current.pic =
+              info.data.pic || castHistoryMetadataRef.current.pic;
+          }
+          if (info?.data?.owner?.name) {
+            castHistoryMetadataRef.current.ownerName = info.data.owner.name;
           }
           if (!video.bvid && info?.data?.bvid) video.bvid = info.data.bvid;
         }
@@ -636,8 +654,14 @@ export default function PlayerPage({
             const info = await getVideoInfo(video);
             if (info?.data?.title) {
               setVideoTitle(info.data.title);
+              castHistoryMetadataRef.current.title = info.data.title;
+              castHistoryMetadataRef.current.pic =
+                info.data.pic || castHistoryMetadataRef.current.pic;
             } else {
               setVideoTitle('投屏视频');
+            }
+            if (info?.data?.owner?.name) {
+              castHistoryMetadataRef.current.ownerName = info.data.owner.name;
             }
           } else {
             setVideoTitle('投屏视频');
@@ -892,6 +916,28 @@ export default function PlayerPage({
       setLoading(false);
       setPlaying(true);
       castReportState({ playState: 'playing' }).catch(() => {});
+
+      if (
+        !castHistoryWrittenRef.current &&
+        video?.fromCast === true &&
+        typeof video?.bvid === 'string' &&
+        video.bvid.trim()
+      ) {
+        castHistoryWrittenRef.current = true;
+        const metadata = castHistoryMetadataRef.current;
+        const el = videoRef.current;
+        if (!el) return;
+        storage.addCastRecentHistory({
+          bvid: video.bvid,
+          cid: cidRef.current ?? video.cid,
+          title: metadata.title,
+          pic: metadata.pic,
+          ownerName: metadata.ownerName,
+          duration: Number(el.duration) || Number(video.duration) || undefined,
+          progress: Number(el.currentTime) || Number(video.progress) || 0,
+          viewedAt: Date.now(),
+        });
+      }
     };
     const handleWaiting = () => {
       bufferingSinceRef.current = bufferingSinceRef.current || Date.now();
