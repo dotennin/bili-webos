@@ -157,15 +157,16 @@ export const storage = {
     try {
       const normalized = normalizeCastRecentEntry(entry);
       if (!normalized) return;
-      const previous = this.getCastRecentHistory().find(
+      const existing = this.getCastRecentHistory();
+      const previous = existing.find(
         (item) => item.bvid === normalized.bvid,
       );
-      const compact = (value) =>
+      const stripUndefined = (value) =>
         Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
-      const merged = compact({ ...previous, ...compact(normalized) });
+      const merged = { ...previous, ...stripUndefined(normalized) };
       const entries = [
         merged,
-        ...this.getCastRecentHistory().filter((item) => item.bvid !== merged.bvid),
+        ...existing.filter((item) => item.bvid !== merged.bvid),
       ]
         .sort((a, b) => b.viewedAt - a.viewedAt)
         .slice(0, CAST_RECENT_HISTORY_LIMIT);
