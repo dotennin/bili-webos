@@ -37,6 +37,30 @@ test('mergeRecentHistory deduplicates bvid and lets the newer source lead', () =
   );
 });
 
+test('mergeRecentHistory lets the remote source lead when remote is newer', () => {
+  const result = mergeRecentHistory(
+    [{
+      history: { bvid: 'BV1', cid: 1 },
+      title: 'remote title',
+      cover: 'remote cover',
+      progress: 10,
+      view_at: 30,
+    }],
+    [{ bvid: 'BV1', cid: 2, progress: 20, viewedAt: 20_000 }],
+  );
+  expect(result).toHaveLength(1);
+  expect(result[0]).toEqual(
+    expect.objectContaining({
+      bvid: 'BV1',
+      cid: 1,
+      progress: 10,
+      title: 'remote title',
+      pic: 'remote cover',
+      viewedAt: 30_000,
+    }),
+  );
+});
+
 test('mergeRecentHistory keeps stable remote order without timestamps', () => {
   expect(
     mergeRecentHistory([

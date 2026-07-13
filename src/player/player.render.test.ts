@@ -2498,6 +2498,53 @@ describe('LivePlayerPage', () => {
     });
   });
 
+  test('records resolved metadata from getVideoInfo in cast history write', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onBack = mock(() => {});
+    api.getVideoInfo.mockResolvedValueOnce({
+      data: {
+        cid: 7,
+        bvid: 'BV-CAST-RESOLVED',
+        title: 'resolved title',
+        pic: 'https://pic.resolved',
+        owner: { name: 'resolved owner' },
+      },
+    });
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: {
+          bvid: 'BV-CAST-RESOLVED',
+          cid: 7,
+          fromCast: true,
+        },
+        onBack,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    video.currentTime = 5;
+    video.duration = 60;
+    await interact(() => video.dispatch('playing'));
+
+    expect(storageState.castRecentHistoryWrites).toEqual([
+      expect.objectContaining({
+        bvid: 'BV-CAST-RESOLVED',
+        title: 'resolved title',
+        pic: 'https://pic.resolved',
+        ownerName: 'resolved owner',
+      }),
+    ]);
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test('does not write cast history for non-cast video', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();
