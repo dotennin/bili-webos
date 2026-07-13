@@ -137,3 +137,82 @@ test('resume progress helpers normalize values and detect near-end playback', ()
     expect(storage.shouldClearResumeProgress(5, 0)).toBe(false);
   });
 });
+
+test('cast recent history helpers roundtrip normalized entries in newest-first order', () => {
+  withMockLocalStorage((items) => {
+    storage.addCastRecentHistory({ bvid: 'BV1', title: 'older', viewedAt: 100 });
+    storage.addCastRecentHistory({ bvid: 'BV2', title: 'newer', viewedAt: 200 });
+
+    expect(storage.getCastRecentHistory().map((item) => item.bvid)).toEqual([
+      'BV2',
+      'BV1',
+    ]);
+    expect(JSON.parse(items.get('bili_cast_recent_history'))).toEqual({
+      version: 1,
+      entries: expect.any(Array),
+    });
+  });
+});
+
+test('cast recent history replaces duplicate bvid and keeps old valid metadata', () => {
+  withMockLocalStorage(() => {
+    storage.addCastRecentHistory({
+      bvid: 'BV1',
+      cid: 1,
+      title: 'title',
+      pic: 'cover',
+      ownerName: 'owner',
+      viewedAt: 100,
+    });
+    storage.addCastRecentHistory({ bvid: 'BV1', cid: 2, viewedAt: 200 });
+
+    expect(storage.getCastRecentHistory()).toEqual([
+      expect.objectContaining({
+        bvid: 'BV1',
+        cid: 2,
+        title: 'title',
+        pic: 'cover',
+        ownerName: 'owner',
+        viewedAt: 200,
+      }),
+    ]);
+  });
+});
+
+test('cast recent history trims to fifty and rejects invalid schemas', () => {
+  withMockLocalStorage((items) => {
+    for (let index = 0; index < 51; index += 1) {
+      storage.addCastRecentHistory({ bvid: `BV${index}`, viewedAt: index + 1 });
+    }
+    expect(storage.getCastRecentHistory()).toHaveLength(50);
+    expect(storage.getCastRecentHistory().some((item) => item.bvid === 'BV0')).toBe(false);
+
+    items.set('bili_cast_recent_history', JSON.stringify({ version: 2, entries: [] }));
+    expect(storage.getCastRecentHistory()).toEqual([]);
+  });
+});
+
+test('cast recent history drops invalid entries and tolerates storage failures', () => {
+  withMockLocalStorage((items, mock) => {
+    items.set(
+      'bili_cast_recent_history',
+      JSON.stringify({
+        version: 1,
+        entries: [
+          { bvid: '', viewedAt: 10 },
+          { bvid: 'BV1', viewedAt: 0 },
+          { bvid: 'BV2', viewedAt: 20, progress: -5 },
+        ],
+      }),
+    );
+    expect(storage.getCastRecentHistory()).toEqual([
+      expect.objectContaining({ bvid: 'BV2', progress: 0, viewedAt: 20 }),
+    ]);
+    mock.setItem = () => {
+      throw new Error('quota');
+    };
+    expect(() =>
+      storage.addCastRecentHistory({ bvid: 'BV3', viewedAt: 30 }),
+    ).not.toThrow();
+  });
+});

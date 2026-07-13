@@ -1,6 +1,9 @@
 const PREFIX = 'bili_';
 const RESUME_PROGRESS_KEY = 'resume_progress';
 const RESUME_END_THRESHOLD_SEC = 3;
+const CAST_RECENT_HISTORY_KEY = 'cast_recent_history';
+const CAST_RECENT_HISTORY_VERSION = 1;
+const CAST_RECENT_HISTORY_LIMIT = 50;
 const DEFAULT_SETTINGS = {
   danmaku: true,
   quality: 80,
@@ -24,6 +27,28 @@ function normalizeResumeEntry(entry) {
     progress,
     duration,
     updatedAt: Number(entry.updatedAt) || Date.now(),
+  };
+}
+
+function normalizeCastRecentEntry(entry) {
+  if (typeof entry?.bvid !== 'string' || !entry.bvid.trim()) return null;
+  const viewedAt = Number(entry.viewedAt);
+  if (!Number.isFinite(viewedAt) || viewedAt <= 0) return null;
+  const optionalText = (value) =>
+    typeof value === 'string' && value.trim() ? value : undefined;
+  const optionalNumber = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.max(0, number) : undefined;
+  };
+  return {
+    bvid: entry.bvid.trim(),
+    cid: entry.cid == null || entry.cid === '' ? undefined : entry.cid,
+    title: optionalText(entry.title),
+    pic: optionalText(entry.pic),
+    ownerName: optionalText(entry.ownerName),
+    duration: optionalNumber(entry.duration),
+    progress: optionalNumber(entry.progress),
+    viewedAt,
   };
 }
 
@@ -113,5 +138,43 @@ export const storage = {
     const safeProgress = Math.max(0, Number(progress) || 0);
     if (!safeDuration) return false;
     return safeDuration - safeProgress <= RESUME_END_THRESHOLD_SEC;
+  },
+
+  getCastRecentHistory() {
+    const stored = this.get(CAST_RECENT_HISTORY_KEY);
+    if (
+      stored?.version !== CAST_RECENT_HISTORY_VERSION ||
+      !Array.isArray(stored.entries)
+    ) return [];
+    return stored.entries
+      .map(normalizeCastRecentEntry)
+      .filter(Boolean)
+      .sort((a, b) => b.viewedAt - a.viewedAt)
+      .slice(0, CAST_RECENT_HISTORY_LIMIT);
+  },
+
+  addCastRecentHistory(entry) {
+    try {
+      const normalized = normalizeCastRecentEntry(entry);
+      if (!normalized) return;
+      const previous = this.getCastRecentHistory().find(
+        (item) => item.bvid === normalized.bvid,
+      );
+      const compact = (value) =>
+        Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+      const merged = compact({ ...previous, ...compact(normalized) });
+      const entries = [
+        merged,
+        ...this.getCastRecentHistory().filter((item) => item.bvid !== merged.bvid),
+      ]
+        .sort((a, b) => b.viewedAt - a.viewedAt)
+        .slice(0, CAST_RECENT_HISTORY_LIMIT);
+      this.set(CAST_RECENT_HISTORY_KEY, {
+        version: CAST_RECENT_HISTORY_VERSION,
+        entries,
+      });
+    } catch {
+      /* local cast history must never interrupt playback */
+    }
   },
 };
