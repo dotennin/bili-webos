@@ -145,7 +145,8 @@ export const storage = {
     if (
       stored?.version !== CAST_RECENT_HISTORY_VERSION ||
       !Array.isArray(stored.entries)
-    ) return [];
+    )
+      return [];
     return stored.entries
       .map(normalizeCastRecentEntry)
       .filter(Boolean)
@@ -158,11 +159,11 @@ export const storage = {
       const normalized = normalizeCastRecentEntry(entry);
       if (!normalized) return;
       const existing = this.getCastRecentHistory();
-      const previous = existing.find(
-        (item) => item.bvid === normalized.bvid,
-      );
+      const previous = existing.find((item) => item.bvid === normalized.bvid);
       const stripUndefined = (value) =>
-        Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+        Object.fromEntries(
+          Object.entries(value).filter(([, item]) => item !== undefined),
+        );
       const merged = { ...previous, ...stripUndefined(normalized) };
       const entries = [
         merged,
