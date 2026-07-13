@@ -286,31 +286,101 @@ Expected: FAIL because `./history` does not exist.
 
 Create `src/pages/history.ts` with exported `mergeRecentHistory(remoteItems, localEntries)`. Normalize Bilibili fields (`history.bvid`, `history.cid`, `cover`, `author_name`, and `view_at * 1000`) and local fields (`ownerName` to `owner.name`). Keep an internal source order, merge only matching non-empty `bvid` values, select `cid` and `progress` from the newer source with fallback, fill display metadata from the other source, then sort by descending `viewedAt` and ascending source order. Return plain card objects and retain `viewedAt` for deterministic sorting and tests.
 
-Use these concrete merge helpers:
+Provide the complete module:
 
 ```ts
-const present = (value) => value !== undefined && value !== null && value !== '';
-const choose = (primary, fallback) => (present(primary) ? primary : fallback);
+// src/pages/history.ts
+
+function present(value) {
+  return value !== undefined && value !== null && value !== '';
+}
+
+function choose(primary, fallback) {
+  return present(primary) ? primary : fallback;
+}
+
+function normalizeRemoteItem(item) {
+  const bvid = item?.history?.bvid;
+  if (!bvid || !bvid.trim()) return null;
+  return {
+    video: {
+      bvid: bvid.trim(),
+      cid: item.history.cid,
+      title: item.title || undefined,
+      pic: item.cover || undefined,
+      duration: item.duration != null ? Number(item.duration) : undefined,
+      progress: item.progress != null ? Number(item.progress) : undefined,
+      owner: item.author_name ? { name: item.author_name } : undefined,
+      pubdate: item.pubdate != null ? Number(item.pubdate) : undefined,
+      stat: item.stat?.view != null
+        ? { view: Number(item.stat.view) }
+        : undefined,
+      play: item.play != null ? Number(item.play) : undefined,
+    },
+    viewedAt: item.view_at ? Number(item.view_at) * 1000 : null,
+  };
+}
+
+function normalizeLocalEntry(entry) {
+  if (!entry?.bvid || !entry.bvid.trim()) return null;
+  return {
+    video: {
+      bvid: entry.bvid.trim(),
+      cid: entry.cid,
+      title: entry.title || undefined,
+      pic: entry.pic || undefined,
+      duration: entry.duration,
+      progress: entry.progress,
+      owner: entry.ownerName ? { name: entry.ownerName } : undefined,
+    },
+    viewedAt: entry.viewedAt || null,
+  };
+}
 
 function combine(newer, older) {
   return {
-    ...older.video,
-    ...newer.video,
-    bvid: newer.video.bvid,
-    cid: choose(newer.video.cid, older.video.cid),
-    progress: choose(newer.video.progress, older.video.progress),
-    title: choose(newer.video.title, older.video.title),
-    pic: choose(newer.video.pic, older.video.pic),
-    duration: choose(newer.video.duration, older.video.duration),
-    owner: choose(newer.video.owner?.name, older.video.owner?.name)
-      ? { name: choose(newer.video.owner?.name, older.video.owner?.name) }
-      : undefined,
+    video: {
+      bvid: newer.video.bvid,
+      cid: choose(newer.video.cid, older.video.cid),
+      title: choose(newer.video.title, older.video.title),
+      pic: choose(newer.video.pic, older.video.pic),
+      duration: choose(newer.video.duration, older.video.duration),
+      progress: choose(newer.video.progress, older.video.progress),
+      owner: newer.video.owner?.name || older.video.owner?.name
+        ? { name: newer.video.owner?.name || older.video.owner?.name }
+        : undefined,
+      pubdate: choose(newer.video.pubdate, older.video.pubdate),
+      stat: newer.video.stat || older.video.stat,
+      play: choose(newer.video.play, older.video.play),
+    },
     viewedAt: Math.max(newer.viewedAt || 0, older.viewedAt || 0) || null,
   };
 }
+
+export function mergeRecentHistory(remoteItems, localEntries) {
+  const normalizedLocal = localEntries.map(normalizeLocalEntry).filter(Boolean);
+  const normalizedRemote = remoteItems.map(normalizeRemoteItem).filter(Boolean);
+
+  const byBvid = new Map();
+  for (const item of [...normalizedLocal, ...normalizedRemote]) {
+    const existing = byBvid.get(item.video.bvid);
+    if (!existing) {
+      byBvid.set(item.video.bvid, item);
+      continue;
+    }
+    const newer =
+      (item.viewedAt || 0) > (existing.viewedAt || 0) ? item : existing;
+    const older = newer === item ? existing : item;
+    byBvid.set(item.video.bvid, combine(newer, older));
+  }
+
+  return [...byBvid.values()]
+    .sort((a, b) => (b.viewedAt || 0) - (a.viewedAt || 0))
+    .map((item) => ({ ...item.video, viewedAt: item.viewedAt }));
+}
 ```
 
-For equal timestamps, keep the first encountered item as the primary record so the result is stable.
+Local entries are always iterated before remote ones, so when timestamps are equal the local entry becomes "newer" (the `>` operator gives the existing entry priority over a late-arriving one with the same timestamp). This satisfies the spec's equal-timestamp requirement (local's own `viewedAt` guarantees stable ordering) and ensures the stale-friendly behavior: a local record with the same `viewedAt` as a remote record still surfaces.
 
 - [ ] **Step 4: Run merge tests**
 
@@ -333,25 +403,55 @@ git commit -m "feat: merge remote and local recent history"
 
 - [ ] **Step 1: Extend the storage mock and add failing player tests**
 
-Add `castRecentHistoryWrites: []` to the player test state and mock `addCastRecentHistory(entry)` by pushing into it. Add tests that render a cast video, dispatch `playing` twice, and assert exactly one entry:
+In `beforeEach`, add `castRecentHistoryWrites: []` to the `storageState` initial value. Extend the `mock.module(storagePath, ...)` call to include `addCastRecentHistory`:
+
+```ts
+// Inside the existing mock.module(storagePath, ...) in beforeEach:
+storage: {
+  ...realStorage.storage,
+  // … existing overrides (getSettings, setResumeProgress, etc.) stay …
+  addCastRecentHistory(entry) {
+    storageState.castRecentHistoryWrites.push(entry);
+  },
+  getCastRecentHistory() {
+    return storageState.castRecentHistory || [];
+  },
+},
+```
+
+Also add `castRecentHistory: []` to the `storageState` initial object so the page tests can seed local entries.
+
+Then add the following tests that render a cast video, dispatch `playing` twice, and assert exactly one entry. The test uses the repository's existing `renderWithNodeMock` / `React.createElement(PlayerPage, ...)` pattern, followed by `act`/`flush` stabilization to let Shaka init complete:
 
 ```ts
 test('records cast recent history on the first playing event only', async () => {
+  const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
   const video = createVideoMock();
-  await renderPlayer({
-    video: {
-      bvid: 'BVX',
-      cid: 7,
-      title: 'cast title',
-      owner: { name: 'owner' },
-      fromCast: true,
-    },
-    videoNode: video,
+  const onBack = mock(() => {});
+  const renderer = await renderWithNodeMock(
+    React.createElement(PlayerPage, {
+      video: {
+        bvid: 'BVX',
+        cid: 7,
+        title: 'cast title',
+        owner: { name: 'owner' },
+        fromCast: true,
+      },
+      onBack,
+    }),
+    (element) => (element.type === 'video' ? video : null),
+  );
+  await act(async () => {
+    await flush();
+    await flush();
+    await flush();
   });
+
   video.currentTime = 8;
   video.duration = 100;
-  await act(() => video.dispatch('playing'));
-  await act(() => video.dispatch('playing'));
+  await interact(() => video.dispatch('playing'));
+  await interact(() => video.dispatch('playing'));
+
   expect(storageState.castRecentHistoryWrites).toEqual([
     expect.objectContaining({
       bvid: 'BVX',
@@ -362,10 +462,53 @@ test('records cast recent history on the first playing event only', async () => 
       duration: 100,
     }),
   ]);
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test('does not write cast history for non-cast video', async () => {
+  const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+  const video = createVideoMock();
+  const renderer = await renderWithNodeMock(
+    React.createElement(PlayerPage, {
+      video: { bvid: 'BVY', cid: 5, title: 'app video', owner: { name: 'u' } },
+    }),
+    (element) => (element.type === 'video' ? video : null),
+  );
+  await act(async () => {
+    await flush();
+    await flush();
+    await flush();
+  });
+  video.duration = 100;
+  await interact(() => video.dispatch('playing'));
+  expect(storageState.castRecentHistoryWrites).toEqual([]);
+  await act(async () => { renderer.unmount(); });
+});
+
+test('does not write cast history without bvid', async () => {
+  const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+  const video = createVideoMock();
+  const renderer = await renderWithNodeMock(
+    React.createElement(PlayerPage, {
+      video: { cid: 6, title: 'no-bvid cast', fromCast: true },
+    }),
+    (element) => (element.type === 'video' ? video : null),
+  );
+  await act(async () => {
+    await flush();
+    await flush();
+    await flush();
+  });
+  video.duration = 100;
+  await interact(() => video.dispatch('playing'));
+  expect(storageState.castRecentHistoryWrites).toEqual([]);
+  await act(async () => { renderer.unmount(); });
 });
 ```
 
-Add two focused variants using the same existing render helper: one with `fromCast: false`, and one with no `bvid`; dispatch `playing` and assert the writes array remains empty. Also assert no write exists before `playing` is dispatched.
+No write assertions before `playing` are implicit: the initial state is `castRecentHistoryWrites = []` and no write logic runs during mount without a `playing` event.
 
 - [ ] **Step 2: Run focused player tests**
 
@@ -373,33 +516,80 @@ Run: `bun test src/player/player.render.test.ts -t "cast recent history"`
 
 Expected: FAIL because the storage method is never called.
 
-- [ ] **Step 3: Add an instance guard and metadata ref**
+- [ ] **Step 3: Add an instance guard, metadata ref, and populate it synchronously**
 
-Import the existing `storage`, add `castHistoryWrittenRef = useRef(false)`, and keep the latest cast card metadata in a ref updated when resolved title/CID data changes. In `handlePlaying`, mark the guard before storage access and call:
+Import the existing `storage`. Add two refs at the top of the component body:
 
 ```ts
-if (
-  !castHistoryWrittenRef.current &&
-  video?.fromCast === true &&
-  typeof video?.bvid === 'string' &&
-  video.bvid.trim()
-) {
-  castHistoryWrittenRef.current = true;
-  const metadata = castHistoryMetadataRef.current;
-  storage.addCastRecentHistory({
-    bvid: video.bvid,
-    cid: cidRef.current ?? video.cid,
-    title: metadata.title,
-    pic: metadata.pic,
-    ownerName: metadata.ownerName,
-    duration: Number(el.duration) || Number(video.duration) || undefined,
-    progress: Number(el.currentTime) || Number(video.progress) || 0,
-    viewedAt: Date.now(),
-  });
+const castHistoryWrittenRef = useRef(false);
+const castHistoryMetadataRef = useRef({
+  title: video?.title,
+  pic: video?.pic,
+  ownerName: video?.owner?.name,
+});
+```
+
+Update the ref synchronously at the top of the component on every render so it always reflects the latest prop values without an effect-timing gap:
+
+```ts
+castHistoryMetadataRef.current = {
+  title: video?.title || castHistoryMetadataRef.current.title,
+  pic: video?.pic || castHistoryMetadataRef.current.pic,
+  ownerName: video?.owner?.name || castHistoryMetadataRef.current.ownerName,
+};
+```
+
+Also update the ref inside `loadVideo` whenever metadata is resolved from `getVideoInfo`, so cast commands that arrive without a title still get the resolved data before `playing` fires:
+
+```ts
+// Inside loadVideo, after resolving title from getVideoInfo:
+if (info?.data?.title) {
+  castHistoryMetadataRef.current.title = info.data.title;
+  castHistoryMetadataRef.current.pic = info.data.pic || castHistoryMetadataRef.current.pic;
+}
+// After resolving owner name:
+if (info?.data?.owner?.name) {
+  castHistoryMetadataRef.current.ownerName = info.data.owner.name;
 }
 ```
 
-Do not add the write to the `play` event, load path, heartbeat interval, or resume-progress interval.
+Note: `getVideoInfo` already runs before `player.load()` and `video.play()`, and the `playing` event fires after playback starts, so the ref is always populated before the write guard is reached.
+
+In `handlePlaying`, access `videoRef.current` (aliased `el` in the listener scope), mark the guard, and write:
+
+```ts
+const handlePlaying = () => {
+  markPlaybackProgress();
+  setBuffering(false);
+  setLoading(false);
+  setPlaying(true);
+  castReportState({ playState: 'playing' }).catch(() => {});
+
+  if (
+    !castHistoryWrittenRef.current &&
+    video?.fromCast === true &&
+    typeof video?.bvid === 'string' &&
+    video.bvid.trim()
+  ) {
+    castHistoryWrittenRef.current = true;
+    const metadata = castHistoryMetadataRef.current;
+    const el = videoRef.current;
+    if (!el) return;
+    storage.addCastRecentHistory({
+      bvid: video.bvid,
+      cid: cidRef.current ?? video.cid,
+      title: metadata.title,
+      pic: metadata.pic,
+      ownerName: metadata.ownerName,
+      duration: Number(el.duration) || Number(video.duration) || undefined,
+      progress: Number(el.currentTime) || Number(video.progress) || 0,
+      viewedAt: Date.now(),
+    });
+  }
+};
+```
+
+Do not add the write to the `play` event, `loadVideo` path, heartbeat interval, or resume-progress interval.
 
 - [ ] **Step 4: Run the complete player test file**
 
@@ -422,7 +612,22 @@ git commit -m "feat: record cast videos after playback starts"
 
 - [ ] **Step 1: Add failing HistoryPage tests**
 
-Extend the mocked storage with `getCastRecentHistory`. Add tests using the existing `videoGridCalls`, timeout capture, `render`, `update`, and `flush` helpers:
+Extend the storage mock inside the `mock.module(storagePath, ...)` block to add `getCastRecentHistory`:
+
+```ts
+// Inside the existing mock.module in pages.render.test.ts, in the storage block:
+storage: {
+  ...realStorage.storage,
+  // … existing overrides (getAuth, setAuth, getSettings, setSettings) stay …
+  getCastRecentHistory() {
+    return storageState.castRecentHistory || [];
+  },
+},
+```
+
+The `storageState` in `beforeEach` already exists; add `castRecentHistory: []` to its initial value.
+
+Now add the merge/dedup test:
 
 ```ts
 test('HistoryPage merges remote and local history and deduplicates by bvid', async () => {
@@ -450,7 +655,9 @@ Create these exact additional tests, each using `React.createElement(HistoryPage
 - `HistoryPage shows local history with api error and timeout notices`: first throw `new Error('网络异常')`, then use a never-resolving promise and invoke `timeouts.at(-1).fn()`; for each renderer assert the seeded local title plus the corresponding message.
 - `HistoryPage keeps unavailable states blocking when local history is empty`: repeat logged-out and thrown-error responses with `storageState.castRecentHistory = []`; assert the message exists and no new `videoGridCalls` entry is added.
 - `HistoryPage treats an empty remote list as successful history`: return `{ code: 0, data: { list: [] } }`; assert `暂无观看记录` and no remote-error notice.
-- `HistoryPage ignores stale remote results after timeout or refresh`: retain a resolver for the first request, trigger its timeout, update the renderer from `refreshKey: 0` to `refreshKey: 1` with a second successful response, then resolve the first request; assert only the second response appears.
+- `HistoryPage ignores stale remote results after timeout or refresh`: retain a resolver for the first request, trigger its timeout, call `update` on the renderer with `refreshKey: 1` and a second successful response, then resolve the first request; assert only the second response appears in `videoGridCalls`.
+
+Update every pre-existing successful HistoryPage fixture in this file to include `code: 0`. The refactored page deliberately treats only `code === 0` with an array `data.list` as success; a fixture that supplies only `data.list` no longer models a valid API response.
 
 - [ ] **Step 2: Run focused page tests**
 
@@ -460,7 +667,7 @@ Expected: FAIL because `HistoryPage` neither reads local history nor supports in
 
 - [ ] **Step 3: Refactor HistoryPage state and loading effect**
 
-Accept `refreshKey`, import `mergeRecentHistory`, and replace the blocking `error` state with:
+Accept `refreshKey` (number), import `mergeRecentHistory` from `./history`, and replace the blocking `error`/`loading` state with:
 
 ```ts
 const [videos, setVideos] = useState([]);
@@ -468,7 +675,58 @@ const [remoteStatus, setRemoteStatus] = useState('loading');
 const [remoteMessage, setRemoteMessage] = useState('');
 ```
 
-On every `[refreshKey]` effect run, read `storage.getCastRecentHistory()` immediately, start `getHistory(0, 0, 24)`, and use a request-local `settled` flag plus cleanup cancellation. The timeout sets `settled = true`, status `timeout`, and merged local-only videos. A successful array response uses `mergeRecentHistory`; `-101` maps to `logged-out`; all other responses and thrown errors map to `error`. Never allow a completion after timeout or cleanup to set state.
+On every `[refreshKey]` effect run, read `storage.getCastRecentHistory()` immediately, then start `getHistory(0, 0, 24)`. Use a request-local `cancelled` flag (for cleanup/unmount) and a local `settled` flag (preventing a timeout-triggered stale or post-timeout resolution from overwriting newer data). The timeout sets `settled = true`, status to `'timeout'`, and message to `'加载超时'`. A successful response where `res.code === 0 && Array.isArray(res?.data?.list)` feeds both sources into `mergeRecentHistory`; `-101` maps to `'logged-out'`; all other responses and thrown errors map to `'error'` with `res.message || err.message`. On effect cleanup, set `cancelled = true` and clear the pending timeout. Never allow a read or state-set after `settled` or `cancelled`.
+
+```ts
+useEffect(() => {
+  let cancelled = false;
+  let settled = false;
+  let timer;
+
+  const localEntries = storage.getCastRecentHistory();
+  const localVideos = mergeRecentHistory([], localEntries);
+  setVideos(localVideos);
+  setRemoteStatus('loading');
+  setRemoteMessage('');
+
+  timer = setTimeout(() => {
+    if (cancelled) return;
+    settled = true;
+    setRemoteStatus('timeout');
+    setRemoteMessage('加载超时');
+  }, 10000);
+
+  async function load() {
+    try {
+      const res = await getHistory(0, 0, 24);
+      if (cancelled || settled) return;
+      if (res?.code === 0 && Array.isArray(res?.data?.list)) {
+        setVideos(mergeRecentHistory(res.data.list, localEntries));
+        setRemoteStatus('success');
+        setRemoteMessage('');
+      } else if (res?.code === -101) {
+        setRemoteStatus('logged-out');
+        setRemoteMessage('请先登录');
+      } else {
+        setRemoteStatus('error');
+        setRemoteMessage(res?.message || '加载失败');
+      }
+    } catch (err) {
+      if (!cancelled && !settled) {
+        setRemoteStatus('error');
+        setRemoteMessage(err.message);
+      }
+    }
+    if (!cancelled && !settled) clearTimeout(timer);
+  }
+
+  load();
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+  };
+}, [refreshKey]);
+```
 
 Render rules:
 
@@ -513,7 +771,17 @@ return (
 );
 ```
 
-Enable default grid focus whenever loading has ended and `videos.length > 0`, even if a non-blocking remote warning exists.
+Update the default-grid-focus effect to use `remoteStatus !== 'loading'` instead of the removed `!loading && !error`:
+
+```tsx
+useEffect(() => {
+  return scheduleDefaultGridFocus({
+    enabled: remoteStatus !== 'loading' && videos.length > 0,
+  });
+}, [remoteStatus, videos.length]);
+```
+
+This allows grid focus on local-only entries even when the remote status is `logged-out`, `error`, or `timeout`, matching the spec's non-blocking fallback requirement.
 
 - [ ] **Step 4: Run the complete page test file**
 
