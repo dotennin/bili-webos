@@ -5,6 +5,7 @@ import {
   textOf,
   flush,
   interact,
+  update,
 } from '../test/reactTestUtils.ts';
 
 let api;
@@ -74,6 +75,7 @@ beforeEach(() => {
   storageState = {
     auth: {},
     settings: { danmaku: true, quality: 80, videoGridCols: 4 },
+    castRecentHistory: [],
   };
   focusConfigs = [];
   oskKeys = [];
@@ -152,6 +154,9 @@ beforeEach(() => {
       getSettings: () => storageState.settings,
       setSettings: (value) => {
         storageState.settings = value;
+      },
+      getCastRecentHistory() {
+        return storageState.castRecentHistory || [];
       },
     },
   }));
@@ -686,6 +691,7 @@ describe('page rendering', () => {
     expect(textOf(failed.toJSON())).toContain('网络异常');
 
     api.getHistory.mockImplementationOnce(async () => ({
+      code: 0,
       data: {
         list: [
           {
@@ -728,6 +734,138 @@ describe('page rendering', () => {
     expect(textOf(timeoutRenderer.toJSON())).toContain('加载超时');
   });
 
+  test('HistoryPage merges remote and local history and deduplicates by bvid', async () => {
+    const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
+    storageState.castRecentHistory = [
+      { bvid: 'BV1', cid: 2, title: 'local', viewedAt: 20_000 },
+      { bvid: 'BV2', title: 'local only', viewedAt: 15_000 },
+    ];
+    api.getHistory.mockImplementationOnce(async () => ({
+      code: 0,
+      data: { list: [{ history: { bvid: 'BV1', cid: 1 }, title: 'remote', view_at: 10 }] },
+    }));
+    await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+    await flush();
+    expect(videoGridCalls.at(-1).videos.map((item) => item.bvid)).toEqual(['BV1', 'BV2']);
+    expect(videoGridCalls.at(-1).videos[0].cid).toBe(2);
+  });
+
+  test('HistoryPage shows local history with a non-blocking logged-out notice', async () => {
+    const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
+    storageState.castRecentHistory = [{ bvid: 'BV1', title: 'local video', viewedAt: 100 }];
+    api.getHistory.mockImplementationOnce(async () => ({ code: -101 }));
+    const rendered = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+    await flush();
+    expect(textOf(rendered.toJSON())).toContain('local video');
+    expect(textOf(rendered.toJSON())).toContain('请先登录');
+    expect(videoGridCalls.at(-1).videos).toBeDefined();
+    rendered.unmount();
+  });
+
+  test('HistoryPage shows local history with api error and timeout notices', async () => {
+    const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
+
+    storageState.castRecentHistory = [{ bvid: 'BV1', title: 'local error', viewedAt: 100 }];
+    api.getHistory.mockImplementationOnce(async () => {
+      throw new Error('网络异常');
+    });
+    const errorRendered = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+    await flush();
+    expect(textOf(errorRendered.toJSON())).toContain('网络异常');
+    expect(textOf(errorRendered.toJSON())).toContain('local error');
+    expect(videoGridCalls.at(-1).videos).toBeDefined();
+
+    storageState.castRecentHistory = [{ bvid: 'BV2', title: 'local timeout', viewedAt: 100 }];
+    api.getHistory.mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+    const timeoutRendered = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+    await interact(() => timeouts.at(-1).fn());
+    expect(textOf(timeoutRendered.toJSON())).toContain('加载超时');
+    expect(textOf(timeoutRendered.toJSON())).toContain('local timeout');
+    expect(videoGridCalls.at(-1).videos).toBeDefined();
+
+    errorRendered.unmount();
+    timeoutRendered.unmount();
+  });
+
+  test('HistoryPage keeps unavailable states blocking when local history is empty', async () => {
+    const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
+
+    storageState.castRecentHistory = [];
+    api.getHistory.mockImplementationOnce(async () => ({ code: -101 }));
+    const loggedOutRendered = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+    await flush();
+    expect(textOf(loggedOutRendered.toJSON())).toContain('请先登录');
+    expect(videoGridCalls).toHaveLength(0);
+
+    api.getHistory.mockImplementationOnce(async () => {
+      throw new Error('网络异常');
+    });
+    const errorRendered = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+    await flush();
+    expect(textOf(errorRendered.toJSON())).toContain('网络异常');
+    expect(videoGridCalls).toHaveLength(0);
+
+    loggedOutRendered.unmount();
+    errorRendered.unmount();
+  });
+
+  test('HistoryPage treats an empty remote list as successful history', async () => {
+    const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
+    api.getHistory.mockImplementationOnce(async () => ({
+      code: 0,
+      data: { list: [] },
+    }));
+    const rendered = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+    await flush();
+    expect(textOf(rendered.toJSON())).toContain('暂无观看记录');
+    rendered.unmount();
+  });
+
+  test('HistoryPage ignores stale remote results after timeout or refresh', async () => {
+    const { default: HistoryPage } = await importFresh('./HistoryPage.tsx');
+
+    let resolveFirst;
+    api.getHistory.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveFirst = resolve; }),
+    );
+
+    const renderer = await render(
+      React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 0 }),
+    );
+
+    await interact(() => timeouts.at(-1).fn());
+
+    api.getHistory.mockImplementationOnce(async () => ({
+      code: 0,
+      data: { list: [{ history: { bvid: 'BV2' }, title: 'second' }] },
+    }));
+
+    await update(renderer, React.createElement(HistoryPage, { onPlayVideo() {}, refreshKey: 1 }));
+
+    await interact(() => resolveFirst({
+      code: 0,
+      data: { list: [{ history: { bvid: 'BV1' }, title: 'first' }] },
+    }));
+
+    expect(videoGridCalls.at(-1).videos[0].bvid).toBe('BV2');
+  });
+
   test('HomePage moves focus to the first video card after sidebar tab activation', async () => {
     const { default: HomePage } = await importFresh('./HomePage.tsx');
 
@@ -752,6 +890,7 @@ describe('page rendering', () => {
 
     currentFocusId = 'sidebar-5-0';
     api.getHistory.mockImplementationOnce(async () => ({
+      code: 0,
       data: {
         list: [
           {
