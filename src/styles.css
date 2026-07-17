@@ -193,13 +193,12 @@ body,
   overflow: hidden;
   background: linear-gradient(180deg, #141c2d 0%, var(--bg-surface) 100%);
   cursor: pointer;
-  outline: none;
+  outline: 3px solid transparent;
+  outline-offset: -3px;
   contain: content;
   content-visibility: auto;
   transform: scale(1);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16);
-  transition: transform var(--motion-fast) ease, border-color var(--motion-fast)
-    ease, box-shadow var(--motion-fast) ease;
+  transition: transform var(--motion-fast) ease;
 }
 .video-card.focused,
 .subscription-card.focused {
@@ -207,8 +206,8 @@ body,
   position: relative;
   background: var(--bg-raised);
   border-color: var(--focus-ring);
+  outline-color: var(--focus-ring);
   transform: scale(1.03);
-  box-shadow: var(--focus-shadow);
 }
 .video-card-thumb {
   width: 100%;
@@ -781,6 +780,8 @@ body,
   min-width: 0;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  outline: 3px solid transparent;
+  outline-offset: -3px;
   background: linear-gradient(180deg, #141c2d 0%, var(--bg-surface) 100%);
   color: #f6f8ff;
   transform: scale(1);
