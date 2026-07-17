@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { storage } from '../utils/storage';
 import { useFocusable } from '../hooks/useFocus';
+import PageHeader from '../components/PageHeader';
 
 type SettingsPageProps = {
   onLogout: () => void;
@@ -24,9 +25,9 @@ export default function SettingsPage({ onLogout, user }: SettingsPageProps) {
   });
 
   const { props: gridColsProps } = useFocusable({
-    id: 'content-0-1',
-    row: 0,
-    col: 1,
+    id: 'content-1-0',
+    row: 1,
+    col: 0,
     group: 'content',
     onSelect: () => {
       const current = Number(settings.videoGridCols) || 3;
@@ -38,9 +39,9 @@ export default function SettingsPage({ onLogout, user }: SettingsPageProps) {
   });
 
   const { props: logoutProps } = useFocusable({
-    id: 'content-0-2',
-    row: 0,
-    col: 2,
+    id: 'content-2-0',
+    row: 2,
+    col: 0,
     group: 'content',
     onSelect: () => {
       storage.clearAuth();
@@ -49,31 +50,36 @@ export default function SettingsPage({ onLogout, user }: SettingsPageProps) {
   });
 
   return (
-    <div style={{ padding: '20px 28px', height: '100%', overflow: 'auto' }}>
-      <div
-        style={{
-          fontSize: 26,
-          fontWeight: 600,
-          color: '#fff',
-          marginBottom: 20,
-        }}
-      >
-        {user ? `${user.uname} 的空间` : '我的'}
-      </div>
+    <div className="page-shell page-scroll settings-page">
+      <PageHeader
+        eyebrow="PREFERENCES"
+        title={user ? `${user.uname} 的空间` : '设置'}
+        description="播放与界面偏好会保存在此设备"
+      />
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-        <div {...danmakuProps} className="detail-btn" style={{ fontSize: 16 }}>
-          弹幕: {settings.danmaku ? '开' : '关'}
+      <div className="settings-list">
+        <div {...danmakuProps} className="setting-row">
+          <div className="setting-copy">
+            <div className="setting-name">显示弹幕</div>
+            <div className="setting-description">播放视频时显示实时弹幕</div>
+          </div>
+          <span className="setting-value">
+            {settings.danmaku ? '开启' : '关闭'}
+          </span>
         </div>
-        <div {...gridColsProps} className="detail-btn" style={{ fontSize: 16 }}>
-          每行视频数: {settings.videoGridCols}
+        <div {...gridColsProps} className="setting-row">
+          <div className="setting-copy">
+            <div className="setting-name">每行视频数</div>
+            <div className="setting-description">根据观看距离调整卡片密度</div>
+          </div>
+          <span className="setting-value">{settings.videoGridCols} 列</span>
         </div>
-        <div
-          {...logoutProps}
-          className="detail-btn secondary"
-          style={{ fontSize: 16, background: '#4a2020' }}
-        >
-          退出登录
+        <div {...logoutProps} className="setting-row setting-row-danger">
+          <div className="setting-copy">
+            <div className="setting-name">退出当前账号</div>
+            <div className="setting-description">清除本机登录信息</div>
+          </div>
+          <span className="setting-value">退出</span>
         </div>
       </div>
     </div>

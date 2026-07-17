@@ -86,28 +86,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
   }, [qrUrl]);
 
-  const statusColor =
-    status === 'success'
-      ? '#52c41a'
-      : status === 'scanned'
-        ? '#faad14'
-        : status === 'error' || status === 'expired'
-          ? '#ff4d4f'
-          : '#8888a0';
-
   return (
     <div className="login-page">
-      <h2 style={{ fontSize: 36, marginBottom: 30, color: '#00a1d6' }}>
-        哔哩哔哩
-      </h2>
-      <div className="login-qr">
-        <canvas ref={canvasRef} />
-      </div>
-      <div className="login-tip">{STATUS_TEXT[status]}</div>
-      <div className="login-status" style={{ color: statusColor }}>
-        {status === 'expired' && '🔄'}
-        {status === 'scanned' && '📱'}
-        {status === 'success' && '✅'}
+      <div className="login-panel">
+        <div className="login-qr">
+          <canvas ref={canvasRef} />
+        </div>
+        <div className="login-copy">
+          <div className="page-eyebrow">SIGN IN</div>
+          <h2>扫码登录哔哩哔哩</h2>
+          <div className={`login-status login-status-${status}`}>
+            <span className="login-status-dot" />
+            {STATUS_TEXT[status]}
+          </div>
+          <div className="login-steps">
+            <div>
+              <span>1</span>打开哔哩哔哩 App
+            </div>
+            <div>
+              <span>2</span>扫描二维码
+            </div>
+            <div>
+              <span>3</span>在手机上确认登录
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -17,6 +17,10 @@ let storageState;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
+const responsiveColsPath = new URL(
+  '../hooks/useResponsiveGridCols.ts',
+  import.meta.url,
+).pathname;
 const realApi = await import(apiPath);
 const realHooks = await import(hooksPath);
 const realStorage = await import(storagePath);
@@ -123,6 +127,12 @@ beforeEach(() => {
       setFocusCalls.push(id);
       focusId = id;
     },
+    restoreFocusIfMissing(id) {
+      if (!focusId) {
+        setFocusCalls.push(id);
+        focusId = id;
+      }
+    },
     onFocusChange(handler) {
       focusListener = handler;
       return () => {
@@ -136,6 +146,9 @@ beforeEach(() => {
       ...realStorage.storage,
       getSettings: () => storageState.settings,
     },
+  }));
+  mock.module(responsiveColsPath, () => ({
+    useResponsiveGridCols: () => 4,
   }));
 });
 
@@ -171,12 +184,16 @@ test('HomePage loads by mode, dedupes items, focuses first content, and loads mo
   api.getPopular.mockResolvedValueOnce({
     data: { list: [{ bvid: 'BV5', title: '热门2' }] },
   });
+  focusId = 'content-4-0';
+  const focusCallCountBeforePagination = setFocusCalls.length;
   await interact(() => focusListener?.('content-0-0'));
   expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual([
     'BV1',
     'BV5',
   ]);
-  expect(videoGridCalls.at(-1).focusRow).toBe(0);
+  expect(videoGridCalls.at(-1).focusRow).toBeUndefined();
+  expect(setFocusCalls).toHaveLength(focusCallCountBeforePagination);
+  expect(focusId).toBe('content-4-0');
 
   setFocusCalls = [];
   focusId = 'sidebar-0-0';

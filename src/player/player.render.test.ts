@@ -386,7 +386,11 @@ afterEach(() => {
 
 describe('DanmakuLayer', () => {
   test('renders visible danmaku items and resets on source change', async () => {
-    const { default: DanmakuLayer } = await importFresh('./DanmakuLayer.tsx');
+    const { default: DanmakuLayer, getDanmakuTrackCount } =
+      await importFresh('./DanmakuLayer.tsx');
+
+    expect(getDanmakuTrackCount(540)).toBe(10);
+    expect(getDanmakuTrackCount(810)).toBe(15);
 
     const renderer = await render(
       React.createElement(DanmakuLayer, {

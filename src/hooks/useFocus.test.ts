@@ -51,6 +51,7 @@ test('register/setFocus/onFocusChange update DOM focus classes', async () => {
     setFocus,
     getCurrentFocusId,
     onFocusChange,
+    restoreFocusIfMissing,
   } = mod;
   const sidebar = createFocusableNode('sidebar-0-0');
   const content = createFocusableNode('content-0-0');
@@ -71,9 +72,24 @@ test('register/setFocus/onFocusChange update DOM focus classes', async () => {
   expect(content.scrollIntoViewCalls[0]).toEqual({ block: 'nearest' });
   expect(seen).toEqual(['sidebar-0-0', 'content-0-0']);
 
+  restoreFocusIfMissing('sidebar-0-0');
+  expect(getCurrentFocusId()).toBe('content-0-0');
+
   off();
+  content.element.dataset.focusId = 'content-0-1';
   unregisterFocusable('content-0-0');
   expect(getCurrentFocusId()).toBeNull();
+  expect(content.element.classList.contains('focused')).toBe(false);
+  const replacement = createFocusableNode('content-0-0');
+  registerFocusable('content-0-0', { row: 0, col: 0, group: 'content' });
+  expect(getCurrentFocusId()).toBeNull();
+  restoreFocusIfMissing('sidebar-0-0');
+  expect(getCurrentFocusId()).toBe('content-0-0');
+  expect(replacement.element.classList.contains('focused')).toBe(true);
+  expect(testDocument.querySelectorAll('.focused')).toHaveLength(1);
+  unregisterFocusable('content-0-0');
+  restoreFocusIfMissing('sidebar-0-0');
+  expect(getCurrentFocusId()).toBe('sidebar-0-0');
 });
 
 test('createFocusableHandlers focuses on hover and selects on click', async () => {

@@ -27,28 +27,28 @@ type FocusableOptions = {
 
 const focusRegistry = new Map<string, FocusableEntry>();
 let currentFocusId: string | null = null;
+let pendingFocusRestoreId: string | null = null;
+let currentFocusElement: Element | null = null;
 
 // Track last sidebar focus position
 let lastSidebarFocus = 'sidebar-0-0';
 
 // Direct DOM focus update - no React involved
 function applyFocus(newId: string | null) {
-  const prevId = currentFocusId;
   currentFocusId = newId;
 
   // Remember sidebar position
   if (newId?.startsWith('sidebar-')) lastSidebarFocus = newId;
 
   // Remove focus from previous element
-  if (prevId) {
-    const prevEl = document.querySelector(`[data-focus-id="${prevId}"]`);
-    if (prevEl) prevEl.classList.remove('focused');
-  }
+  currentFocusElement?.classList.remove('focused');
+  currentFocusElement = null;
 
   // Add focus to new element
   if (newId) {
     const newEl = document.querySelector(`[data-focus-id="${newId}"]`);
     if (newEl) {
+      currentFocusElement = newEl;
       newEl.classList.add('focused');
       newEl.scrollIntoView({ block: 'nearest' });
     }
@@ -64,16 +64,31 @@ export function registerFocusable(id, data) {
 
 export function unregisterFocusable(id) {
   focusRegistry.delete(id);
-  if (currentFocusId === id) currentFocusId = null;
+  if (currentFocusId === id) {
+    currentFocusElement?.classList.remove('focused');
+    currentFocusElement = null;
+    pendingFocusRestoreId = id;
+    currentFocusId = null;
+  }
 }
 
 export function setFocus(id) {
   if (!focusRegistry.has(id) || id === currentFocusId) return;
+  pendingFocusRestoreId = null;
   applyFocus(id);
 }
 
 export function getCurrentFocusId() {
   return currentFocusId;
+}
+
+export function restoreFocusIfMissing(fallbackId: string) {
+  if (currentFocusId && focusRegistry.has(currentFocusId)) return;
+  if (pendingFocusRestoreId && focusRegistry.has(pendingFocusRestoreId)) {
+    setFocus(pendingFocusRestoreId);
+    return;
+  }
+  setFocus(fallbackId);
 }
 
 // Global listeners (minimal - only for things like page switching)
@@ -252,7 +267,10 @@ export const __testing = {
   },
   reset() {
     focusRegistry.clear();
+    currentFocusElement?.classList.remove('focused');
+    currentFocusElement = null;
     currentFocusId = null;
+    pendingFocusRestoreId = null;
     lastSidebarFocus = 'sidebar-0-0';
     customKeyHandler = null;
     if (keyHandler) {

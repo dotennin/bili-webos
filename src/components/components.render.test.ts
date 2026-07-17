@@ -41,6 +41,72 @@ afterEach(() => {
 });
 
 describe('rendered components', () => {
+  test('AppIcon renders consistent dependency-free svg icons', async () => {
+    const { default: AppIcon, APP_ICON_NAMES } =
+      await importComponent('./AppIcon.tsx');
+
+    for (const name of APP_ICON_NAMES) {
+      const renderer = await render(
+        React.createElement(AppIcon, { name, className: 'nav-icon' }),
+      );
+      const svg = renderer.container.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg.getAttribute('viewBox')).toBe('0 0 24 24');
+      expect(svg.getAttribute('class')).toContain('nav-icon');
+      expect(svg.getAttribute('stroke')).toBe('currentColor');
+      renderer.unmount();
+    }
+  });
+
+  test('PageHeader renders required and optional content', async () => {
+    const { default: PageHeader } =
+      await importComponent('./PageHeader.tsx');
+    const renderer = await render(
+      React.createElement(
+        PageHeader,
+        {
+          title: '为你推荐',
+          eyebrow: 'DISCOVER',
+          description: '精选内容',
+        },
+        React.createElement('span', null, '用户'),
+      ),
+    );
+    expect(textOf(renderer.toJSON())).toContain('DISCOVER');
+    expect(textOf(renderer.toJSON())).toContain('为你推荐');
+    expect(textOf(renderer.toJSON())).toContain('精选内容');
+    expect(textOf(renderer.toJSON())).toContain('用户');
+    renderer.unmount();
+
+    const titleOnly = await render(
+      React.createElement(PageHeader, { title: '搜索' }),
+    );
+    expect(textOf(titleOnly.toJSON())).toBe('搜索');
+    titleOnly.unmount();
+  });
+
+  test('PageState renders loading, empty, error, and unauthenticated states', async () => {
+    const { default: PageState } =
+      await importComponent('./PageState.tsx');
+    const cases = [
+      ['loading', '加载中...', true],
+      ['empty', '暂无内容', false],
+      ['error', '加载失败', false],
+      ['unauthenticated', '请先登录', false],
+    ];
+
+    for (const [state, message, hasSpinner] of cases) {
+      const renderer = await render(
+        React.createElement(PageState, { state, message }),
+      );
+      expect(textOf(renderer.toJSON())).toContain(message);
+      expect(renderer.container.querySelector('.loading-spinner') !== null).toBe(
+        hasSpinner,
+      );
+      renderer.unmount();
+    }
+  });
+
   test('FocusableTab wires active state and onSelect', async () => {
     const { default: FocusableTab } =
       await importComponent('./FocusableTab.tsx');
@@ -102,7 +168,7 @@ describe('rendered components', () => {
       React.createElement(SidebarItem, {
         id: 'sidebar-1-0',
         row: 1,
-        icon: '🔥',
+        icon: 'hot',
         label: '热门',
         active: true,
         onSelect,
@@ -110,7 +176,7 @@ describe('rendered components', () => {
     );
 
     const item = renderer.container.querySelector('.sidebar-item.active');
-    expect(textOf(item)).toContain('🔥');
+    expect(item.querySelector('svg')).not.toBeNull();
     expect(textOf(item)).toContain('热门');
     expect(focusConfigs.at(-1).onSelect).toBe(onSelect);
     item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -147,6 +213,8 @@ describe('rendered components', () => {
     expect(textOf(renderer.toJSON())).toContain('测试视频');
     expect(textOf(renderer.toJSON())).toContain('UP 主');
     expect(textOf(renderer.toJSON())).toContain('播放');
+    expect(renderer.container.querySelector('.video-card-progress')).not.toBeNull();
+    expect(renderer.container.querySelector('.video-card-progress-fill')).not.toBeNull();
 
     const card = renderer.container.querySelector('.video-card');
     card.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -223,11 +291,13 @@ describe('rendered components', () => {
         group: 'results',
         startRow: 4,
         cols: 2,
-        focusRow: 3,
         onSelect: (video) => selectCalls.push(video.title),
       }),
     );
 
+    const grid = gridRenderer.container.querySelector('.video-grid');
+    expect(grid).not.toBeNull();
+    expect(grid.style.transform).toBe('');
     const cards = Array.from(
       gridRenderer.container.querySelectorAll('.video-card'),
     );

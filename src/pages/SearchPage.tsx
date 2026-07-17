@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { searchVideo } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
 import OSKey from '../components/OSKey';
-import { storage } from '../utils/storage';
+import PageHeader from '../components/PageHeader';
+import PageState from '../components/PageState';
+import { useResponsiveGridCols } from '../hooks/useResponsiveGridCols';
+import { restoreFocusIfMissing } from '../hooks/useFocus';
 
 const KEYBOARD_ROWS = [
   ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
@@ -20,7 +23,20 @@ export default function SearchPage({ onPlayVideo }: SearchPageProps) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [gridCols] = useState(() => storage.getSettings().videoGridCols || 3);
+  const gridCols = useResponsiveGridCols();
+  const previousGridColsRef = useRef(gridCols);
+
+  useEffect(() => {
+    if (previousGridColsRef.current === gridCols) return;
+    previousGridColsRef.current = gridCols;
+    if (results.length === 0) return;
+
+    const timer = globalThis.setTimeout(
+      () => restoreFocusIfMissing('content-10-0'),
+      0,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [gridCols, results.length]);
 
   async function doSearch() {
     if (!keyword.trim()) return;
@@ -45,10 +61,12 @@ export default function SearchPage({ onPlayVideo }: SearchPageProps) {
   }
 
   return (
-    <div className="search-container">
-      <div className="page-title" style={{ padding: 0 }}>
-        搜索
-      </div>
+    <div className="page-shell page-scroll search-container">
+      <PageHeader
+        eyebrow="SEARCH"
+        title="搜索"
+        description="使用屏幕键盘输入关键词"
+      />
       <div className="search-bar">
         <div
           className="search-input"
@@ -85,14 +103,11 @@ export default function SearchPage({ onPlayVideo }: SearchPageProps) {
       </div>
 
       {loading ? (
-        <div className="loading">
-          <div className="loading-spinner" />
-          搜索中...
-        </div>
+        <PageState state="loading" message="搜索中..." />
       ) : searched && results.length === 0 ? (
-        <div className="empty-state">未找到相关视频</div>
+        <PageState state="empty" message="未找到相关视频" />
       ) : results.length > 0 ? (
-        <div style={{ marginTop: 8 }}>
+        <div className="search-results">
           <VideoGrid
             videos={results}
             startRow={10}

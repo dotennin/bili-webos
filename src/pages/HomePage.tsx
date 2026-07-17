@@ -7,11 +7,21 @@ import {
   getLiveList,
 } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
-import { onFocusChange } from '../hooks/useFocus';
+import PageHeader from '../components/PageHeader';
+import PageState from '../components/PageState';
+import { onFocusChange, restoreFocusIfMissing } from '../hooks/useFocus';
+import { useResponsiveGridCols } from '../hooks/useResponsiveGridCols';
 import { scheduleDefaultGridFocus } from './pageFocus';
-import { storage } from '../utils/storage';
 
 const FETCH_SIZE = 20;
+
+const MODE_COPY = {
+  recommend: ['DISCOVER', '为你推荐', '精选内容，方向键即可浏览'],
+  hot: ['TRENDING', '热门', '正在受到关注的内容'],
+  live: ['LIVE', '直播', '发现正在直播的精彩内容'],
+  partition: ['CHANNELS', '分区', '探索不同兴趣分区'],
+  follow: ['FOLLOWING', '关注', '查看关注 UP 主的最新内容'],
+};
 
 async function fetchByMode(mode, pn) {
   if (mode === 'hot') {
@@ -70,8 +80,9 @@ export default function HomePage({
 }: HomePageProps) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [focusRow, setFocusRow] = useState(0);
-  const [gridCols] = useState(() => storage.getSettings().videoGridCols || 3);
+  const [error, setError] = useState('');
+  const gridCols = useResponsiveGridCols();
+  const previousGridColsRef = useRef(gridCols);
   const pageRef = useRef(1);
   const seenRef = useRef(new Set());
   const fetchingRef = useRef(false);
@@ -82,8 +93,8 @@ export default function HomePage({
     seenRef.current = new Set();
     pageRef.current = 1;
     setLoading(true);
+    setError('');
     setVideos([]);
-    setFocusRow(0);
 
     fetchByMode(mode, 1)
       .then((items) => {
@@ -93,7 +104,10 @@ export default function HomePage({
         pageRef.current = 2;
       })
       .catch(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError('内容加载失败，请稍后重试');
+          setLoading(false);
+        }
       });
 
     return () => {
@@ -106,6 +120,18 @@ export default function HomePage({
       enabled: !loading && videos.length > 0,
     });
   }, [loading]);
+
+  useEffect(() => {
+    if (previousGridColsRef.current === gridCols) return;
+    previousGridColsRef.current = gridCols;
+    if (loading || videos.length === 0) return;
+
+    const timer = globalThis.setTimeout(
+      () => restoreFocusIfMissing('content-0-0'),
+      0,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [gridCols, loading, videos.length]);
 
   function dedupe(items) {
     return items.filter((v) => {
@@ -123,7 +149,6 @@ export default function HomePage({
       const m = fid.match(/^content-(\d+)-/);
       if (!m) return;
       const row = parseInt(m[1]);
-      setFocusRow(row);
 
       // Load more when near bottom
       const totalRows = Math.ceil(videos.length / gridCols);
@@ -144,22 +169,25 @@ export default function HomePage({
   }, [videos.length, mode, gridCols]);
 
   if (loading) {
-    return (
-      <div className="loading">
-        <div className="loading-spinner" />
-        加载中...
-      </div>
-    );
+    return <PageState state="loading" />;
   }
 
+  const [eyebrow, title, description] = MODE_COPY[mode] || MODE_COPY.recommend;
+
   return (
-    <VideoGrid
-      videos={videos}
-      group="content"
-      startRow={0}
-      cols={gridCols}
-      onSelect={onPlayVideo}
-      focusRow={focusRow}
-    />
+    <div className="page-shell page-scroll">
+      <PageHeader eyebrow={eyebrow} title={title} description={description} />
+      {error ? (
+        <PageState state="error" message={error} />
+      ) : (
+        <VideoGrid
+          videos={videos}
+          group="content"
+          startRow={0}
+          cols={gridCols}
+          onSelect={onPlayVideo}
+        />
+      )}
+    </div>
   );
 }
