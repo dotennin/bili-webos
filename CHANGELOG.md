@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.14.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.13.0...bili-webos-tv-v1.14.0) (2026-07-17)
+
+
+### Features
+
+* remember subtitle preference ([#123](https://github.com/dotennin/bili-webos/issues/123)) ([f620318](https://github.com/dotennin/bili-webos/commit/f62031832c8ce54a8dcc8ff04dddd36a0bd845d6))
+
+
+### Bug Fixes
+
+* show cast video title in overlay and ensure cast videos report to history ([#125](https://github.com/dotennin/bili-webos/issues/125)) ([66d7f34](https://github.com/dotennin/bili-webos/commit/66d7f34da2713b6802d61c36e995e1ac0da6ae44))
+* sync overlay quality after automatic adaptation ([#127](https://github.com/dotennin/bili-webos/issues/127)) ([6e10923](https://github.com/dotennin/bili-webos/commit/6e109238f6cba04702c01f260fa5fd7cd04a23d5))
+
 ## [1.13.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.12.1...bili-webos-tv-v1.13.0) (2026-07-12)
 
 
