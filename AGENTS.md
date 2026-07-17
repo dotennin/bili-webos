@@ -88,7 +88,6 @@ In Dev: Web App ──HTTP──────▶ Vite Dev Server (/proxy) ──H
 - Keep `.video-card` on the proven lightweight focus path: `transform 0.15s ease` is the only transition. Do not animate `background`, `border-color`, `outline`, `filter`, or `box-shadow`.
 - Do not add blurred card shadows, backdrop filters, broad `will-change`, or desktop hover effects to TV video cards. These cause large card repaints or excessive compositor memory on webOS.
 - Preserve the established video-card geometry unless a real-device test explicitly justifies a change: 12px radius, 16:9 thumbnail, existing title/meta typography, and 1.03 focused scale. Prefer color-token changes over structural restyling.
-- Keep enough top padding on `.video-grid` for the first row's focused scale so cards do not visually collide with the page header.
 - Update `src/styles.performance.test.ts` whenever card or grid CSS changes. Run it directly, then run the full coverage suite before committing.
 
 ## Development Workflow

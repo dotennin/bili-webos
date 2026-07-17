@@ -38,7 +38,7 @@ test('video cards retain the TV-proven layout and transform-only focus style', (
   );
 
   expect(getTransitionProperties(cardRule)).toEqual(['transform']);
-  expect(gridRule).toContain('padding: 20px 40px 48px');
+  expect(gridRule).toContain('padding: 0 40px 48px');
   expect(getTransitionProperties(focusRule)).toEqual([]);
   expect(cardRule).toContain('border-radius: 12px');
   expect(cardRule).toContain('outline: none');
