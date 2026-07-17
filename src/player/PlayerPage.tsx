@@ -596,6 +596,12 @@ export default function PlayerPage({
           error: e.detail?.message || 'shaka-error',
         }).catch(() => {});
       });
+      player.addEventListener('adaptation', (e) => {
+        const quality = Number(e.newTrack?.originalVideoId);
+        if (Number.isFinite(quality) && quality > 0) {
+          setCurrentQuality(quality);
+        }
+      });
       if (mounted) loadVideo(player);
     }
     init();

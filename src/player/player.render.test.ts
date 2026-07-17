@@ -32,7 +32,6 @@ let originalDateNow;
 let liveDanmakuState;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
-const proxyPath = new URL('../utils/proxy.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
 const liveDanmakuHookPath = new URL(
   './useLiveDanmaku.ts',
@@ -40,7 +39,6 @@ const liveDanmakuHookPath = new URL(
 ).pathname;
 const realApi = await import(apiPath);
 const realStorage = await import(storagePath);
-const realProxy = await import(proxyPath);
 const realHooks = await import(hooksPath);
 const NativeURL = globalThis.URL;
 const originalGlobals = {
@@ -193,7 +191,9 @@ beforeEach(() => {
     currentTime: 0,
   };
 
-  globalThis.window = Object.assign(eventTarget, {});
+  globalThis.window = Object.assign(eventTarget, {
+    location: { origin: 'http://proxy.test', hostname: 'localhost' },
+  });
   const domDocument = globalThis.__TEST_DOCUMENT__;
   globalThis.document = {
     querySelectorAll(selector) {
@@ -275,12 +275,6 @@ beforeEach(() => {
       },
     },
   }));
-  mock.module(proxyPath, () => ({
-    ...realProxy,
-    getProxyBase: () => 'http://proxy.test',
-    buildProxyUrl: (url) =>
-      `http://proxy.test/proxy/${new URL(url).host}${new URL(url).pathname}${new URL(url).search}`,
-  }));
   mock.module(hooksPath, () => ({
     ...realHooks,
     setCustomKeyHandler(handler) {
@@ -309,6 +303,7 @@ beforeEach(() => {
       constructor() {
         this.config = null;
         this.errorHandler = null;
+        this.adaptationHandler = null;
         this.requestFilter = null;
         this.retryCalls = 0;
         shakaPlayers.push(this);
@@ -322,6 +317,7 @@ beforeEach(() => {
       async attach() {}
       addEventListener(type, handler) {
         if (type === 'error') this.errorHandler = handler;
+        if (type === 'adaptation') this.adaptationHandler = handler;
       }
       getNetworkingEngine() {
         return {
@@ -379,7 +375,6 @@ afterEach(() => {
   mock.restore();
   mock.module(apiPath, () => realApi);
   mock.module(storagePath, () => realStorage);
-  mock.module(proxyPath, () => realProxy);
   mock.module(hooksPath, () => realHooks);
   for (const [name, value] of Object.entries(originalGlobals)) {
     restoreGlobal(name, value);
@@ -424,6 +419,36 @@ describe('DanmakuLayer', () => {
 });
 
 describe('PlayerPage', () => {
+  test('updates the displayed quality after automatic adaptation', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-ABR', cid: 6, title: '自动画质' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    expect(JSON.stringify(renderer.toJSON())).toContain('1080P');
+    if (shakaPlayers[0].adaptationHandler) {
+      await interact(() =>
+        shakaPlayers[0].adaptationHandler({
+          newTrack: { originalVideoId: '64' },
+        }),
+      );
+    }
+    expect(JSON.stringify(renderer.toJSON())).toContain('720P');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test('loads video, handles controls, related, quality, cast commands, and remote keys', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();
