@@ -32,7 +32,6 @@ let originalDateNow;
 let liveDanmakuState;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
-const proxyPath = new URL('../utils/proxy.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
 const liveDanmakuHookPath = new URL(
   './useLiveDanmaku.ts',
@@ -40,7 +39,6 @@ const liveDanmakuHookPath = new URL(
 ).pathname;
 const realApi = await import(apiPath);
 const realStorage = await import(storagePath);
-const realProxy = await import(proxyPath);
 const realHooks = await import(hooksPath);
 const NativeURL = globalThis.URL;
 const originalGlobals = {
@@ -193,7 +191,9 @@ beforeEach(() => {
     currentTime: 0,
   };
 
-  globalThis.window = Object.assign(eventTarget, {});
+  globalThis.window = Object.assign(eventTarget, {
+    location: { origin: 'http://proxy.test', hostname: 'localhost' },
+  });
   const domDocument = globalThis.__TEST_DOCUMENT__;
   globalThis.document = {
     querySelectorAll(selector) {
@@ -274,12 +274,6 @@ beforeEach(() => {
         return Number(duration) - Number(progress) <= 3;
       },
     },
-  }));
-  mock.module(proxyPath, () => ({
-    ...realProxy,
-    getProxyBase: () => 'http://proxy.test',
-    buildProxyUrl: (url) =>
-      `http://proxy.test/proxy/${new URL(url).host}${new URL(url).pathname}${new URL(url).search}`,
   }));
   mock.module(hooksPath, () => ({
     ...realHooks,
@@ -381,7 +375,6 @@ afterEach(() => {
   mock.restore();
   mock.module(apiPath, () => realApi);
   mock.module(storagePath, () => realStorage);
-  mock.module(proxyPath, () => realProxy);
   mock.module(hooksPath, () => realHooks);
   for (const [name, value] of Object.entries(originalGlobals)) {
     restoreGlobal(name, value);
