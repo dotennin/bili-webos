@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.15.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.14.0...bili-webos-tv-v1.15.0) (2026-07-17)
+
+
+### Features
+
+* modernize TV interface ([#128](https://github.com/dotennin/bili-webos/issues/128)) ([7fbb10a](https://github.com/dotennin/bili-webos/commit/7fbb10aa20fbdd3825fe4bcc0ff6f4f6942c63cd))
+
+
+### Bug Fixes
+
+* restore cast scrub preview thumbnails ([#130](https://github.com/dotennin/bili-webos/issues/130)) ([9e87a45](https://github.com/dotennin/bili-webos/commit/9e87a45b28f29eb31bc0f11fba3385bc69cade21))
+
 ## [1.14.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.13.0...bili-webos-tv-v1.14.0) (2026-07-17)
 
 
