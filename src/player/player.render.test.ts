@@ -851,6 +851,7 @@ describe('PlayerPage', () => {
       await flush();
     });
     expect(api.getVideoInfo).toHaveBeenCalled();
+    expect(api.getStoryboard).toHaveBeenCalledWith('BVX', 6);
     expect(JSON.stringify(renderer.toJSON())).toContain('详情标题');
     await act(async () => {
       renderer.unmount();

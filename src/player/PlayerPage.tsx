@@ -640,6 +640,7 @@ export default function PlayerPage({
         if (titleNeedsResolution) {
           if (video?.bvid || video?.aid) {
             const info = await getVideoInfo(video);
+            if (!video.bvid && info?.data?.bvid) video.bvid = info.data.bvid;
             if (info?.data?.title) {
               setVideoTitle(info.data.title);
             } else {
