@@ -1,14 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getHistory } from '../api/client';
 import VideoGrid from '../components/VideoGrid';
-import { storage } from '../utils/storage';
+import PageHeader from '../components/PageHeader';
+import PageState from '../components/PageState';
+import { useResponsiveGridCols } from '../hooks/useResponsiveGridCols';
+import { restoreFocusIfMissing } from '../hooks/useFocus';
 import { scheduleDefaultGridFocus } from './pageFocus';
 
 export default function HistoryPage({ onPlayVideo }) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [gridCols] = useState(() => storage.getSettings().videoGridCols || 3);
+  const gridCols = useResponsiveGridCols();
+  const previousGridColsRef = useRef(gridCols);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,31 +62,41 @@ export default function HistoryPage({ onPlayVideo }) {
     });
   }, [error, loading, videos.length]);
 
-  if (loading)
-    return (
-      <div className="loading">
-        <div className="loading-spinner" />
-        加载中...
-      </div>
+  useEffect(() => {
+    if (previousGridColsRef.current === gridCols) return;
+    previousGridColsRef.current = gridCols;
+    if (loading || error || videos.length === 0) return;
+
+    const timer = globalThis.setTimeout(
+      () => restoreFocusIfMissing('content-0-0'),
+      0,
     );
-  if (error)
-    return (
-      <div>
-        <div className="page-title">最近观看</div>
-        <div className="empty-state">{error}</div>
-      </div>
-    );
+    return () => globalThis.clearTimeout(timer);
+  }, [error, gridCols, loading, videos.length]);
 
   return (
-    <div className="content-scroll">
-      <div className="section-title">最近观看</div>
-      <VideoGrid
-        videos={videos}
-        group="content"
-        startRow={0}
-        cols={gridCols}
-        onSelect={onPlayVideo}
+    <div className="page-shell page-scroll">
+      <PageHeader
+        eyebrow="HISTORY"
+        title="最近观看"
+        description="从上次停下的位置继续"
       />
+      {loading ? (
+        <PageState state="loading" />
+      ) : error ? (
+        <PageState
+          state={error === '请先登录' ? 'unauthenticated' : 'error'}
+          message={error}
+        />
+      ) : (
+        <VideoGrid
+          videos={videos}
+          group="content"
+          startRow={0}
+          cols={gridCols}
+          onSelect={onPlayVideo}
+        />
+      )}
     </div>
   );
 }

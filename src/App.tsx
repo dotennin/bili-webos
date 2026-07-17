@@ -3,6 +3,7 @@ import { initKeyboardNav, setFocus, useFocusable } from './hooks/useFocus';
 import { castAck, castSubscribe, getNavInfo } from './api/client';
 import { storage } from './utils/storage';
 import SidebarItem from './components/SidebarItem';
+import type { AppIconName } from './components/AppIcon';
 import packageJson from '../package.json';
 
 import LoginPage from './pages/LoginPage';
@@ -17,20 +18,20 @@ import LivePlayerPage from './player/LivePlayerPage';
 type NavItem = {
   key: string;
   label: string;
-  icon: string;
+  icon: AppIconName;
   dividerBefore?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'recommend', label: '推荐', icon: '🏠' },
-  { key: 'hot', label: '热门', icon: '🔥' },
-  { key: 'live', label: '直播', icon: '📡' },
-  { key: 'partition', label: '分区', icon: '📁' },
-  { key: 'follow', label: '关注', icon: '👤' },
-  { key: 'history', label: '最近观看', icon: '🕘' },
-  { key: 'favorites', label: '我的收藏', icon: '⭐' },
-  { key: 'search', label: '搜索', icon: '🔍' },
-  { key: 'settings', label: '设置', icon: '⚙️' },
+  { key: 'recommend', label: '推荐', icon: 'home' },
+  { key: 'hot', label: '热门', icon: 'hot' },
+  { key: 'live', label: '直播', icon: 'live' },
+  { key: 'partition', label: '分区', icon: 'partition' },
+  { key: 'follow', label: '关注', icon: 'follow' },
+  { key: 'history', label: '最近观看', icon: 'history' },
+  { key: 'favorites', label: '我的收藏', icon: 'favorites' },
+  { key: 'search', label: '搜索', icon: 'search' },
+  { key: 'settings', label: '设置', icon: 'settings' },
 ];
 
 type SidebarProps = {
@@ -366,17 +367,7 @@ export default function App() {
       )}
 
       {showLogin && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: 1920,
-            height: 1080,
-            zIndex: 200,
-            background: '#0d0d1a',
-          }}
-        >
+        <div className="login-overlay">
           <LoginPage onLogin={handleLogin} />
         </div>
       )}

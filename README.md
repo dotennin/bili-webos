@@ -20,13 +20,19 @@ A third-party Bilibili client built for LG webOS TVs.
 
 ## Screenshots
 
-| Home (320px) | Player (320px) |
-| --- | --- |
-| <img src="docs/screenshots/home.jpg" width="320" alt="Home screen"> | <img src="docs/screenshots/player.jpg" width="320" alt="Player screen"> |
+The TV-first interface uses high-contrast D-pad focus states, natural grid scrolling, and a consistent dark visual system across browsing and account pages.
 
-| Search (320px) | Scrub Preview (320px) |
+| Home | Search |
 | --- | --- |
-| <img src="docs/screenshots/search.png" width="320" alt="Search screen"> | <img src="docs/screenshots/scrub-preview.png" width="320" alt="Scrub preview thumbnails"> |
+| <img src="docs/screenshots/home.jpg" width="320" alt="TV home screen with a focused video card"> | <img src="docs/screenshots/search.png" width="320" alt="TV search screen with the on-screen keyboard"> |
+
+| Settings | QR Login |
+| --- | --- |
+| <img src="docs/screenshots/settings.png" width="320" alt="TV settings screen with a focused preference row"> | <img src="docs/screenshots/login.png" width="320" alt="QR code login screen"> |
+
+| Player | Scrub Preview |
+| --- | --- |
+| <img src="docs/screenshots/player.jpg" width="320" alt="Player screen"> | <img src="docs/screenshots/scrub-preview.png" width="320" alt="Scrub preview thumbnails"> |
 
 ## Architecture
 

@@ -1,11 +1,12 @@
 import React from 'react';
 import { useFocusable } from '../hooks/useFocus';
+import AppIcon, { type AppIconName } from './AppIcon';
 
 type SidebarItemProps = {
   id: string;
   row: number;
   label: React.ReactNode;
-  icon?: React.ReactNode;
+  icon: AppIconName;
   active?: boolean;
   onSelect?: () => void;
 };
@@ -28,7 +29,7 @@ export default React.memo(function SidebarItem({
 
   return (
     <div {...props} className={`sidebar-item ${active ? 'active' : ''}`}>
-      <span>{icon}</span>
+      <AppIcon name={icon} className="sidebar-icon" />
       <span className="sidebar-label">{label}</span>
     </div>
   );

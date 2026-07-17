@@ -1,15 +1,28 @@
 import React, { useRef, useEffect } from 'react';
 
+const MAX_TRACKS = 15;
+const TRACK_HEIGHT_PX = 48;
+const TRACK_TOP_PX = 20;
+const DEFAULT_CONTAINER_HEIGHT_PX = 810;
+
+export function getDanmakuTrackCount(containerHeight: number) {
+  const availableHeight = Math.max(0, containerHeight - TRACK_TOP_PX);
+  return Math.max(
+    1,
+    Math.min(MAX_TRACKS, Math.floor(availableHeight / TRACK_HEIGHT_PX)),
+  );
+}
+
 // Danmaku rendering layer over video
 export default function DanmakuLayer({ danmakus, currentTime, enabled }) {
   const containerRef = useRef(null);
   const renderedRef = useRef(new Set()); // Track which danmakus have been shown
-  const trackRef = useRef(new Array(15).fill(0)); // 15 tracks, value = time when track becomes free
+  const trackRef = useRef(new Array(MAX_TRACKS).fill(0));
 
   // Reset when danmaku list changes
   useEffect(() => {
     renderedRef.current = new Set();
-    trackRef.current = new Array(15).fill(0);
+    trackRef.current = new Array(MAX_TRACKS).fill(0);
     if (containerRef.current) {
       containerRef.current.innerHTML = '';
     }
@@ -36,7 +49,13 @@ export default function DanmakuLayer({ danmakus, currentTime, enabled }) {
 
       // Find a free track
       let track = -1;
-      for (let t = 0; t < trackRef.current.length; t++) {
+      const containerHeight =
+        container.clientHeight ||
+        (typeof window === 'undefined'
+          ? DEFAULT_CONTAINER_HEIGHT_PX
+          : (window.innerHeight || 1080) * 0.75);
+      const trackCount = getDanmakuTrackCount(containerHeight);
+      for (let t = 0; t < trackCount; t++) {
         if (trackRef.current[t] <= now) {
           track = t;
           trackRef.current[t] = now + 3; // Occupy track for 3 seconds
@@ -48,7 +67,7 @@ export default function DanmakuLayer({ danmakus, currentTime, enabled }) {
       const el = document.createElement('div');
       el.className = 'danmaku-item';
       el.textContent = dm.text;
-      el.style.top = `${track * 48 + 20}px`;
+      el.style.top = `${track * TRACK_HEIGHT_PX + TRACK_TOP_PX}px`;
       el.style.color = dm.color || '#fff';
       el.style.fontSize = `${dm.size || 28}px`;
       el.style.animationDuration = '8s';

@@ -5,6 +5,7 @@ screenshot*.png
 verify-screenshot.png
 proxy/cookies.json
 .claude/
+.superpowers/
 .DS_Store
 .env
 

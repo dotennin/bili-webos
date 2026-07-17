@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getFavFolders,
   getFavList,
@@ -8,13 +8,16 @@ import {
 import FocusableTab from '../components/FocusableTab';
 import SubscriptionList from '../components/SubscriptionList';
 import VideoGrid from '../components/VideoGrid';
+import PageHeader from '../components/PageHeader';
+import PageState from '../components/PageState';
 import {
   getCurrentFocusId,
   onFocusChange,
+  restoreFocusIfMissing,
   setCustomKeyHandler,
   setFocus,
 } from '../hooks/useFocus';
-import { storage } from '../utils/storage';
+import { useResponsiveGridCols } from '../hooks/useResponsiveGridCols';
 
 const FAVORITES_MODE = 'favorites';
 const SUBSCRIPTIONS_MODE = 'subscriptions';
@@ -36,6 +39,34 @@ function parseSubscriptionFocusId(focusId) {
     row: Number(match[1]),
     col: Number(match[2]),
   };
+}
+
+export function getFavoritesResizeFallbackId({
+  gridCols,
+  isFavoritesMode,
+  isSubscriptionDetail,
+  isSubscriptionsMode,
+  favoriteVideosLength,
+  subscriptionVideosLength,
+  subscriptionsLength,
+  lastFocusedSubscriptionIndex,
+}) {
+  if (isFavoritesMode) {
+    return favoriteVideosLength > 0 ? 'content-2-0' : 'content-0-0';
+  }
+  if (isSubscriptionDetail) {
+    return subscriptionVideosLength > 0 ? 'content-1-0' : 'content-0-1';
+  }
+  if (isSubscriptionsMode && subscriptionsLength > 0) {
+    const index =
+      Number.isInteger(lastFocusedSubscriptionIndex) &&
+      lastFocusedSubscriptionIndex >= 0 &&
+      lastFocusedSubscriptionIndex < subscriptionsLength
+        ? lastFocusedSubscriptionIndex
+        : 0;
+    return getSubscriptionFocusId(index, gridCols);
+  }
+  return 'content-0-0';
 }
 
 function mapFavoriteVideo(item) {
@@ -78,12 +109,14 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
   });
   const [subscriptionVideosLoading, setSubscriptionVideosLoading] =
     useState(false);
-  const [lastFocusedSubscriptionId, setLastFocusedSubscriptionId] =
+  const [lastFocusedSubscriptionIndex, setLastFocusedSubscriptionIndex] =
     useState(null);
   const [shouldRestoreSubscriptionFocus, setShouldRestoreSubscriptionFocus] =
     useState(false);
   const [subscriptionDetailCache, setSubscriptionDetailCache] = useState({});
-  const [gridCols] = useState(() => storage.getSettings().videoGridCols || 3);
+  const gridCols = useResponsiveGridCols();
+  const previousGridColsRef = useRef(gridCols);
+  const subscriptionDetailFocusKeyRef = useRef(null);
 
   const selectedFolderIndex = folders.findIndex(
     (folder) => folder.id === selectedFolderId,
@@ -310,22 +343,62 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
       return;
     }
 
+    if (!isSubscriptionDetail) {
+      subscriptionDetailFocusKeyRef.current = null;
+      return;
+    }
+
     if (
-      isSubscriptionDetail &&
       !subscriptionVideosLoading &&
       subscriptionVideos.length > 0 &&
       !subscriptionsError
     ) {
-      setFocus('content-1-0');
+      const focusKey = selectedSubscription?.id || '';
+      if (subscriptionDetailFocusKeyRef.current !== focusKey) {
+        subscriptionDetailFocusKeyRef.current = focusKey;
+        setFocus('content-1-0');
+      }
     }
   }, [
     favoriteVideos.length,
     favoritesLoading,
     isFavoritesMode,
     isSubscriptionDetail,
+    selectedSubscription?.id,
     subscriptionVideos.length,
     subscriptionVideosLoading,
     subscriptionsError,
+  ]);
+
+  useEffect(() => {
+    if (previousGridColsRef.current === gridCols) return;
+    previousGridColsRef.current = gridCols;
+
+    const fallbackId = getFavoritesResizeFallbackId({
+      gridCols,
+      isFavoritesMode,
+      isSubscriptionDetail,
+      isSubscriptionsMode,
+      favoriteVideosLength: favoriteVideos.length,
+      subscriptionVideosLength: subscriptionVideos.length,
+      subscriptionsLength: subscriptions.length,
+      lastFocusedSubscriptionIndex,
+    });
+
+    const timer = globalThis.setTimeout(
+      () => restoreFocusIfMissing(fallbackId),
+      0,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [
+    favoriteVideos.length,
+    gridCols,
+    isFavoritesMode,
+    isSubscriptionDetail,
+    isSubscriptionsMode,
+    lastFocusedSubscriptionIndex,
+    subscriptionVideos.length,
+    subscriptions.length,
   ]);
 
   useEffect(() => {
@@ -341,22 +414,22 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
       return;
     }
 
-    const nextFocusId =
-      lastFocusedSubscriptionId &&
-      subscriptions.some(
-        (_, index) =>
-          getSubscriptionFocusId(index, gridCols) === lastFocusedSubscriptionId,
-      )
-        ? lastFocusedSubscriptionId
-        : subscriptions.length > 0
-          ? getSubscriptionFocusId(0, gridCols)
-          : 'content-0-1';
+    const hasRestorableIndex =
+      Number.isInteger(lastFocusedSubscriptionIndex) &&
+      lastFocusedSubscriptionIndex >= 0 &&
+      lastFocusedSubscriptionIndex < subscriptions.length;
+    const nextFocusId = hasRestorableIndex
+      ? getSubscriptionFocusId(lastFocusedSubscriptionIndex, gridCols)
+      : subscriptions.length > 0
+        ? getSubscriptionFocusId(0, gridCols)
+        : 'content-0-1';
 
     setFocus(nextFocusId);
     setShouldRestoreSubscriptionFocus(false);
   }, [
+    gridCols,
     isSubscriptionsMode,
-    lastFocusedSubscriptionId,
+    lastFocusedSubscriptionIndex,
     shouldRestoreSubscriptionFocus,
     subscriptionView,
     subscriptionsLoaded,
@@ -586,33 +659,26 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
     folders.length,
     isFavoritesMode,
     isSubscriptionsMode,
-    lastFocusedSubscriptionId,
+    lastFocusedSubscriptionIndex,
     selectedFolderIndex,
     subscriptionVideos.length,
     subscriptionView,
     subscriptions,
   ]);
 
-  function handleSubscriptionSelect(item, index, focusId) {
+  function handleSubscriptionSelect(item, index) {
     setSelectedSubscription(item);
-    setLastFocusedSubscriptionId(
-      focusId || getSubscriptionFocusId(index, gridCols),
-    );
+    setLastFocusedSubscriptionIndex(index);
     setSubscriptionView(SUBSCRIPTION_DETAIL_VIEW);
   }
 
   function renderFavoritesContent() {
     if (isFavoriteFoldersLoading) {
-      return (
-        <div className="loading">
-          <div className="loading-spinner" />
-          加载中...
-        </div>
-      );
+      return <PageState state="loading" />;
     }
 
     if (favoritesError) {
-      return <div className="empty-state">{favoritesError}</div>;
+      return <PageState state="empty" message={favoritesError} />;
     }
 
     return (
@@ -635,10 +701,7 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
           </div>
         ) : null}
         {isFavoriteVideosLoading ? (
-          <div className="loading">
-            <div className="loading-spinner" />
-            加载中...
-          </div>
+          <PageState state="loading" />
         ) : (
           <VideoGrid
             videos={favoriteVideos}
@@ -655,16 +718,11 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
   function renderSubscriptionsContent() {
     if (subscriptionView === SUBSCRIPTION_DETAIL_VIEW) {
       if (subscriptionVideosLoading && subscriptionVideos.length === 0) {
-        return (
-          <div className="loading">
-            <div className="loading-spinner" />
-            加载中...
-          </div>
-        );
+        return <PageState state="loading" />;
       }
 
       if (subscriptionsError) {
-        return <div className="empty-state">{subscriptionsError}</div>;
+        return <PageState state="error" message={subscriptionsError} />;
       }
 
       return (
@@ -679,16 +737,11 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
     }
 
     if (subscriptionsLoading && subscriptions.length === 0) {
-      return (
-        <div className="loading">
-          <div className="loading-spinner" />
-          加载中...
-        </div>
-      );
+      return <PageState state="loading" />;
     }
 
     if (subscriptionsError) {
-      return <div className="empty-state">{subscriptionsError}</div>;
+      return <PageState state="error" message={subscriptionsError} />;
     }
 
     return (
@@ -702,16 +755,20 @@ export default function FavoritesPage({ userMid, onPlayVideo }) {
 
   if (!userMid) {
     return (
-      <div>
-        <div className="page-title">我的收藏</div>
-        <div className="empty-state">请先登录</div>
+      <div className="page-shell page-scroll">
+        <PageHeader eyebrow="LIBRARY" title="我的收藏" />
+        <PageState state="unauthenticated" />
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="page-title">{pageTitle}</div>
+    <div className="page-shell page-scroll">
+      <PageHeader
+        eyebrow="LIBRARY"
+        title={pageTitle}
+        description="整理收藏夹与订阅内容"
+      />
       <div className="tabs tabs-primary">
         <FocusableTab
           id="content-0-0"

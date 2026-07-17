@@ -49,6 +49,7 @@ export default React.memo(function VideoCard({
         {thumbUrl && (
           <img src={thumbUrl} alt="" loading="lazy" decoding="async" />
         )}
+        {!thumbUrl && <div className="video-card-thumb-placeholder" />}
         {video.duration != null && (
           <span className="video-card-duration">
             {typeof video.duration === 'number'
@@ -57,20 +58,10 @@ export default React.memo(function VideoCard({
           </span>
         )}
         {video.progress > 0 && video.duration > 0 && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: 3,
-              background: 'rgba(255,255,255,0.2)',
-            }}
-          >
+          <div className="video-card-progress">
             <div
+              className="video-card-progress-fill"
               style={{
-                height: '100%',
-                background: '#00a1d6',
                 width: `${Math.min(100, (video.progress / video.duration) * 100)}%`,
               }}
             />

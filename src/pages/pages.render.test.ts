@@ -5,6 +5,7 @@ import {
   textOf,
   flush,
   interact,
+  update,
 } from '../test/reactTestUtils.ts';
 
 let api;
@@ -19,9 +20,15 @@ let setFocusCalls;
 let currentFocusId;
 let customKeyHandler;
 let focusChangeHandler;
+let responsiveGridCols;
+let restoreFocusCalls;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
+const responsiveColsPath = new URL(
+  '../hooks/useResponsiveGridCols.ts',
+  import.meta.url,
+).pathname;
 const realApi = await import(apiPath);
 const realHooks = await import(hooksPath);
 const realStorage = await import(storagePath);
@@ -85,6 +92,8 @@ beforeEach(() => {
   currentFocusId = null;
   customKeyHandler = null;
   focusChangeHandler = null;
+  responsiveGridCols = 4;
+  restoreFocusCalls = [];
 
   mock.module(apiPath, () => ({
     ...realApi,
@@ -118,6 +127,9 @@ beforeEach(() => {
     setFocus(id) {
       setFocusCalls.push(id);
       currentFocusId = id;
+    },
+    restoreFocusIfMissing(id) {
+      restoreFocusCalls.push(id);
     },
     onFocusChange(handler) {
       focusChangeHandler = handler;
@@ -154,6 +166,9 @@ beforeEach(() => {
         storageState.settings = value;
       },
     },
+  }));
+  mock.module(responsiveColsPath, () => ({
+    useResponsiveGridCols: () => responsiveGridCols,
   }));
   mock.module('qrcode', () => ({
     default: {
@@ -359,7 +374,21 @@ describe('page rendering', () => {
   });
 
   test('FavoritesPage supports subscriptions list, detail, and focus restoration', async () => {
-    const { default: FavoritesPage } = await importFresh('./FavoritesPage.tsx');
+    const { default: FavoritesPage, getFavoritesResizeFallbackId } =
+      await importFresh('./FavoritesPage.tsx');
+
+    expect(
+      getFavoritesResizeFallbackId({
+        gridCols: 3,
+        isFavoritesMode: false,
+        isSubscriptionDetail: true,
+        isSubscriptionsMode: true,
+        favoriteVideosLength: 0,
+        subscriptionVideosLength: 0,
+        subscriptionsLength: 15,
+        lastFocusedSubscriptionIndex: 14,
+      }),
+    ).toBe('content-0-1');
 
     api.getFavFolders.mockImplementationOnce(async () => ({
       data: { list: [{ id: 7, title: '默认收藏夹' }] },
@@ -446,6 +475,16 @@ describe('page rendering', () => {
 
     expect(textOf(page.toJSON())).toContain('订阅 15');
     expect(setFocusCalls.at(-1)).toBe('subscription-3-2');
+
+    responsiveGridCols = 3;
+    await update(
+      page,
+      React.createElement(FavoritesPage, { userMid: 1, onPlayVideo() {} }),
+    );
+    await flush();
+    await flush();
+    await interact(() => timeouts.at(-1)?.fn());
+    expect(restoreFocusCalls.at(-1)).toBe('subscription-4-2');
 
     await interact(() =>
       focusConfigs.find((config) => config.id === 'content-0-0').onSelect(),
@@ -616,6 +655,9 @@ describe('page rendering', () => {
     );
     await flush();
 
+    const detailFocusCountBeforePagination = setFocusCalls.filter(
+      (focusId) => focusId === 'content-1-0',
+    ).length;
     await interact(() => focusChangeHandler?.('content-0-3'));
     await flush();
 
@@ -625,6 +667,9 @@ describe('page rendering', () => {
       pageSize: 30,
     });
     expect(textOf(page.toJSON())).toContain('详情视频 5');
+    expect(
+      setFocusCalls.filter((focusId) => focusId === 'content-1-0'),
+    ).toHaveLength(detailFocusCountBeforePagination);
 
     page.unmount();
   });
@@ -794,6 +839,9 @@ describe('page rendering', () => {
     expect(textOf(renderer.toJSON())).toContain(
       '请使用哔哩哔哩手机客户端扫描二维码',
     );
+    expect(textOf(renderer.toJSON())).toContain('打开哔哩哔哩 App');
+    expect(textOf(renderer.toJSON())).toContain('扫描二维码');
+    expect(textOf(renderer.toJSON())).toContain('确认登录');
 
     api.qrCodePoll.mockResolvedValueOnce({ data: { code: 86090 } });
     await interact(() => intervals[0].fn());
@@ -880,6 +928,15 @@ describe('page rendering', () => {
     });
     expect(videoGridCalls.at(-1).cols).toBe(4);
     expect(textOf(renderer.toJSON())).toContain('结果');
+
+    responsiveGridCols = 3;
+    await update(
+      renderer,
+      React.createElement(SearchPage, { onPlayVideo() {} }),
+    );
+    await flush();
+    await interact(() => timeouts.at(-1)?.fn());
+    expect(restoreFocusCalls.at(-1)).toBe('content-10-0');
   });
 
   test('SettingsPage toggles danmaku, updates grid columns, and logs out', async () => {
@@ -895,7 +952,9 @@ describe('page rendering', () => {
     await flush();
 
     expect(textOf(renderer.toJSON())).toContain('测试用户 的空间');
-    expect(textOf(renderer.toJSON())).toContain('每行视频数: 4');
+    expect(textOf(renderer.toJSON())).toContain('每行视频数');
+    expect(textOf(renderer.toJSON())).toContain('4 列');
+    expect(textOf(renderer.toJSON())).toContain('根据观看距离调整卡片密度');
     expect(textOf(renderer.toJSON())).not.toContain('最近观看');
 
     await interact(() =>
@@ -903,15 +962,15 @@ describe('page rendering', () => {
     );
     expect(storageState.settings.danmaku).toBe(false);
     await interact(() =>
-      focusConfigs.filter((config) => config.id === 'content-0-1').at(-1).onSelect(),
+      focusConfigs.filter((config) => config.id === 'content-1-0').at(-1).onSelect(),
     );
     expect(storageState.settings.videoGridCols).toBe(2);
     await interact(() =>
-      focusConfigs.filter((config) => config.id === 'content-0-1').at(-1).onSelect(),
+      focusConfigs.filter((config) => config.id === 'content-1-0').at(-1).onSelect(),
     );
     expect(storageState.settings.videoGridCols).toBe(3);
     await interact(() =>
-      focusConfigs.filter((config) => config.id === 'content-0-2').at(-1).onSelect(),
+      focusConfigs.filter((config) => config.id === 'content-2-0').at(-1).onSelect(),
     );
     expect(logs).toEqual(['logout']);
   });
