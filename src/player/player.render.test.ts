@@ -309,6 +309,7 @@ beforeEach(() => {
       constructor() {
         this.config = null;
         this.errorHandler = null;
+        this.adaptationHandler = null;
         this.requestFilter = null;
         this.retryCalls = 0;
         shakaPlayers.push(this);
@@ -322,6 +323,7 @@ beforeEach(() => {
       async attach() {}
       addEventListener(type, handler) {
         if (type === 'error') this.errorHandler = handler;
+        if (type === 'adaptation') this.adaptationHandler = handler;
       }
       getNetworkingEngine() {
         return {
@@ -424,6 +426,36 @@ describe('DanmakuLayer', () => {
 });
 
 describe('PlayerPage', () => {
+  test('updates the displayed quality after automatic adaptation', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-ABR', cid: 6, title: '自动画质' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    expect(JSON.stringify(renderer.toJSON())).toContain('1080P');
+    if (shakaPlayers[0].adaptationHandler) {
+      await interact(() =>
+        shakaPlayers[0].adaptationHandler({
+          newTrack: { originalVideoId: '64' },
+        }),
+      );
+    }
+    expect(JSON.stringify(renderer.toJSON())).toContain('720P');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test('loads video, handles controls, related, quality, cast commands, and remote keys', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();
