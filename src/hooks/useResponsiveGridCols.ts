@@ -28,10 +28,8 @@ export function subscribeToViewportWidth(
   return () => target.removeEventListener('resize', updateViewportWidth);
 }
 
-export function useResponsiveGridCols(preferredColsOverride?: number) {
-  const [preferredCols] = useState(
-    () => preferredColsOverride ?? storage.getSettings().videoGridCols,
-  );
+export function useResponsiveGridCols() {
+  const [preferredCols] = useState(() => storage.getSettings().videoGridCols);
   const [viewportWidth, setViewportWidth] = useState(getViewportWidth);
 
   useEffect(() => subscribeToViewportWidth(setViewportWidth), []);

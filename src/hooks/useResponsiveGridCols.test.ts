@@ -9,7 +9,7 @@ import {
 const originalInnerWidth = window.innerWidth;
 
 function GridColsProbe() {
-  return React.createElement('div', null, useResponsiveGridCols(2));
+  return React.createElement('div', null, useResponsiveGridCols());
 }
 
 beforeEach(() => {
@@ -20,11 +20,11 @@ afterEach(() => {
   window.innerWidth = originalInnerWidth;
 });
 
-test('uses an explicit preference without reading shared storage', async () => {
+test('uses the default preference at the current viewport width', async () => {
   const renderer = await render(React.createElement(GridColsProbe));
   await flush();
 
-  expect(textOf(renderer.toJSON())).toBe('2');
+  expect(textOf(renderer.toJSON())).toBe('3');
   renderer.unmount();
 });
 
