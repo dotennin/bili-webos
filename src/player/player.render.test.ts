@@ -8,6 +8,7 @@ import {
   update,
   act,
   interact,
+  textOf,
 } from '../test/reactTestUtils.ts';
 
 let api;
@@ -24,6 +25,7 @@ let originalConsoleError;
 let shakaSupported;
 let shakaLoadError;
 let shakaPlayers;
+let revokedObjectUrls;
 let mpegtsSupported;
 let mpegtsFeatureList;
 let mpegtsPlayers;
@@ -179,6 +181,7 @@ beforeEach(() => {
   shakaSupported = true;
   shakaLoadError = null;
   shakaPlayers = [];
+  revokedObjectUrls = [];
   mpegtsSupported = true;
   mpegtsFeatureList = { mseLivePlayback: true };
   mpegtsPlayers = [];
@@ -230,7 +233,9 @@ beforeEach(() => {
     static createObjectURL() {
       return 'blob:test';
     }
-    static revokeObjectURL() {}
+    static revokeObjectURL(url) {
+      revokedObjectUrls.push(url);
+    }
   };
 
   mock.module(apiPath, () => ({
@@ -305,6 +310,7 @@ beforeEach(() => {
         this.errorHandler = null;
         this.adaptationHandler = null;
         this.requestFilter = null;
+        this.estimatedBandwidth = 0;
         this.retryCalls = 0;
         shakaPlayers.push(this);
       }
@@ -329,6 +335,9 @@ beforeEach(() => {
       async load(url) {
         if (shakaLoadError) throw shakaLoadError;
         shakaLoads.push(url);
+      }
+      getStats() {
+        return { estimatedBandwidth: this.estimatedBandwidth };
       }
       async destroy() {
         shakaDestroyed += 1;
@@ -485,12 +494,52 @@ describe('PlayerPage', () => {
     expect(shakaLoads[0]).toBe('blob:test');
     expect(video.playCalls).toBeGreaterThan(0);
     expect(shakaPlayers[0].config.streaming.bufferBehind).toBe(30);
+    expect(textOf(renderer.toJSON())).not.toContain('测速中…');
+    expect(textOf(renderer.toJSON())).not.toContain('0 MB/s');
+    expect(textOf(renderer.toJSON())).not.toContain('当前速度');
 
-    const proxiedRequest = { uris: ['https://cdn.test/path/seg.m4s?token=1'] };
+    const proxiedRequest = {
+      uris: [
+        'https://cdn.test/path/seg.m4s?token=1',
+        'https://fallback.test/path/seg.m4s?token=2',
+      ],
+    };
     shakaPlayers[0].requestFilter(null, proxiedRequest);
-    expect(proxiedRequest.uris[0]).toBe(
+    expect(proxiedRequest.uris).toEqual([
       'http://proxy.test/proxy/cdn.test/path/seg.m4s?token=1',
+      'http://proxy.test/proxy/fallback.test/path/seg.m4s?token=2',
+    ]);
+    const mixedRequest = {
+      uris: [
+        'HTTPS://UPPER.TEST/path/seg.m4s',
+        'http-segment.m4s',
+        'blob:manifest',
+        'http://proxy.test/proxy/already.test/path/seg.m4s',
+      ],
+    };
+    shakaPlayers[0].requestFilter(null, mixedRequest);
+    expect(mixedRequest.uris).toEqual([
+      'http://proxy.test/proxy/upper.test/path/seg.m4s',
+      'http-segment.m4s',
+      'blob:manifest',
+      'http://proxy.test/proxy/already.test/path/seg.m4s',
+    ]);
+    shakaPlayers[0].estimatedBandwidth = 8 * 1024 * 1024;
+    await interact(() =>
+      intervals
+        .filter((item) => item.delay === 250 && !item.cleared)
+        .at(-1)?.fn(),
     );
+    expect(textOf(renderer.toJSON())).toContain('1 MB/s');
+    expect(textOf(renderer.toJSON())).not.toContain('当前速度');
+
+    video.error = { message: 'media failed' };
+    await interact(() => video.dispatch('error'));
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('加载中...');
+    expect(api.castReportState).toHaveBeenCalledWith({
+      playState: 'error',
+      error: 'media-error',
+    });
 
     await interact(() => video.dispatch('loadedmetadata'));
     expect(video.currentTime).toBe(0);
@@ -500,6 +549,7 @@ describe('PlayerPage', () => {
     await interact(() => video.dispatch('canplay'));
     expect(video.currentTime).toBeCloseTo(23, 1);
     await interact(() => video.dispatch('loadeddata'));
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('当前速度');
     await interact(() => video.dispatch('play'));
     expect(api.castReportState).toHaveBeenCalledWith({ playState: 'playing' });
     expect(JSON.stringify(renderer.toJSON())).toContain('"作者"," · 2024/3/9"');
@@ -705,6 +755,7 @@ describe('PlayerPage', () => {
       undefined,
       expect.anything(),
     );
+    expect(JSON.stringify(noCidRenderer.toJSON())).not.toContain('加载中...');
     await act(async () => {
       noCidRenderer.unmount();
     });
@@ -723,6 +774,7 @@ describe('PlayerPage', () => {
       await flush();
     });
     expect(shakaLoads).not.toContain('blob:test');
+    expect(JSON.stringify(noDashRenderer.toJSON())).not.toContain('加载中...');
     await act(async () => {
       noDashRenderer.unmount();
     });
@@ -744,6 +796,7 @@ describe('PlayerPage', () => {
       playState: 'error',
       error: 'boom',
     });
+    expect(revokedObjectUrls).toContain('blob:test');
     expect(JSON.stringify(errorRenderer.toJSON())).not.toContain('加载中...');
     await act(async () => {
       errorRenderer.unmount();
@@ -769,6 +822,79 @@ describe('PlayerPage', () => {
     await act(async () => {
       unsupportedRenderer.unmount();
     });
+  });
+
+  test('starts Shaka loading before sidecar requests finish', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const resolvers = {};
+    api.getDanmaku.mockImplementationOnce(
+      () => new Promise((resolve) => (resolvers.danmaku = resolve)),
+    );
+    api.getRelated.mockImplementationOnce(
+      () => new Promise((resolve) => (resolvers.related = resolve)),
+    );
+    api.getStoryboard.mockImplementationOnce(
+      () => new Promise((resolve) => (resolvers.storyboard = resolve)),
+    );
+    api.getPlayerSubtitles.mockImplementationOnce(
+      () => new Promise((resolve) => (resolvers.subtitles = resolve)),
+    );
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-FAST-START', cid: 88, title: '快速首帧' },
+        onBack: mock(() => {}),
+      }),
+      (element) => (element.type === 'video' ? createVideoMock() : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    const startedBeforeSidecars = shakaLoads.includes('blob:test');
+
+    await act(async () => {
+      resolvers.danmaku([]);
+      resolvers.related({ data: [] });
+      resolvers.storyboard(null);
+      resolvers.subtitles([]);
+      await flush();
+    });
+    await act(async () => renderer.unmount());
+
+    expect(startedBeforeSidecars).toBe(true);
+  });
+
+  test('does not resume loading after unmount during video info lookup', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    let resolveVideoInfo;
+    api.getVideoInfo.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveVideoInfo = resolve)),
+    );
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-UNMOUNT-PENDING', title: '待取消视频' },
+        onBack: mock(() => {}),
+      }),
+      (element) => (element.type === 'video' ? createVideoMock() : null),
+    );
+    await act(async () => await flush());
+    await act(async () => renderer.unmount());
+
+    await act(async () => {
+      resolveVideoInfo({
+        data: { cid: 91, bvid: 'BV-UNMOUNT-PENDING', title: '已返回' },
+      });
+      await flush();
+      await flush();
+    });
+
+    expect(shakaLoads).not.toContain('blob:test');
+    expect(api.getPlayUrl).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV-UNMOUNT-PENDING' }),
+      91,
+      expect.anything(),
+    );
   });
 
   test('resolves title from getVideoInfo for cast video without cid', async () => {

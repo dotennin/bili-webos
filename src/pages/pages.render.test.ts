@@ -7,6 +7,7 @@ import {
   interact,
   update,
 } from '../test/reactTestUtils.ts';
+import { CDN_PICKER_OPTIONS } from '../utils/cdn.ts';
 
 let api;
 let storageState;
@@ -22,9 +23,11 @@ let customKeyHandler;
 let focusChangeHandler;
 let responsiveGridCols;
 let restoreFocusCalls;
+let cdnScannerInstances;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
+const cdnSpeedPath = new URL('../utils/cdnSpeed.ts', import.meta.url).pathname;
 const responsiveColsPath = new URL(
   '../hooks/useResponsiveGridCols.ts',
   import.meta.url,
@@ -32,6 +35,7 @@ const responsiveColsPath = new URL(
 const realApi = await import(apiPath);
 const realHooks = await import(hooksPath);
 const realStorage = await import(storagePath);
+const realCdnSpeed = await import(cdnSpeedPath);
 const originalGlobals = {
   localStorage: globalThis.localStorage,
   setInterval: globalThis.setInterval,
@@ -80,7 +84,13 @@ beforeEach(() => {
   };
   storageState = {
     auth: {},
-    settings: { danmaku: true, quality: 80, videoGridCols: 4 },
+    settings: {
+      danmaku: true,
+      quality: 80,
+      videoGridCols: 4,
+      cdnEnabled: false,
+      cdnHost: 'upos-sz-mirrorali.bilivideo.com',
+    },
   };
   focusConfigs = [];
   oskKeys = [];
@@ -94,10 +104,34 @@ beforeEach(() => {
   focusChangeHandler = null;
   responsiveGridCols = 4;
   restoreFocusCalls = [];
+  cdnScannerInstances = [];
 
   mock.module(apiPath, () => ({
     ...realApi,
     ...api,
+  }));
+  mock.module(cdnSpeedPath, () => ({
+    ...realCdnSpeed,
+    createCdnSpeedScanner(options = {}) {
+      const scanner = {
+        cancelled: false,
+        start: async () => {
+          options.onUpdate?.(
+            CDN_PICKER_OPTIONS.map((option) => ({
+              ...option,
+              status: 'success',
+              speed: '12 MB/s',
+              message: null,
+            })),
+          );
+        },
+        cancel() {
+          scanner.cancelled = true;
+        },
+      };
+      cdnScannerInstances.push(scanner);
+      return scanner;
+    },
   }));
   mock.module('../components/VideoGrid', () => ({
     default(props) {
@@ -209,6 +243,7 @@ afterEach(() => {
   mock.module(apiPath, () => realApi);
   mock.module(hooksPath, () => realHooks);
   mock.module(storagePath, () => realStorage);
+  mock.module(cdnSpeedPath, () => realCdnSpeed);
   for (const [name, value] of Object.entries(originalGlobals)) {
     restoreGlobal(name, value);
   }
@@ -939,7 +974,7 @@ describe('page rendering', () => {
     expect(restoreFocusCalls.at(-1)).toBe('content-10-0');
   });
 
-  test('SettingsPage toggles danmaku, updates grid columns, and logs out', async () => {
+  test('SettingsPage opens the CDN picker, selects routes, and logs out', async () => {
     const { default: SettingsPage } = await importFresh('./SettingsPage.tsx');
     const logs = [];
     const renderer = await render(
@@ -953,6 +988,8 @@ describe('page rendering', () => {
 
     expect(textOf(renderer.toJSON())).toContain('测试用户 的空间');
     expect(textOf(renderer.toJSON())).toContain('每行视频数');
+    expect(textOf(renderer.toJSON())).toContain('视频 CDN');
+    expect(textOf(renderer.toJSON())).toContain('不使用 CDN');
     expect(textOf(renderer.toJSON())).toContain('4 列');
     expect(textOf(renderer.toJSON())).toContain('根据观看距离调整卡片密度');
     expect(textOf(renderer.toJSON())).not.toContain('最近观看');
@@ -964,13 +1001,65 @@ describe('page rendering', () => {
     await interact(() =>
       focusConfigs.filter((config) => config.id === 'content-1-0').at(-1).onSelect(),
     );
-    expect(storageState.settings.videoGridCols).toBe(2);
+    await flush();
+    expect(cdnScannerInstances).toHaveLength(1);
+    expect(textOf(renderer.toJSON())).toContain('CDN 设置');
+    expect(textOf(renderer.toJSON())).toContain('阿里云 · ali');
+    expect(textOf(renderer.toJSON())).toContain('12 MB/s');
+
+    await interact(() =>
+      customKeyHandler({
+        key: 'ArrowDown',
+        preventDefault() {},
+        stopPropagation() {},
+      }),
+    );
+    await interact(() =>
+      customKeyHandler({
+        key: 'Enter',
+        preventDefault() {},
+        stopPropagation() {},
+      }),
+    );
+    expect(storageState.settings.cdnEnabled).toBe(true);
+    expect(storageState.settings.cdnHost).toBe(
+      'upos-sz-mirrorali.bilivideo.com',
+    );
+    expect(cdnScannerInstances[0].cancelled).toBe(true);
+
     await interact(() =>
       focusConfigs.filter((config) => config.id === 'content-1-0').at(-1).onSelect(),
     );
-    expect(storageState.settings.videoGridCols).toBe(3);
+    await flush();
+    expect(cdnScannerInstances).toHaveLength(2);
+    await interact(() =>
+      customKeyHandler({
+        key: 'ArrowUp',
+        preventDefault() {},
+        stopPropagation() {},
+      }),
+    );
+    await interact(() =>
+      customKeyHandler({
+        key: 'Enter',
+        preventDefault() {},
+        stopPropagation() {},
+      }),
+    );
+    expect(storageState.settings.cdnEnabled).toBe(false);
+    expect(storageState.settings.cdnHost).toBe('');
+    expect(cdnScannerInstances[1].cancelled).toBe(true);
+
     await interact(() =>
       focusConfigs.filter((config) => config.id === 'content-2-0').at(-1).onSelect(),
+    );
+    expect(storageState.settings.videoGridCols).toBe(2);
+    await interact(() =>
+      focusConfigs.filter((config) => config.id === 'content-2-0').at(-1).onSelect(),
+    );
+    expect(storageState.settings.videoGridCols).toBe(3);
+    await interact(() =>
+      focusConfigs.filter((config) => config.id === 'content-3-0').at(-1).onSelect(),
     );
     expect(logs).toEqual(['logout']);
   });

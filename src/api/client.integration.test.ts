@@ -94,6 +94,31 @@ describe('api client integration paths', () => {
     expect(auth.DedeUserID).toBe('100');
   });
 
+  it('forwards an AbortSignal through proxy requests', async () => {
+    const requests = [];
+    globalThis.fetch = mock((url, options) => {
+      requests.push({ url, options });
+      return Promise.resolve({
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          code: 0,
+          data: {
+            wbi_img: {
+              img_url: 'https://i.test/abcdefghijklmnopqrstuvwxyz012345.png',
+              sub_url: 'https://i.test/abcdefghijklmnopqrstuvwxyz012345.png',
+            },
+            dash: { video: [] },
+          },
+        }),
+      });
+    });
+    const controller = new AbortController();
+
+    await apiFetch('/x/abort', {}, { signal: controller.signal });
+
+    expect(requests.at(-1).options.signal).toBe(controller.signal);
+  });
+
   it('uses luna service when available and supports cast subscribe/ack', async () => {
     const events = [];
     const requests = [];

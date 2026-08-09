@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test';
+import { DEFAULT_CDN_HOST } from './cdn.ts';
 import { storage } from './storage.ts';
 
 function withMockLocalStorage(fn) {
@@ -43,12 +44,16 @@ test('auth/settings helpers roundtrip values', () => {
       quality: 64,
       videoGridCols: 4,
       subtitleLanguage: 'ja-JP',
+      cdnEnabled: true,
+      cdnHost: 'upos-sz-mirrorcos.bilivideo.com',
     });
     expect(storage.getSettings()).toEqual({
       danmaku: false,
       quality: 64,
       videoGridCols: 4,
       subtitleLanguage: 'ja-JP',
+      cdnEnabled: true,
+      cdnHost: 'upos-sz-mirrorcos.bilivideo.com',
     });
 
     storage.clearAuth();
@@ -76,6 +81,8 @@ test('getSettings returns defaults when missing', () => {
       quality: 80,
       videoGridCols: 3,
       subtitleLanguage: null,
+      cdnEnabled: false,
+      cdnHost: DEFAULT_CDN_HOST,
     });
   });
 });
@@ -88,6 +95,8 @@ test('getSettings tolerates invalid stored payloads', () => {
       quality: 80,
       videoGridCols: 3,
       subtitleLanguage: null,
+      cdnEnabled: false,
+      cdnHost: DEFAULT_CDN_HOST,
     });
   });
 });
