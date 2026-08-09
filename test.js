@@ -14,30 +14,40 @@
 // ==/UserScript==
 
 (function () {
-  "use strict";
+  'use strict';
 
-  const [_, owner, repo] = window.location.pathname.split("/");
+  const [_, owner, repo] = window.location.pathname.split('/');
   if (!owner || !repo) return;
 
   /* ── Storage ── */
-  const STORAGE_KEY = "gv_config";
+  const STORAGE_KEY = 'gv_config';
   function loadCfg() {
-    try { return JSON.parse(GM_getValue(STORAGE_KEY, "{}")); } catch { return {}; }
+    try {
+      return JSON.parse(GM_getValue(STORAGE_KEY, '{}'));
+    } catch {
+      return {};
+    }
   }
-  function saveCfg(cfg) { GM_setValue(STORAGE_KEY, JSON.stringify(cfg)); }
+  function saveCfg(cfg) {
+    GM_setValue(STORAGE_KEY, JSON.stringify(cfg));
+  }
 
   /* ── Helpers ── */
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const isDark = () =>
-    document.documentElement.getAttribute("data-color-mode") === "dark" ||
+    document.documentElement.getAttribute('data-color-mode') === 'dark' ||
     !!document.querySelector('meta[name="color-mode"][content="dark"]');
 
   function detectVisFromPage() {
-    const m = document.body.innerText.match(/currently (public|private|internal)/i);
+    const m = document.body.innerText.match(
+      /currently (public|private|internal)/i,
+    );
     return m ? m[1].toLowerCase() : null;
   }
 
-  function repoFullName() { return `${owner}/${repo}`; }
+  function repoFullName() {
+    return `${owner}/${repo}`;
+  }
 
   /* ── Styles ── */
   GM_addStyle(`
@@ -182,20 +192,25 @@
     return {
       add(msg, isErr) {
         lines.push({ msg, isErr });
-        console.log("[GV2]", msg);
+        console.log('[GV2]', msg);
         if (!dbgEl) return;
-        dbgEl.style.display = "block";
-        const line = document.createElement("div");
-        line.textContent = (isErr ? "✗ " : "· ") + msg;
-        if (isErr) line.style.color = "#da3633";
+        dbgEl.style.display = 'block';
+        const line = document.createElement('div');
+        line.textContent = (isErr ? '✗ ' : '· ') + msg;
+        if (isErr) line.style.color = '#da3633';
         dbgEl.appendChild(line);
         dbgEl.scrollTop = dbgEl.scrollHeight;
       },
       clear() {
         lines.length = 0;
-        if (dbgEl) { dbgEl.innerHTML = ""; dbgEl.style.display = "none"; }
+        if (dbgEl) {
+          dbgEl.innerHTML = '';
+          dbgEl.style.display = 'none';
+        }
       },
-      getAll() { return [...lines]; },
+      getAll() {
+        return [...lines];
+      },
     };
   })();
 
@@ -205,11 +220,13 @@
       const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github.v3+json",
+          Accept: 'application/vnd.github.v3+json',
         },
       });
-      if (res.status === 401) return { valid: false, reason: "Token invalid or expired" };
-      if (res.status === 403) return { valid: false, reason: "Token lacks repo scope" };
+      if (res.status === 401)
+        return { valid: false, reason: 'Token invalid or expired' };
+      if (res.status === 403)
+        return { valid: false, reason: 'Token lacks repo scope' };
       if (!res.ok) return { valid: false, reason: `API error ${res.status}` };
       const data = await res.json();
       return { valid: true, visibility: data.visibility };
@@ -220,16 +237,16 @@
 
   async function apiSetVisibility(token, targetVis) {
     const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      method: "PATCH",
+      method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github.v3+json",
-        "Content-Type": "application/json",
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({ visibility: targetVis }),
     });
     if (!res.ok) {
-      const errBody = await res.text().catch(() => "");
+      const errBody = await res.text().catch(() => '');
       throw new Error(`API ${res.status}: ${errBody.slice(0, 200)}`);
     }
     return res.json();
@@ -240,13 +257,13 @@
     const btn = findChangeVisBtn();
     if (!btn) throw new Error("Cannot find 'Change visibility' button");
     log.add(`Clicking "Change visibility"`);
-    btn.scrollIntoView({ behavior: "smooth", block: "center" });
+    btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
     await sleep(500);
     btn.click();
     await sleep(1500);
 
     const dialog = await waitForDialog();
-    if (!dialog) throw new Error("Visibility dialog did not appear");
+    if (!dialog) throw new Error('Visibility dialog did not appear');
 
     log.add(`Dialog found, selecting "${targetVis}"`);
     await selectVisibilityInDialog(dialog, targetVis);
@@ -254,23 +271,28 @@
 
     log.add(`Looking for confirm button…`);
     const confirmed = await confirmInDialog(dialog);
-    if (!confirmed) throw new Error("Could not find confirm button in dialog");
+    if (!confirmed) throw new Error('Could not find confirm button in dialog');
     log.add(`Confirm clicked ✓`);
     await sleep(2000);
   }
 
   function findChangeVisBtn() {
     const candidates = document.querySelectorAll(
-      "button, [role='button'], a[href], summary, [data-action], [onclick]"
+      "button, [role='button'], a[href], summary, [data-action], [onclick]",
     );
     for (const el of candidates) {
-      const t = el.textContent.replace(/\s+/g, " ").trim().toLowerCase();
-      if (t.includes("change visibility") && t.length < 50) return el;
+      const t = el.textContent.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (t.includes('change visibility') && t.length < 50) return el;
     }
-    log.add("Change visibility button candidates:", true);
-    [...candidates].filter(c => c.textContent.trim()).slice(0, 20).forEach(c =>
-      log.add(`  <${c.tagName}> "${c.textContent.replace(/\s+/g, " ").trim().slice(0, 60)}"`)
-    );
+    log.add('Change visibility button candidates:', true);
+    [...candidates]
+      .filter((c) => c.textContent.trim())
+      .slice(0, 20)
+      .forEach((c) =>
+        log.add(
+          `  <${c.tagName}> "${c.textContent.replace(/\s+/g, ' ').trim().slice(0, 60)}"`,
+        ),
+      );
     return null;
   }
 
@@ -280,22 +302,33 @@
       if (d) return d;
       await sleep(500);
     }
-    log.add("No visibility dialog found. Dumping all dialogs:", true);
-    document.querySelectorAll('[role="dialog"], [role="alertdialog"], .Overlay, [data-component="Overlay"]').forEach(el => {
-      log.add(`  "${el.textContent.replace(/\s+/g, " ").trim().slice(0, 150)}"`);
-    });
+    log.add('No visibility dialog found. Dumping all dialogs:', true);
+    document
+      .querySelectorAll(
+        '[role="dialog"], [role="alertdialog"], .Overlay, [data-component="Overlay"]',
+      )
+      .forEach((el) => {
+        log.add(
+          `  "${el.textContent.replace(/\s+/g, ' ').trim().slice(0, 150)}"`,
+        );
+      });
     return null;
   }
 
   function findVisibilityDialog() {
     const dialogs = document.querySelectorAll(
-      '[role="dialog"], [role="alertdialog"], .Overlay, [data-component="Overlay"]'
+      '[role="dialog"], [role="alertdialog"], .Overlay, [data-component="Overlay"]',
     );
     for (const d of dialogs) {
       const text = d.textContent.toLowerCase();
-      if (text.includes("search code") || text.includes("search repositories")) continue;
-      if ((text.includes("visibility") || text.includes("make this repository") ||
-           text.includes("change repository") || text.includes("public") && text.includes("private"))) {
+      if (text.includes('search code') || text.includes('search repositories'))
+        continue;
+      if (
+        text.includes('visibility') ||
+        text.includes('make this repository') ||
+        text.includes('change repository') ||
+        (text.includes('public') && text.includes('private'))
+      ) {
         return d;
       }
     }
@@ -303,80 +336,119 @@
   }
 
   async function selectVisibilityInDialog(dialog, targetVis) {
-    const label = targetVis === "public" ? "public" : "private";
+    const label = targetVis === 'public' ? 'public' : 'private';
     let done = false;
 
     const radios = dialog.querySelectorAll('input[type="radio"]');
     for (const r of radios) {
-      const val = (r.value || "").toLowerCase();
+      const val = (r.value || '').toLowerCase();
       if (val === label || val.includes(label)) {
-        r.click(); log.add(`Radio selected: ${r.value}`); done = true; await sleep(300); break;
+        r.click();
+        log.add(`Radio selected: ${r.value}`);
+        done = true;
+        await sleep(300);
+        break;
       }
     }
 
     if (!done) {
-      const segs = dialog.querySelectorAll('[role="tab"][aria-selected], [role="radio"], [data-value]');
+      const segs = dialog.querySelectorAll(
+        '[role="tab"][aria-selected], [role="radio"], [data-value]',
+      );
       for (const s of segs) {
-        const v = (s.dataset?.value || s.textContent || "").toLowerCase().trim();
+        const v = (s.dataset?.value || s.textContent || '')
+          .toLowerCase()
+          .trim();
         if (v.includes(label)) {
-          s.click(); log.add(`Segment clicked: ${v}`); done = true; await sleep(300); break;
+          s.click();
+          log.add(`Segment clicked: ${v}`);
+          done = true;
+          await sleep(300);
+          break;
         }
       }
     }
 
     if (!done) {
-      const labels = dialog.querySelectorAll("label, span, div");
+      const labels = dialog.querySelectorAll('label, span, div');
       for (const lb of labels) {
         const t = lb.textContent.trim().toLowerCase();
         if (t === label && lb.children.length === 0) {
-          lb.click(); log.add(`Label clicked: ${t}`); done = true; await sleep(300); break;
+          lb.click();
+          log.add(`Label clicked: ${t}`);
+          done = true;
+          await sleep(300);
+          break;
         }
       }
     }
 
     if (!done) {
-      log.add(`Could not select "${targetVis}" — trying direct click on dialog body`, true);
-      const visEl = [...dialog.querySelectorAll("*")].find(el =>
-        el.textContent.trim().toLowerCase() === label && el.offsetParent !== null
+      log.add(
+        `Could not select "${targetVis}" — trying direct click on dialog body`,
+        true,
       );
-      if (visEl) { visEl.click(); done = true; await sleep(300); }
+      const visEl = [...dialog.querySelectorAll('*')].find(
+        (el) =>
+          el.textContent.trim().toLowerCase() === label &&
+          el.offsetParent !== null,
+      );
+      if (visEl) {
+        visEl.click();
+        done = true;
+        await sleep(300);
+      }
     }
 
     if (!done) log.add(`⚠ Could not find "${targetVis}" radio/segment`);
   }
 
   async function confirmInDialog(dialog) {
-    const btns = dialog.querySelectorAll("button:not([disabled])");
+    const btns = dialog.querySelectorAll('button:not([disabled])');
     const terms = [
-      "make this repository", "i understand, change", "i understand",
-      "change visibility", "change repository visibility",
-      "make this repo", "make it public", "make it private",
+      'make this repository',
+      'i understand, change',
+      'i understand',
+      'change visibility',
+      'change repository visibility',
+      'make this repo',
+      'make it public',
+      'make it private',
     ];
 
     let found = null;
     for (const b of btns) {
-      const t = b.textContent.replace(/\s+/g, " ").trim().toLowerCase();
+      const t = b.textContent.replace(/\s+/g, ' ').trim().toLowerCase();
       for (const term of terms) {
-        if (t.includes(term)) { found = b; break; }
+        if (t.includes(term)) {
+          found = b;
+          break;
+        }
       }
       if (found) break;
     }
 
     if (found) {
       found.click();
-      log.add(`Confirm clicked: "${found.textContent.replace(/\s+/g, " ").trim().slice(0, 50)}"`);
+      log.add(
+        `Confirm clicked: "${found.textContent.replace(/\s+/g, ' ').trim().slice(0, 50)}"`,
+      );
       return true;
     }
 
-    const primary = dialog.querySelector(".btn-primary, .btn-danger");
+    const primary = dialog.querySelector('.btn-primary, .btn-danger');
     if (primary && !primary.disabled) {
       primary.click();
-      log.add(`Primary/danger button clicked: "${primary.textContent.replace(/\s+/g, " ").trim().slice(0, 50)}"`);
+      log.add(
+        `Primary/danger button clicked: "${primary.textContent.replace(/\s+/g, ' ').trim().slice(0, 50)}"`,
+      );
       return true;
     }
 
-    log.add("Available buttons in dialog:", true);
-    btns.forEach(b => log.add(`  "${b.textContent.replace(/\s+/g, " ").trim().slice(0, 60)}"`));
+    log.add('Available buttons in dialog:', true);
+    btns.forEach((b) =>
+      log.add(`  "${b.textContent.replace(/\s+/g, ' ').trim().slice(0, 60)}"`),
+    );
     return false;
   }
 
@@ -384,17 +456,17 @@
   let running = false;
 
   async function run(targetVis, cfg, stateEl, pubBtn, prvBtn) {
-    if(targetVis === 'public') {
+    if (targetVis === 'public') {
       document.querySelector('#visibility_menu-list').click();
       document.querySelector('#repo-visibility-proceed-button-public').click();
       document.querySelector('#repo-visibility-proceed-button-public').click();
-      document.querySelector('#repo-visibility-proceed-button-public').click()
+      document.querySelector('#repo-visibility-proceed-button-public').click();
     }
-    if(targetVis === 'private') {
+    if (targetVis === 'private') {
       document.querySelector('#visibility_menu-list').click();
-      document.querySelector('#repo-visibility-proceed-button-private').click()
-      document.querySelector('#repo-visibility-proceed-button-private').click()
-      document.querySelector('#repo-visibility-proceed-button-private').click()
+      document.querySelector('#repo-visibility-proceed-button-private').click();
+      document.querySelector('#repo-visibility-proceed-button-private').click();
+      document.querySelector('#repo-visibility-proceed-button-private').click();
     }
 
     return;
@@ -403,28 +475,27 @@
     log.clear();
 
     try {
-
       const pageVis = detectVisFromPage();
-      log.add(`Target: ${targetVis}, Page says: ${pageVis || "?"}`);
+      log.add(`Target: ${targetVis}, Page says: ${pageVis || '?'}`);
 
       if (targetVis === pageVis) {
-        log.add("Already set — skipping");
+        log.add('Already set — skipping');
         updateStatus(stateEl, pageVis, cfg);
         return;
       }
 
       if (cfg.token) {
-        log.add("Mode: API (token available)");
-        updateState("via API…");
+        log.add('Mode: API (token available)');
+        updateState('via API…');
         const result = await apiSetVisibility(cfg.token, targetVis);
         log.add(`API success: ${result.visibility} ✓`);
-        log.add("Reloading…");
+        log.add('Reloading…');
         setTimeout(() => location.reload(), 1500);
       } else {
-        log.add("Mode: DOM (no token)");
-        updateState("via DOM…");
+        log.add('Mode: DOM (no token)');
+        updateState('via DOM…');
         await domChangeVisibility(targetVis);
-        log.add("✓ Done! Reloading…");
+        log.add('✓ Done! Reloading…');
         setTimeout(() => location.reload(), 2000);
       }
     } catch (e) {
@@ -437,52 +508,60 @@
   }
 
   function updateState(msg) {
-    const el = document.querySelector(".gv2-status-mode");
+    const el = document.querySelector('.gv2-status-mode');
     if (el) el.textContent = msg;
   }
 
   function updateStatus(stateEl, vis, cfg) {
     if (!stateEl) return;
-    const dot = stateEl.querySelector(".gv2-status-dot");
-    const label = stateEl.querySelector(".gv2-status-label");
-    const mode = stateEl.querySelector(".gv2-status-mode");
-    if (dot) { dot.className = `gv2-status-dot ${vis || "unknown"}`; }
-    if (label) { label.textContent = vis || "Unknown"; }
-    if (mode) { mode.textContent = cfg.token ? "API" : "DOM"; }
+    const dot = stateEl.querySelector('.gv2-status-dot');
+    const label = stateEl.querySelector('.gv2-status-label');
+    const mode = stateEl.querySelector('.gv2-status-mode');
+    if (dot) {
+      dot.className = `gv2-status-dot ${vis || 'unknown'}`;
+    }
+    if (label) {
+      label.textContent = vis || 'Unknown';
+    }
+    if (mode) {
+      mode.textContent = cfg.token ? 'API' : 'DOM';
+    }
   }
 
   /* ── Token Management ── */
   function showTokenPanel(panel, input, msgEl) {
-    panel.style.display = "block";
+    panel.style.display = 'block';
     const cfg = loadCfg();
-    input.value = cfg.token || "";
-    msgEl.textContent = "";
+    input.value = cfg.token || '';
+    msgEl.textContent = '';
     input.focus();
   }
 
   async function saveToken(input, panel, msgEl, stateEl) {
     const token = input.value.trim();
     if (!token) {
-      msgEl.textContent = "Token cannot be empty";
-      msgEl.style.color = "#da3633";
+      msgEl.textContent = 'Token cannot be empty';
+      msgEl.style.color = '#da3633';
       return;
     }
 
-    msgEl.textContent = "Validating…";
-    msgEl.style.color = "#656d76";
+    msgEl.textContent = 'Validating…';
+    msgEl.style.color = '#656d76';
     const result = await apiCheckToken(token);
 
     if (result.valid) {
       const cfg = loadCfg();
       cfg.token = token;
       saveCfg(cfg);
-      msgEl.textContent = `✓ Token valid (repo: ${result.visibility || "ok"})`;
-      msgEl.style.color = "#238636";
+      msgEl.textContent = `✓ Token valid (repo: ${result.visibility || 'ok'})`;
+      msgEl.style.color = '#238636';
       updateStatus(stateEl, result.visibility || detectVisFromPage(), cfg);
-      setTimeout(() => { panel.style.display = "none"; }, 1500);
+      setTimeout(() => {
+        panel.style.display = 'none';
+      }, 1500);
     } else {
       msgEl.textContent = `✗ ${result.reason}`;
-      msgEl.style.color = "#da3633";
+      msgEl.style.color = '#da3633';
     }
   }
 
@@ -490,11 +569,13 @@
     const cfg = loadCfg();
     delete cfg.token;
     saveCfg(cfg);
-    input.value = "";
-    msgEl.textContent = "Token removed";
-    msgEl.style.color = "#656d76";
+    input.value = '';
+    msgEl.textContent = 'Token removed';
+    msgEl.style.color = '#656d76';
     updateStatus(stateEl, detectVisFromPage(), cfg);
-    setTimeout(() => { panel.style.display = "none"; }, 1000);
+    setTimeout(() => {
+      panel.style.display = 'none';
+    }, 1000);
   }
 
   /* ── Toolbar ── */
@@ -503,102 +584,117 @@
     let vis = detectVisFromPage();
     const dk = isDark();
 
-    const container = document.createElement("div");
-    container.className = `gv2${dk ? " dark" : ""}`;
+    const container = document.createElement('div');
+    container.className = `gv2${dk ? ' dark' : ''}`;
 
     /* ── Full toolbar ── */
-    const widget = document.createElement("div");
-    widget.className = "gv2-w";
+    const widget = document.createElement('div');
+    widget.className = 'gv2-w';
 
-    const header = document.createElement("div");
-    header.className = "gv2-h";
-    const repoLabel = document.createElement("span");
-    repoLabel.className = "gv2-h-repo";
+    const header = document.createElement('div');
+    header.className = 'gv2-h';
+    const repoLabel = document.createElement('span');
+    repoLabel.className = 'gv2-h-repo';
     repoLabel.textContent = repoFullName();
-    const collapseBtn = document.createElement("button");
-    collapseBtn.className = "gv2-h-btn";
-    collapseBtn.textContent = "−";
-    collapseBtn.title = "Collapse";
-    collapseBtn.onclick = (e) => { e.stopPropagation(); toggleCollapse(); };
+    const collapseBtn = document.createElement('button');
+    collapseBtn.className = 'gv2-h-btn';
+    collapseBtn.textContent = '−';
+    collapseBtn.title = 'Collapse';
+    collapseBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleCollapse();
+    };
     header.onclick = toggleCollapse;
     header.appendChild(repoLabel);
     header.appendChild(collapseBtn);
     widget.appendChild(header);
 
-    const body = document.createElement("div");
-    body.className = "gv2-body";
+    const body = document.createElement('div');
+    body.className = 'gv2-body';
 
-    const statusEl = document.createElement("div");
-    statusEl.className = "gv2-status";
+    const statusEl = document.createElement('div');
+    statusEl.className = 'gv2-status';
     statusEl.innerHTML = `
-      <span class="gv2-status-dot ${vis || "unknown"}"></span>
-      <span>Current: <strong class="gv2-status-label">${vis || "Unknown"}</strong></span>
-      <span class="gv2-status-mode">${cfg.token ? "API" : "DOM"}</span>
+      <span class="gv2-status-dot ${vis || 'unknown'}"></span>
+      <span>Current: <strong class="gv2-status-label">${vis || 'Unknown'}</strong></span>
+      <span class="gv2-status-mode">${cfg.token ? 'API' : 'DOM'}</span>
     `;
     body.appendChild(statusEl);
 
-    const row = document.createElement("div");
-    row.className = "gv2-row";
+    const row = document.createElement('div');
+    row.className = 'gv2-row';
 
-    const pubBtn = document.createElement("button");
-    pubBtn.className = `gv2-btn gv2-btn-pub${vis === "public" ? " active" : ""}`;
-    pubBtn.textContent = "Public";
+    const pubBtn = document.createElement('button');
+    pubBtn.className = `gv2-btn gv2-btn-pub${vis === 'public' ? ' active' : ''}`;
+    pubBtn.textContent = 'Public';
     pubBtn.disabled = running;
 
-    const prvBtn = document.createElement("button");
-    prvBtn.className = `gv2-btn gv2-btn-prv${vis === "private" ? " active" : ""}`;
-    prvBtn.textContent = "Private";
+    const prvBtn = document.createElement('button');
+    prvBtn.className = `gv2-btn gv2-btn-prv${vis === 'private' ? ' active' : ''}`;
+    prvBtn.textContent = 'Private';
     prvBtn.disabled = running;
 
-    pubBtn.onclick = () => { pubBtn.disabled = true; prvBtn.disabled = true; run("public", cfg, statusEl, pubBtn, prvBtn); };
-    prvBtn.onclick = () => { pubBtn.disabled = true; prvBtn.disabled = true; run("private", cfg, statusEl, pubBtn, prvBtn); };
+    pubBtn.onclick = () => {
+      pubBtn.disabled = true;
+      prvBtn.disabled = true;
+      run('public', cfg, statusEl, pubBtn, prvBtn);
+    };
+    prvBtn.onclick = () => {
+      pubBtn.disabled = true;
+      prvBtn.disabled = true;
+      run('private', cfg, statusEl, pubBtn, prvBtn);
+    };
 
     row.appendChild(pubBtn);
     row.appendChild(prvBtn);
     body.appendChild(row);
 
-    const actions = document.createElement("div");
-    actions.className = "gv2-actions";
+    const actions = document.createElement('div');
+    actions.className = 'gv2-actions';
 
-    const tokenBtn = document.createElement("button");
-    tokenBtn.className = "gv2-act";
-    tokenBtn.textContent = cfg.token ? "🔑 Token ✓" : "🔑 Set Token";
-    tokenBtn.title = cfg.token ? "Change or remove GitHub Token" : "Add GitHub Personal Access Token for API mode";
+    const tokenBtn = document.createElement('button');
+    tokenBtn.className = 'gv2-act';
+    tokenBtn.textContent = cfg.token ? '🔑 Token ✓' : '🔑 Set Token';
+    tokenBtn.title = cfg.token
+      ? 'Change or remove GitHub Token'
+      : 'Add GitHub Personal Access Token for API mode';
 
-    const dbgToggle = document.createElement("button");
-    dbgToggle.className = "gv2-act";
-    dbgToggle.textContent = "🐛 Debug";
+    const dbgToggle = document.createElement('button');
+    dbgToggle.className = 'gv2-act';
+    dbgToggle.textContent = '🐛 Debug';
     dbgToggle.onclick = () => {
-      dbgToggle.classList.toggle("active");
-      if (dbgEl) dbgEl.style.display = dbgEl.style.display === "block" ? "none" : "block";
+      dbgToggle.classList.toggle('active');
+      if (dbgEl)
+        dbgEl.style.display =
+          dbgEl.style.display === 'block' ? 'none' : 'block';
     };
 
     actions.appendChild(tokenBtn);
     actions.appendChild(dbgToggle);
     body.appendChild(actions);
 
-    dbgEl = document.createElement("div");
-    dbgEl.className = "gv2-debug";
-    dbgEl.textContent = `detected: ${vis || "?"}`;
+    dbgEl = document.createElement('div');
+    dbgEl.className = 'gv2-debug';
+    dbgEl.textContent = `detected: ${vis || '?'}`;
     body.appendChild(dbgEl);
 
-    const tokenPanel = document.createElement("div");
-    tokenPanel.className = "gv2-token-input";
-    const tokenInput = document.createElement("input");
-    tokenInput.type = "password";
-    tokenInput.placeholder = "ghp_xxxxxxxxxxxxxxxxxxxx";
+    const tokenPanel = document.createElement('div');
+    tokenPanel.className = 'gv2-token-input';
+    const tokenInput = document.createElement('input');
+    tokenInput.type = 'password';
+    tokenInput.placeholder = 'ghp_xxxxxxxxxxxxxxxxxxxx';
     tokenInput.spellcheck = false;
-    const tiActions = document.createElement("div");
-    tiActions.className = "gv2-ti-actions";
-    const saveBtn = document.createElement("button");
-    saveBtn.className = "gv2-ti-save";
-    saveBtn.textContent = "Save";
-    const clearBtn = document.createElement("button");
-    clearBtn.textContent = "Remove";
-    const cancelBtn = document.createElement("button");
-    cancelBtn.textContent = "Cancel";
-    const tiMsg = document.createElement("div");
-    tiMsg.className = "gv2-ti-msg";
+    const tiActions = document.createElement('div');
+    tiActions.className = 'gv2-ti-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'gv2-ti-save';
+    saveBtn.textContent = 'Save';
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = 'Remove';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    const tiMsg = document.createElement('div');
+    tiMsg.className = 'gv2-ti-msg';
     tiActions.appendChild(saveBtn);
     tiActions.appendChild(clearBtn);
     tiActions.appendChild(cancelBtn);
@@ -608,8 +704,11 @@
     body.appendChild(tokenPanel);
 
     tokenBtn.onclick = () => {
-      const isOpen = tokenPanel.style.display === "block";
-      if (isOpen) { tokenPanel.style.display = "none"; return; }
+      const isOpen = tokenPanel.style.display === 'block';
+      if (isOpen) {
+        tokenPanel.style.display = 'none';
+        return;
+      }
       showTokenPanel(tokenPanel, tokenInput, tiMsg);
     };
 
@@ -617,25 +716,27 @@
       saveToken(tokenInput, tokenPanel, tiMsg, statusEl);
     };
     tokenInput.onkeydown = (e) => {
-      if (e.key === "Enter") saveToken(tokenInput, tokenPanel, tiMsg, statusEl);
-      if (e.key === "Escape") { tokenPanel.style.display = "none"; }
+      if (e.key === 'Enter') saveToken(tokenInput, tokenPanel, tiMsg, statusEl);
+      if (e.key === 'Escape') {
+        tokenPanel.style.display = 'none';
+      }
     };
     clearBtn.onclick = () => {
       clearToken(tokenInput, tokenPanel, tiMsg, statusEl);
     };
     cancelBtn.onclick = () => {
-      tokenPanel.style.display = "none";
+      tokenPanel.style.display = 'none';
     };
 
     widget.appendChild(body);
     container.appendChild(widget);
 
     /* ── Mini collapsed pill ── */
-    const mini = document.createElement("div");
-    mini.className = "gv2-mini";
-    const mDot = document.createElement("span");
-    mDot.className = `gv2-m-dot ${vis || "unknown"}`;
-    const mText = document.createElement("span");
+    const mini = document.createElement('div');
+    mini.className = 'gv2-mini';
+    const mDot = document.createElement('span');
+    mDot.className = `gv2-m-dot ${vis || 'unknown'}`;
+    const mText = document.createElement('span');
     mText.textContent = repoFullName();
     mini.appendChild(mDot);
     mini.appendChild(mText);
@@ -643,34 +744,34 @@
     container.appendChild(mini);
 
     function toggleCollapse() {
-      const expanded = widget.style.display !== "none";
-      widget.style.display = expanded ? "none" : "";
-      mini.style.display = expanded ? "flex" : "none";
-      collapseBtn.textContent = expanded ? "+" : "−";
-      collapseBtn.title = expanded ? "Expand" : "Collapse";
+      const expanded = widget.style.display !== 'none';
+      widget.style.display = expanded ? 'none' : '';
+      mini.style.display = expanded ? 'flex' : 'none';
+      collapseBtn.textContent = expanded ? '+' : '−';
+      collapseBtn.title = expanded ? 'Expand' : 'Collapse';
     }
 
     document.body.appendChild(container);
 
     if (cfg.token) {
-      apiCheckToken(cfg.token).then(result => {
+      apiCheckToken(cfg.token).then((result) => {
         if (result.valid) {
           vis = result.visibility;
           updateStatus(statusEl, vis, cfg);
-          pubBtn.className = `gv2-btn gv2-btn-pub${vis === "public" ? " active" : ""}`;
-          prvBtn.className = `gv2-btn gv2-btn-prv${vis === "private" ? " active" : ""}`;
+          pubBtn.className = `gv2-btn gv2-btn-pub${vis === 'public' ? ' active' : ''}`;
+          prvBtn.className = `gv2-btn gv2-btn-prv${vis === 'private' ? ' active' : ''}`;
         } else {
           log.add(`Token invalid: ${result.reason}`, true);
           delete cfg.token;
           saveCfg(cfg);
-          tokenBtn.textContent = "🔑 Set Token";
+          tokenBtn.textContent = '🔑 Set Token';
         }
       });
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
