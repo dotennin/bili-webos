@@ -11,6 +11,7 @@ const mainCoverageDir = path.join(coverageDir, 'main');
 // mock.module leakage while still letting us merge their LCOV into the report.
 const isolatedTests = [
   'src/utils/storage.test.ts',
+  'src/api/client.test.ts',
   'src/api/client.integration.test.ts',
   'src/hooks/useFocus.test.ts',
   'src/hooks/useResponsiveGridCols.test.ts',
