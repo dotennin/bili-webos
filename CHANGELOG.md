@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.16.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.15.0...bili-webos-tv-v1.16.0) (2026-08-09)
+
+
+### Features
+
+* add CDN selection with speed testing ([#131](https://github.com/dotennin/bili-webos/issues/131)) ([4a7efad](https://github.com/dotennin/bili-webos/commit/4a7efad320e9fdcad2671f287a609ab9e386c022))
+
 ## [1.15.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.14.0...bili-webos-tv-v1.15.0) (2026-07-17)
 
 
