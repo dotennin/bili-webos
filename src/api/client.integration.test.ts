@@ -304,6 +304,8 @@ describe('api client integration paths', () => {
 
   it('fetches live danmaku auth through signed live host path', async () => {
     const calls = [];
+    const originalDateNow = Date.now;
+    Date.now = () => originalDateNow() + 10 * 60 * 1000 + 1;
     globalThis.fetch = mock((url) => {
       calls.push(String(url));
       if (String(url).includes('/x/web-interface/nav')) {
@@ -325,21 +327,25 @@ describe('api client integration paths', () => {
       });
     });
 
-    const info = await getLiveDanmakuInfo(77);
+    try {
+      const info = await getLiveDanmakuInfo(77);
 
-    expect(info.data.token).toBe('live-token');
-    expect(calls.some((url) => url.includes('/x/web-interface/nav'))).toBe(
-      true,
-    );
-    expect(
-      calls.some(
-        (url) =>
-          url.includes('/proxy/api.live.bilibili.com') &&
-          url.includes('/xlive/web-room/v1/index/getDanmuInfo') &&
-          url.includes('id=77') &&
-          url.includes('w_rid='),
-      ),
-    ).toBe(true);
+      expect(info.data.token).toBe('live-token');
+      expect(calls.some((url) => url.includes('/x/web-interface/nav'))).toBe(
+        true,
+      );
+      expect(
+        calls.some(
+          (url) =>
+            url.includes('/proxy/api.live.bilibili.com') &&
+            url.includes('/xlive/web-room/v1/index/getDanmuInfo') &&
+            url.includes('id=77') &&
+            url.includes('w_rid='),
+        ),
+      ).toBe(true);
+    } finally {
+      Date.now = originalDateNow;
+    }
   });
 
   it('parses danmaku XML and tolerates heartbeat request failures', async () => {
