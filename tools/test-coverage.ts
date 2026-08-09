@@ -12,6 +12,7 @@ const mainCoverageDir = path.join(coverageDir, 'main');
 const isolatedTests = [
   'src/utils/storage.test.ts',
   'src/api/client.integration.test.ts',
+  'src/api/client.test.ts',
   'src/hooks/useFocus.test.ts',
   'src/hooks/useResponsiveGridCols.test.ts',
 ];
@@ -151,6 +152,7 @@ fs.mkdirSync(coverageDir, { recursive: true });
 run('tsc', ['-p', 'tsconfig.service.json']);
 run(bunBin, [
   'test',
+  '--max-concurrency=1',
   '--preload',
   './tools/coverage-preload.ts',
   '--coverage',

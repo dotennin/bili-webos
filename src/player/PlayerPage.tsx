@@ -17,6 +17,7 @@ import { formatDuration, QUALITY_MAP } from '../utils/format';
 import { getProxyBase } from '../utils/proxy';
 import { setCustomKeyHandler } from '../hooks/useFocus';
 import { storage } from '../utils/storage';
+import { applyCdnToDash } from '../utils/cdn';
 import DanmakuLayer from './DanmakuLayer';
 
 const SEEK_BASE_STEP_SEC = 5;
@@ -37,6 +38,7 @@ const PLAYBACK_RATE_SYNC_DELAY_MS = 1200;
 const STALL_WATCH_INTERVAL_MS = 1000;
 const STALL_RECOVERY_AFTER_MS = 6000;
 const STALL_RECOVERY_SEEK_SEC = 0.05;
+const LOADING_SPEED_INTERVAL_MS = 250;
 const WEBOS_BROWSER_APP_ID = 'com.webos.app.browser';
 
 function getActiveSubtitleText(cues, currentTime) {
@@ -137,6 +139,8 @@ export default function PlayerPage({
   const [focusArea, setFocusArea] = useState('none');
   const [focusIdx, setFocusIdx] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const loadingSpeedTextRef = useRef(null);
+  const loadingSpeedTimerRef = useRef(null);
   const controlsTimer = useRef(null);
   const timeUpdateRef = useRef(null);
   const cidRef = useRef(null);
@@ -166,6 +170,44 @@ export default function PlayerPage({
 
   const pendingSeekRef = useRef(null);
   const endedRef = useRef(false);
+
+  const updateLoadingSpeed = useCallback(() => {
+    const estimatedBitsPerSecond = Math.max(
+      0,
+      Number(shakaRef.current?.getStats?.()?.estimatedBandwidth) || 0,
+    );
+    if (!estimatedBitsPerSecond) {
+      if (loadingSpeedTextRef.current) {
+        loadingSpeedTextRef.current.textContent = '';
+        loadingSpeedTextRef.current.style.display = 'none';
+      }
+      return;
+    }
+    const megabytesPerSecond = estimatedBitsPerSecond / (8 * 1024 * 1024);
+    const speedText = `${Number(megabytesPerSecond.toPrecision(3))} MB/s`;
+    if (loadingSpeedTextRef.current) {
+      loadingSpeedTextRef.current.style.display = '';
+      loadingSpeedTextRef.current.textContent = speedText;
+    }
+  }, []);
+
+  const startLoadingSpeed = useCallback(() => {
+    if (loadingSpeedTimerRef.current) {
+      clearInterval(loadingSpeedTimerRef.current);
+    }
+    updateLoadingSpeed();
+    loadingSpeedTimerRef.current = setInterval(
+      updateLoadingSpeed,
+      LOADING_SPEED_INTERVAL_MS,
+    );
+  }, [updateLoadingSpeed]);
+
+  const stopLoadingSpeed = useCallback(() => {
+    if (loadingSpeedTimerRef.current) {
+      clearInterval(loadingSpeedTimerRef.current);
+      loadingSpeedTimerRef.current = null;
+    }
+  }, []);
 
   const queueOrApplySeek = useCallback((seekSec) => {
     const target = Math.max(0, Number(seekSec) || 0);
@@ -575,7 +617,11 @@ export default function PlayerPage({
     async function init() {
       const shaka: any = await import('shaka-player');
       shaka.polyfill.installAll();
-      if (!shaka.Player.isBrowserSupported()) return;
+      if (!shaka.Player.isBrowserSupported()) {
+        stopLoadingSpeed();
+        setLoading(false);
+        return;
+      }
       const player = new shaka.Player();
       player.configure({
         streaming: {
@@ -602,22 +648,27 @@ export default function PlayerPage({
           setCurrentQuality(quality);
         }
       });
-      if (mounted) loadVideo(player);
+      if (mounted) loadVideo(player, () => mounted);
     }
     init();
     return () => {
       mounted = false;
+      storyboardVideoKeyRef.current = null;
       shakaRef.current?.destroy();
     };
   }, []);
 
   const loadVideo = useCallback(
-    async (player) => {
+    async (player, isActive: () => boolean = () => true) => {
+      if (!isActive()) return;
       if (!video?.bvid && !video?.aid) {
         if (!video?.title && video?.fromCast) setVideoTitle('投屏视频');
+        stopLoadingSpeed();
+        setLoading(false);
         return;
       }
       setLoading(true);
+      startLoadingSpeed();
       setFirstFrameReady(false);
       setEnded(false);
       setSubtitleTracks([]);
@@ -630,6 +681,7 @@ export default function PlayerPage({
         let titleNeedsResolution = !video?.title && video?.fromCast;
         if (!cid) {
           const info = await getVideoInfo(video);
+          if (!isActive()) return;
           cid = info?.data?.cid;
           if (info?.data?.title) {
             setVideoTitle(info.data.title);
@@ -640,6 +692,7 @@ export default function PlayerPage({
         if (titleNeedsResolution) {
           if (video?.bvid || video?.aid) {
             const info = await getVideoInfo(video);
+            if (!isActive()) return;
             if (!video.bvid && info?.data?.bvid) video.bvid = info.data.bvid;
             if (info?.data?.title) {
               setVideoTitle(info.data.title);
@@ -650,7 +703,11 @@ export default function PlayerPage({
             setVideoTitle('投屏视频');
           }
         }
-        if (!cid) return;
+        if (!cid) {
+          stopLoadingSpeed();
+          setLoading(false);
+          return;
+        }
         cidRef.current = cid;
 
         const videoKey = `${video.bvid}:${cid}`;
@@ -661,8 +718,13 @@ export default function PlayerPage({
 
         const settings = storage.getSettings();
         const res = await getPlayUrl(video, cid, settings.quality || 80);
+        if (!isActive() || storyboardVideoKeyRef.current !== videoKey) return;
         const dash = res?.data?.dash;
-        if (!dash) return;
+        if (!dash) {
+          stopLoadingSpeed();
+          setLoading(false);
+          return;
+        }
 
         setQualities(
           (res?.data?.accept_quality || []).map((q) => ({
@@ -672,62 +734,84 @@ export default function PlayerPage({
         );
         setCurrentQuality(res?.data?.quality || 80);
 
-        const mpd = buildMPD(dash);
+        const mpd = buildMPD(applyCdnToDash(dash, settings));
         const blob = new Blob([mpd], { type: 'application/dash+xml' });
         const mpdUrl = URL.createObjectURL(blob);
 
         player.getNetworkingEngine().registerRequestFilter((type, request) => {
-          if (request.uris[0].startsWith('http')) {
-            const originalUrl = new URL(request.uris[0]);
-            // Use local proxy on TV (JS Service), fallback to Mac proxy
-            const proxyBase = getProxyBase();
-            request.uris[0] = `${proxyBase}/proxy/${originalUrl.host}${originalUrl.pathname}${originalUrl.search}`;
-          }
+          const proxyBase = getProxyBase();
+          request.uris = request.uris.map((uri) => {
+            try {
+              const originalUrl = new URL(uri);
+              if (
+                !['http:', 'https:'].includes(originalUrl.protocol) ||
+                uri.startsWith(`${proxyBase}/proxy/`)
+              ) {
+                return uri;
+              }
+              return `${proxyBase}/proxy/${originalUrl.host}${originalUrl.pathname}${originalUrl.search}`;
+            } catch {
+              return uri;
+            }
+          });
         });
 
-        const danmakuPromise = getDanmaku(cid).catch(() => []);
-        const relatedPromise = getRelated(video.bvid).catch(() => ({
-          data: [],
-        }));
-        const storyboardPromise = getStoryboard(video.bvid, cid).catch(
-          () => null,
-        );
-        const subtitleTracksPromise = getPlayerSubtitles(video, cid).catch(
-          () => [],
-        );
-
-        const [danmakuData, relatedRes, storyboardData, availableSubtitles] =
-          await Promise.all([
-            danmakuPromise,
-            relatedPromise,
-            storyboardPromise,
-            subtitleTracksPromise,
-          ]);
-
-        if (storyboardVideoKeyRef.current !== videoKey) return;
-        storyboardRef.current = storyboardData;
-        setSubtitleTracks(availableSubtitles);
-        const preferredSubtitleIndex = getPreferredSubtitleIndex(
-          availableSubtitles,
-          settings.subtitleLanguage,
-        );
-        if (preferredSubtitleIndex >= 0) {
-          getSubtitleCues(
-            availableSubtitles[preferredSubtitleIndex].subtitle_url,
-          )
-            .then((cues) => {
-              if (storyboardVideoKeyRef.current !== videoKey) return;
-              setCurrentSubtitleIndex(preferredSubtitleIndex);
-              setSubtitleCues(cues);
-            })
-            .catch(() => {});
-        }
-        if (!storyboardData && typeof console !== 'undefined') {
-          console.warn('[Player] No storyboard data for', video.bvid, cid);
+        let playerLoadPromise;
+        try {
+          playerLoadPromise = player.load(mpdUrl);
+        } catch (error) {
+          URL.revokeObjectURL(mpdUrl);
+          throw error;
         }
 
-        await player.load(mpdUrl);
-        URL.revokeObjectURL(mpdUrl);
+        getDanmaku(cid)
+          .then((danmakuData) => {
+            if (storyboardVideoKeyRef.current !== videoKey) return;
+            setDanmakus(danmakuData);
+          })
+          .catch(() => {});
+        getRelated(video.bvid)
+          .then((relatedRes) => {
+            if (storyboardVideoKeyRef.current !== videoKey) return;
+            setRelatedVideos((relatedRes?.data || []).slice(0, 12));
+          })
+          .catch(() => {});
+        getStoryboard(video.bvid, cid)
+          .then((storyboardData) => {
+            if (storyboardVideoKeyRef.current !== videoKey) return;
+            storyboardRef.current = storyboardData;
+            if (!storyboardData && typeof console !== 'undefined') {
+              console.warn('[Player] No storyboard data for', video.bvid, cid);
+            }
+          })
+          .catch(() => {});
+        getPlayerSubtitles(video, cid)
+          .then((availableSubtitles) => {
+            if (storyboardVideoKeyRef.current !== videoKey) return;
+            setSubtitleTracks(availableSubtitles);
+            const preferredSubtitleIndex = getPreferredSubtitleIndex(
+              availableSubtitles,
+              settings.subtitleLanguage,
+            );
+            if (preferredSubtitleIndex < 0) return;
+            getSubtitleCues(
+              availableSubtitles[preferredSubtitleIndex].subtitle_url,
+            )
+              .then((cues) => {
+                if (storyboardVideoKeyRef.current !== videoKey) return;
+                setCurrentSubtitleIndex(preferredSubtitleIndex);
+                setSubtitleCues(cues);
+              })
+              .catch(() => {});
+          })
+          .catch(() => {});
+
+        try {
+          await playerLoadPromise;
+        } finally {
+          URL.revokeObjectURL(mpdUrl);
+        }
+        if (!isActive()) return;
         syncPlaybackRate();
         schedulePlaybackRateSync();
 
@@ -753,11 +837,10 @@ export default function PlayerPage({
           }
           castReportState({ playState: 'end' }).catch(() => {});
         });
-
-        setDanmakus(danmakuData);
-        setRelatedVideos((relatedRes?.data || []).slice(0, 12));
       } catch (err) {
+        if (!isActive()) return;
         console.error('Load video error:', err);
+        stopLoadingSpeed();
         setLoading(false);
         castReportState({
           playState: 'error',
@@ -765,7 +848,14 @@ export default function PlayerPage({
         }).catch(() => {});
       }
     },
-    [video, queueOrApplySeek, schedulePlaybackRateSync, syncPlaybackRate],
+    [
+      video,
+      queueOrApplySeek,
+      schedulePlaybackRateSync,
+      startLoadingSpeed,
+      stopLoadingSpeed,
+      syncPlaybackRate,
+    ],
   );
 
   function buildMPD(dash) {
@@ -775,9 +865,12 @@ export default function PlayerPage({
     if (dash.video?.length > 0) {
       const reps = dash.video
         .map((v) => {
-          const baseUrl = v.baseUrl || v.base_url || '';
+          const baseUrls =
+            Array.isArray(v.baseUrls) && v.baseUrls.length > 0
+              ? v.baseUrls
+              : [v.baseUrl || v.base_url || ''];
           return `<Representation id="${v.id}" bandwidth="${v.bandwidth || 1000000}" codecs="${v.codecs || 'avc1.640032'}" mimeType="${v.mimeType || 'video/mp4'}" width="${v.width || 1920}" height="${v.height || 1080}" frameRate="${v.frameRate || v.frame_rate || '30'}">
-          <BaseURL>${escapeXml(baseUrl)}</BaseURL>
+          ${baseUrls.map((url) => `<BaseURL>${escapeXml(url)}</BaseURL>`).join('')}
           <SegmentBase indexRange="${v.SegmentBase?.indexRange || v.segment_base?.index_range || '0-0'}">
             <Initialization range="${v.SegmentBase?.Initialization || v.segment_base?.initialization || '0-0'}" />
           </SegmentBase>
@@ -790,9 +883,12 @@ export default function PlayerPage({
     if (dash.audio?.length > 0) {
       const reps = dash.audio
         .map((a) => {
-          const baseUrl = a.baseUrl || a.base_url || '';
+          const baseUrls =
+            Array.isArray(a.baseUrls) && a.baseUrls.length > 0
+              ? a.baseUrls
+              : [a.baseUrl || a.base_url || ''];
           return `<Representation id="${a.id}" bandwidth="${a.bandwidth || 128000}" codecs="${a.codecs || 'mp4a.40.2'}" mimeType="${a.mimeType || 'audio/mp4'}">
-          <BaseURL>${escapeXml(baseUrl)}</BaseURL>
+          ${baseUrls.map((url) => `<BaseURL>${escapeXml(url)}</BaseURL>`).join('')}
           <SegmentBase indexRange="${a.SegmentBase?.indexRange || a.segment_base?.index_range || '0-0'}">
             <Initialization range="${a.SegmentBase?.Initialization || a.segment_base?.initialization || '0-0'}" />
           </SegmentBase>
@@ -874,6 +970,7 @@ export default function PlayerPage({
       syncPlaybackRate();
       schedulePlaybackRateSync();
       setFirstFrameReady(true);
+      stopLoadingSpeed();
       setLoading(false);
       syncTimelineFromPlayer();
     };
@@ -896,6 +993,7 @@ export default function PlayerPage({
     const handlePlaying = () => {
       markPlaybackProgress();
       setBuffering(false);
+      stopLoadingSpeed();
       setLoading(false);
       setPlaying(true);
       castReportState({ playState: 'playing' }).catch(() => {});
@@ -911,6 +1009,8 @@ export default function PlayerPage({
       castReportState({ playState: 'loading' }).catch(() => {});
     };
     const handleError = () => {
+      stopLoadingSpeed();
+      setLoading(false);
       castReportState({
         playState: 'error',
         error: el.error?.message || 'media-error',
@@ -944,9 +1044,14 @@ export default function PlayerPage({
     flushPendingSeek,
     playbackRate,
     schedulePlaybackRateSync,
+    stopLoadingSpeed,
     syncPlaybackRate,
     syncTimelineFromPlayer,
   ]);
+
+  useEffect(() => {
+    return () => stopLoadingSpeed();
+  }, [stopLoadingSpeed]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1141,11 +1246,14 @@ export default function PlayerPage({
         const dash = res?.data?.dash;
         if (dash) {
           const pos = videoRef.current.currentTime;
-          const mpd = buildMPD(dash);
+          const mpd = buildMPD(applyCdnToDash(dash, storage.getSettings()));
           const blob = new Blob([mpd], { type: 'application/dash+xml' });
           const mpdUrl = URL.createObjectURL(blob);
-          await shakaRef.current.load(mpdUrl);
-          URL.revokeObjectURL(mpdUrl);
+          try {
+            await shakaRef.current.load(mpdUrl);
+          } finally {
+            URL.revokeObjectURL(mpdUrl);
+          }
           videoRef.current.currentTime = pos;
           syncPlaybackRate();
           schedulePlaybackRateSync();
@@ -1750,7 +1858,14 @@ export default function PlayerPage({
         >
           <div className="loading">
             <div className="loading-spinner" />
-            加载中...
+            <div className="loading-copy">
+              <div>加载中...</div>
+              <div
+                ref={loadingSpeedTextRef}
+                className="loading-speed"
+                style={{ display: 'none' }}
+              />
+            </div>
           </div>
         </div>
       )}

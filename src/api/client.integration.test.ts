@@ -94,6 +94,31 @@ describe('api client integration paths', () => {
     expect(auth.DedeUserID).toBe('100');
   });
 
+  it('forwards an AbortSignal through proxy requests', async () => {
+    const requests = [];
+    globalThis.fetch = mock((url, options) => {
+      requests.push({ url, options });
+      return Promise.resolve({
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          code: 0,
+          data: {
+            wbi_img: {
+              img_url: 'https://i.test/abcdefghijklmnopqrstuvwxyz012345.png',
+              sub_url: 'https://i.test/abcdefghijklmnopqrstuvwxyz012345.png',
+            },
+            dash: { video: [] },
+          },
+        }),
+      });
+    });
+    const controller = new AbortController();
+
+    await apiFetch('/x/abort', {}, { signal: controller.signal });
+
+    expect(requests.at(-1).options.signal).toBe(controller.signal);
+  });
+
   it('uses luna service when available and supports cast subscribe/ack', async () => {
     const events = [];
     const requests = [];
@@ -279,6 +304,8 @@ describe('api client integration paths', () => {
 
   it('fetches live danmaku auth through signed live host path', async () => {
     const calls = [];
+    const originalDateNow = Date.now;
+    Date.now = () => originalDateNow() + 10 * 60 * 1000 + 1;
     globalThis.fetch = mock((url) => {
       calls.push(String(url));
       if (String(url).includes('/x/web-interface/nav')) {
@@ -300,21 +327,25 @@ describe('api client integration paths', () => {
       });
     });
 
-    const info = await getLiveDanmakuInfo(77);
+    try {
+      const info = await getLiveDanmakuInfo(77);
 
-    expect(info.data.token).toBe('live-token');
-    expect(calls.some((url) => url.includes('/x/web-interface/nav'))).toBe(
-      true,
-    );
-    expect(
-      calls.some(
-        (url) =>
-          url.includes('/proxy/api.live.bilibili.com') &&
-          url.includes('/xlive/web-room/v1/index/getDanmuInfo') &&
-          url.includes('id=77') &&
-          url.includes('w_rid='),
-      ),
-    ).toBe(true);
+      expect(info.data.token).toBe('live-token');
+      expect(calls.some((url) => url.includes('/x/web-interface/nav'))).toBe(
+        true,
+      );
+      expect(
+        calls.some(
+          (url) =>
+            url.includes('/proxy/api.live.bilibili.com') &&
+            url.includes('/xlive/web-room/v1/index/getDanmuInfo') &&
+            url.includes('id=77') &&
+            url.includes('w_rid='),
+        ),
+      ).toBe(true);
+    } finally {
+      Date.now = originalDateNow;
+    }
   });
 
   it('parses danmaku XML and tolerates heartbeat request failures', async () => {

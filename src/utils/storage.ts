@@ -1,3 +1,5 @@
+import { DEFAULT_CDN_HOST } from './cdn';
+
 const PREFIX = 'bili_';
 const RESUME_PROGRESS_KEY = 'resume_progress';
 const RESUME_END_THRESHOLD_SEC = 3;
@@ -6,6 +8,8 @@ const DEFAULT_SETTINGS = {
   quality: 80,
   videoGridCols: 3,
   subtitleLanguage: null,
+  cdnEnabled: false,
+  cdnHost: DEFAULT_CDN_HOST,
 };
 
 function normalizeResumeEntry(entry) {

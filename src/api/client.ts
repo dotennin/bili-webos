@@ -21,6 +21,7 @@ type FetchOptions = {
   range?: string;
   headers?: Record<string, string>;
   host?: string;
+  signal?: AbortSignal;
 };
 
 type LunaFetchResponse = {
@@ -78,10 +79,32 @@ function lunaFetch(url: string, options: FetchOptions = {}) {
     if (options.contentType) params.contentType = options.contentType;
     if (options.range) params.range = options.range;
 
-    window.webOS.service.request(SERVICE_URI, {
+    if (options.signal?.aborted) {
+      var abortedError = new Error('Request aborted');
+      abortedError.name = 'AbortError';
+      reject(abortedError);
+      return;
+    }
+
+    var settled = false;
+    var requestHandle;
+    var handleAbort = function () {
+      if (settled) return;
+      settled = true;
+      requestHandle?.cancel?.();
+      var error = new Error('Request aborted');
+      error.name = 'AbortError';
+      reject(error);
+    };
+    options.signal?.addEventListener('abort', handleAbort, { once: true });
+
+    requestHandle = window.webOS.service.request(SERVICE_URI, {
       method: 'fetch',
       parameters: params,
       onSuccess: function (res) {
+        if (settled) return;
+        settled = true;
+        options.signal?.removeEventListener('abort', handleAbort);
         if (res.newCookies) {
           var auth = storage.getAuth() || {};
           storage.setAuth(Object.assign({}, auth, res.newCookies));
@@ -89,6 +112,9 @@ function lunaFetch(url: string, options: FetchOptions = {}) {
         resolve(res);
       },
       onFailure: function (err) {
+        if (settled) return;
+        settled = true;
+        options.signal?.removeEventListener('abort', handleAbort);
         reject(new Error(err.errorText || err.error || 'Luna fetch failed'));
       },
     });
@@ -110,6 +136,7 @@ function proxyFetchRaw(url: string, options: FetchOptions = {}) {
     method: options.method || 'GET',
     headers: headers,
     body: options.body,
+    signal: options.signal,
   }).then(function (res) {
     var setCookie = res.headers.get('X-Set-Cookie');
     if (setCookie) {
@@ -146,6 +173,7 @@ async function smartFetch(
       }
       return res;
     } catch (err) {
+      if (opts.signal?.aborted || err?.name === 'AbortError') throw err;
       // Browser dev may expose webOS.service but lack PalmServiceBridge; fallback to proxy.
       if (typeof console !== 'undefined' && console.warn) {
         console.warn(
@@ -190,11 +218,17 @@ export async function apiFetch(
 export async function wbiFetch(
   path: string,
   params?: Record<string, any>,
-  options?: { host?: string },
+  options?: FetchOptions,
 ) {
-  var keys = await getWbiKeys(apiFetch);
+  var keys = await getWbiKeys((keyPath) =>
+    apiFetch(keyPath, undefined, { signal: options?.signal }),
+  );
   var signedQuery = signWbi(params || {}, keys.imgKey, keys.subKey);
-  return smartFetch(options?.host || API_HOST, path + '?' + signedQuery);
+  return smartFetch(
+    options?.host || API_HOST,
+    path + '?' + signedQuery,
+    options,
+  );
 }
 
 // Raw fetch for special cases (returns Response or Luna result)
@@ -355,7 +389,7 @@ export async function getVideoInfo(video) {
   throw new Error('Missing video identifier');
 }
 
-export async function getPlayUrl(videoOrBvid, cid, qn) {
+export async function getPlayUrl(videoOrBvid, cid, qn, options?: FetchOptions) {
   var payload: Record<string, any> = {
     cid: cid,
     qn: qn || 80,
@@ -367,7 +401,7 @@ export async function getPlayUrl(videoOrBvid, cid, qn) {
   if (typeof videoOrBvid === 'string') payload.bvid = videoOrBvid;
   else if (videoOrBvid?.bvid) payload.bvid = videoOrBvid.bvid;
   else if (videoOrBvid?.aid) payload.avid = videoOrBvid.aid;
-  return wbiFetch('/x/player/playurl', payload);
+  return wbiFetch('/x/player/playurl', payload, options);
 }
 
 export async function getPlayerSubtitles(videoOrBvid, cid) {

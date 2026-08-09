@@ -65,6 +65,21 @@ test('buildMPD emits both video/audio adaptation sets and escaped URLs', () => {
   expect(mpd).toContain('https://x/a&lt;1&gt;.m4a');
 });
 
+test('buildMPD emits fallback BaseURL entries', () => {
+  const mpd = buildMPD({
+    video: [
+      {
+        id: 80,
+        baseUrls: ['https://mirror/video.m4s', 'https://origin/video.m4s'],
+      },
+    ],
+    audio: [],
+  });
+
+  expect(mpd).toContain('<BaseURL>https://mirror/video.m4s</BaseURL>');
+  expect(mpd).toContain('<BaseURL>https://origin/video.m4s</BaseURL>');
+});
+
 test('buildMPD supports empty tracks', () => {
   const mpd = buildMPD({ duration: 0, minBufferTime: 1, video: [], audio: [] });
   expect(mpd).toContain('<Period></Period>');

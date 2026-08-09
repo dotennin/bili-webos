@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { storage } from '../utils/storage';
+import { getSelectedCdnOption } from '../utils/cdn';
 import { useFocusable } from '../hooks/useFocus';
 import PageHeader from '../components/PageHeader';
+import CdnSelectDialog from './CdnSelectDialog';
 
 type SettingsPageProps = {
   onLogout: () => void;
@@ -11,6 +13,7 @@ type SettingsPageProps = {
 
 export default function SettingsPage({ onLogout, user }: SettingsPageProps) {
   const [settings, setSettings] = useState(storage.getSettings());
+  const [cdnDialogOpen, setCdnDialogOpen] = useState(false);
 
   const { props: danmakuProps } = useFocusable({
     id: 'content-0-0',
@@ -24,9 +27,19 @@ export default function SettingsPage({ onLogout, user }: SettingsPageProps) {
     },
   });
 
-  const { props: gridColsProps } = useFocusable({
+  const { props: cdnProps } = useFocusable({
     id: 'content-1-0',
     row: 1,
+    col: 0,
+    group: 'content',
+    onSelect: () => {
+      setCdnDialogOpen(true);
+    },
+  });
+
+  const { props: gridColsProps } = useFocusable({
+    id: 'content-2-0',
+    row: 2,
     col: 0,
     group: 'content',
     onSelect: () => {
@@ -39,8 +52,8 @@ export default function SettingsPage({ onLogout, user }: SettingsPageProps) {
   });
 
   const { props: logoutProps } = useFocusable({
-    id: 'content-2-0',
-    row: 2,
+    id: 'content-3-0',
+    row: 3,
     col: 0,
     group: 'content',
     onSelect: () => {
@@ -67,6 +80,17 @@ export default function SettingsPage({ onLogout, user }: SettingsPageProps) {
             {settings.danmaku ? '开启' : '关闭'}
           </span>
         </div>
+        <div {...cdnProps} className="setting-row">
+          <div className="setting-copy">
+            <div className="setting-name">视频 CDN</div>
+            <div className="setting-description">
+              打开面板自动测速，选择线路后用于普通视频播放
+            </div>
+          </div>
+          <span className="setting-value">
+            {getSelectedCdnOption(settings).label}
+          </span>
+        </div>
         <div {...gridColsProps} className="setting-row">
           <div className="setting-copy">
             <div className="setting-name">每行视频数</div>
@@ -82,6 +106,22 @@ export default function SettingsPage({ onLogout, user }: SettingsPageProps) {
           <span className="setting-value">退出</span>
         </div>
       </div>
+      {cdnDialogOpen && (
+        <CdnSelectDialog
+          settings={settings}
+          onClose={() => setCdnDialogOpen(false)}
+          onSelect={(host) => {
+            const nextSettings = {
+              ...settings,
+              cdnEnabled: Boolean(host),
+              cdnHost: host,
+            };
+            storage.setSettings(nextSettings);
+            setSettings(nextSettings);
+            setCdnDialogOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
