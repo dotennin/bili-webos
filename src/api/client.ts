@@ -404,6 +404,23 @@ export async function getPlayUrl(videoOrBvid, cid, qn, options?: FetchOptions) {
   return wbiFetch('/x/player/playurl', payload, options);
 }
 
+export async function getHtml5PlayUrl(
+  videoOrBvid,
+  cid,
+  options?: FetchOptions,
+) {
+  var payload: Record<string, any> = {
+    cid: cid,
+    qn: 80,
+    high_quality: 1,
+    platform: 'html5',
+  };
+  if (typeof videoOrBvid === 'string') payload.bvid = videoOrBvid;
+  else if (videoOrBvid?.bvid) payload.bvid = videoOrBvid.bvid;
+  else if (videoOrBvid?.aid) payload.avid = videoOrBvid.aid;
+  return wbiFetch('/x/player/playurl', payload, options);
+}
+
 export async function getPlayerSubtitles(videoOrBvid, cid) {
   var payload: Record<string, any> = { cid: cid };
   if (typeof videoOrBvid === 'string') payload.bvid = videoOrBvid;
