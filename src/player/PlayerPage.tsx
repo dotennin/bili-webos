@@ -248,6 +248,12 @@ export default function PlayerPage({
   const recoverNativeSpeedRef = useRef(null);
   const speedSwitchInFlightRef = useRef(false);
   const nativePlayUrlCacheRef = useRef(null);
+  const nativeWebOSRuntimeRef = useRef(false);
+
+  const hasNativeWebOSRuntime = useCallback(() => {
+    if (isNativeWebOSRuntime()) nativeWebOSRuntimeRef.current = true;
+    return nativeWebOSRuntimeRef.current;
+  }, []);
 
   const updateLoadingSpeed = useCallback(() => {
     const estimatedBitsPerSecond = Math.max(
@@ -383,7 +389,7 @@ export default function PlayerPage({
     const videoElement = videoRef.current;
     if (!videoElement) return;
 
-    if (nativeModeRef.current && isNativeWebOSRuntime()) {
+    if (nativeModeRef.current && hasNativeWebOSRuntime()) {
       const mediaId = videoElement.mediaId;
       if (mediaId && playbackRate !== 1) {
         const operation = playbackSpeedOperationRef.current;
@@ -404,7 +410,7 @@ export default function PlayerPage({
 
     videoElement.defaultPlaybackRate = playbackRate;
     videoElement.playbackRate = playbackRate;
-  }, [playbackRate]);
+  }, [hasNativeWebOSRuntime, playbackRate]);
 
   const schedulePlaybackRateSync = useCallback(() => {
     if (playbackRateSyncTimerRef.current) {
@@ -1568,7 +1574,7 @@ export default function PlayerPage({
   const changePlaybackRate = useCallback(
     (rate) => {
       const nextRate = Number(rate) || 1;
-      if (!isNativeWebOSRuntime()) {
+      if (!hasNativeWebOSRuntime()) {
         if (videoRef.current) {
           videoRef.current.defaultPlaybackRate = nextRate;
           videoRef.current.playbackRate = nextRate;
@@ -1605,7 +1611,12 @@ export default function PlayerPage({
       const operation = ++playbackSpeedOperationRef.current;
       void applyNativePlaybackRate(nextRate, operation);
     },
-    [applyNativePlaybackRate, restoreDashAfterSpeed, switchToNativeSpeed],
+    [
+      applyNativePlaybackRate,
+      hasNativeWebOSRuntime,
+      restoreDashAfterSpeed,
+      switchToNativeSpeed,
+    ],
   );
 
   const changeSubtitle = useCallback(
@@ -1914,7 +1925,7 @@ export default function PlayerPage({
             setFocusArea('quality');
             setFocusIdx(0);
           } else if (btn === 'speed') {
-            if (isNativeWebOSRuntime() && !nativeModeRef.current) {
+            if (hasNativeWebOSRuntime() && !nativeModeRef.current) {
               prefetchNativePlayUrl().catch(() => {});
             }
             setShowQuality(false);
