@@ -20,9 +20,16 @@ if [ ! -x "$BUN_BIN" ]; then
   echo "bun not found at $BUN_BIN"
   exit 1
 fi
+WEBOS_CLI_VERSION="${WEBOS_CLI_VERSION:-3.2.3}"
+export PATH="$(dirname "$BUN_BIN"):$PATH"
+if ! command -v ares-package >/dev/null 2>&1; then
+  echo "ares-package not found. Install the compatible webOS CLI first:"
+  echo "  bun add -g @webos-tools/cli@${WEBOS_CLI_VERSION}"
+  exit 1
+fi
 
 echo "=== [1/3] Build & Package ==="
-"$BUN_BIN" run package:release 2>&1 | grep -E "vite v|built in|Success|ERR|Create" || true
+"$BUN_BIN" run package:release
 
 echo ""
 echo "=== [2/3] Deploy ==="
