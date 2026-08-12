@@ -1,7 +1,7 @@
 // Deploy ipk to LG webOS TV directly via SSH
 // Bypasses ares-cli Node.js compatibility issues
 import { Client } from 'ssh2';
-import { readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { basename } from 'path';
 import type { ClientChannel, ConnectConfig } from 'ssh2';
 
@@ -11,12 +11,13 @@ const TV_USER = process.env.TV_USER;
 const TV_PASS = process.env.TV_PASS;
 const SSH_KEY_PATH = process.env.SSH_KEY_PATH;
 // Find latest ipk in dist
-const distFiles = readdirSync('dist')
-  .filter((f) => f.endsWith('.ipk'))
-  .sort();
+const distFiles = existsSync('dist')
+  ? readdirSync('dist')
+      .filter((f) => f.endsWith('.ipk'))
+      .sort()
+  : [];
 const IPK_PATH =
-  'dist/' +
-  (distFiles[distFiles.length - 1] || 'com.biliwebos.app_1.0.0_all.ipk');
+  distFiles.length > 0 ? `dist/${distFiles[distFiles.length - 1]}` : null;
 const APP_ID = 'com.biliwebos.app';
 const REMOTE_DIR = '/media/developer/temp/';
 
@@ -68,6 +69,11 @@ function upload(
 }
 
 async function main() {
+  if (!IPK_PATH) {
+    throw new Error(
+      'No .ipk found in dist. Run `bun run package:release` first.',
+    );
+  }
   const privateKey = readFileSync(SSH_KEY_PATH);
   const ipkFile = basename(IPK_PATH);
 

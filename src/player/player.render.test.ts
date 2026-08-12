@@ -19,6 +19,7 @@ let timers;
 let intervals;
 let queryCards;
 let shakaLoads;
+let shakaUnloads;
 let shakaDestroyed;
 let mpegtsDestroyed;
 let originalConsoleError;
@@ -32,6 +33,8 @@ let mpegtsPlayers;
 let currentNow;
 let originalDateNow;
 let liveDanmakuState;
+let lunaMediaCalls;
+let lunaPlayRateResult;
 const apiPath = new URL('../api/client.ts', import.meta.url).pathname;
 const storagePath = new URL('../utils/storage.ts', import.meta.url).pathname;
 const hooksPath = new URL('../hooks/useFocus.ts', import.meta.url).pathname;
@@ -143,6 +146,9 @@ beforeEach(() => {
         quality: qn,
       },
     })),
+    getHtml5PlayUrl: mock(async () => ({
+      data: { durl: [{ url: 'https://video.test/html5.mp4' }] },
+    })),
     getDanmaku: mock(async () => [{ time: 1, text: 'hello', mode: 1 }]),
     getVideoInfo: mock(async () => ({
       data: { cid: 7, title: '详情标题', bvid: 'BVX' },
@@ -200,6 +206,7 @@ beforeEach(() => {
     scrollIntoView: mock(() => {}),
   }));
   shakaLoads = [];
+  shakaUnloads = 0;
   shakaDestroyed = 0;
   mpegtsDestroyed = 0;
   shakaSupported = true;
@@ -209,6 +216,8 @@ beforeEach(() => {
   mpegtsSupported = true;
   mpegtsFeatureList = { mseLivePlayback: true };
   mpegtsPlayers = [];
+  lunaMediaCalls = [];
+  lunaPlayRateResult = true;
   currentNow = 1_000;
   originalDateNow = Date.now;
   Date.now = () => currentNow;
@@ -265,6 +274,7 @@ beforeEach(() => {
   mock.module(apiPath, () => ({
     ...realApi,
     getPlayUrl: (...args) => api.getPlayUrl(...args),
+    getHtml5PlayUrl: (...args) => api.getHtml5PlayUrl(...args),
     getDanmaku: (...args) => api.getDanmaku(...args),
     getVideoInfo: (...args) => api.getVideoInfo(...args),
     reportHeartbeat: (...args) => api.reportHeartbeat(...args),
@@ -363,6 +373,9 @@ beforeEach(() => {
       async load(url) {
         if (shakaLoadError) throw shakaLoadError;
         shakaLoads.push(url);
+      }
+      async unload() {
+        shakaUnloads += 1;
       }
       getStats() {
         return { estimatedBandwidth: this.estimatedBandwidth };
@@ -1440,9 +1453,22 @@ describe('PlayerPage', () => {
     await act(async () => renderer.unmount());
   });
 
-  test('shows an unsupported-speed message inside packaged webos apps', async () => {
+  test('switches packaged webos playback to the native speed pipeline', async () => {
     globalThis.window = Object.assign(eventTarget, {
       PalmSystem: { identifier: 'com.biliwebos.app' },
+      webOS: {
+        service: {
+          request(uri, options) {
+            lunaMediaCalls.push({
+              uri,
+              method: options.method,
+              parameters: options.parameters,
+            });
+            options.onSuccess?.({ returnValue: lunaPlayRateResult });
+            return { cancel() {} };
+          },
+        },
+      },
     });
 
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
@@ -1458,6 +1484,11 @@ describe('PlayerPage', () => {
       }),
       (element) => (element.type === 'video' ? video : null),
     );
+    let nativeLoadCalls = 0;
+    video.element.load = () => {
+      nativeLoadCalls += 1;
+      video.element.mediaId = 'media-1';
+    };
 
     await act(async () => {
       await flush();
@@ -1466,22 +1497,104 @@ describe('PlayerPage', () => {
     });
 
     video.duration = 120;
+    video.currentTime = 42;
     await interact(() => video.dispatch('loadeddata'));
     await interact(() => video.dispatch('play'));
     await interact(() => customKeyHandler(event('ArrowUp')));
     await interact(() => customKeyHandler(event('ArrowDown')));
 
-    expect(JSON.stringify(renderer.toJSON())).toContain('倍速');
+    expect(JSON.stringify(renderer.toJSON())).toContain('1x');
 
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('Enter')));
 
-    const tree = JSON.stringify(renderer.toJSON());
-    expect(tree).toContain('speed-panel');
-    expect(tree).toContain('此设备不支持倍速');
-    expect(tree).not.toContain('0.25x');
+    expect(JSON.stringify(renderer.toJSON())).toContain('speed-panel');
+
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+
+    expect(api.getHtml5PlayUrl).toHaveBeenCalledWith(expect.any(Object), 16);
+    expect(shakaUnloads).toBe(1);
+    expect(video.element.src).toBe(
+      'http://proxy.test/proxy/video.test/html5.mp4',
+    );
+    expect(nativeLoadCalls).toBe(1);
+    expect(video.currentTime).toBe(42);
+    expect(video.playCalls).toBeGreaterThan(1);
+
+    await interact(() => {
+      for (const timer of timers.filter(
+        (item) => item.delay === 100 && !item.cleared,
+      )) {
+        timer.fn();
+      }
+    });
+    expect(lunaMediaCalls).toContainEqual({
+      uri: 'luna://com.webos.media',
+      method: 'setPlayRate',
+      parameters: { mediaId: 'media-1', playRate: 0.5, audioOutput: true },
+    });
+    expect(JSON.stringify(renderer.toJSON())).toContain('0.5x');
+
+    const reassertionsBefore = lunaMediaCalls.length;
+    await interact(() => video.dispatch('canplay'));
+    await interact(() => video.dispatch('seeked'));
+    expect(lunaMediaCalls.length).toBeGreaterThan(reassertionsBefore);
+
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('quality-panel');
+
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    expect(shakaLoads).toHaveLength(2);
+    expect(video.currentTime).toBe(42);
+    expect(JSON.stringify(renderer.toJSON())).toContain('1x');
+
+    lunaPlayRateResult = false;
+    await interact(() => customKeyHandler(event('Enter')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    expect(shakaUnloads).toBe(2);
+    expect(shakaLoads).toHaveLength(3);
+    expect(JSON.stringify(renderer.toJSON())).toContain('1x');
+
+    lunaPlayRateResult = true;
+    await interact(() => customKeyHandler(event('Enter')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    lunaPlayRateResult = false;
+    await interact(() => video.dispatch('seeked'));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    expect(shakaLoads).toHaveLength(4);
+    expect(JSON.stringify(renderer.toJSON())).toContain('1x');
 
     await act(async () => {
       renderer.unmount();
@@ -1560,6 +1673,59 @@ describe('PlayerPage', () => {
     await act(async () => {
       renderer.unmount();
     });
+  });
+
+  test('restores DASH when the webOS media service disappears', async () => {
+    globalThis.window = Object.assign(eventTarget, {
+      PalmSystem: { identifier: 'com.biliwebos.app' },
+      webOS: {
+        service: {
+          request() {},
+        },
+      },
+    });
+    api.getHtml5PlayUrl.mockImplementationOnce(async () => {
+      globalThis.window.webOS = undefined;
+      return { data: { durl: [{ url: 'https://video.test/fallback.mp4' }] } };
+    });
+
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-WEBOS-RECOVER', cid: 17, title: '恢复视频' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    video.duration = 120;
+    video.element.mediaId = 'media-recover';
+    await interact(() => video.dispatch('loadeddata'));
+    await interact(() => video.dispatch('play'));
+    await interact(() => customKeyHandler(event('ArrowUp')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+
+    expect(shakaUnloads).toBe(1);
+    expect(shakaLoads).toHaveLength(2);
+    expect(JSON.stringify(renderer.toJSON())).toContain('1x');
+
+    await act(async () => renderer.unmount());
   });
 
   test('keeps endscreen navigation active after a pre-ended auto-hide timer fires', async () => {

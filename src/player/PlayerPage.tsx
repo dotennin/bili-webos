@@ -8,13 +8,14 @@ import {
   getStoryboard,
   getPlayerSubtitles,
   getSubtitleCues,
+  getHtml5PlayUrl,
   castReportProgress,
   castReportState,
   type StoryboardTile,
 } from '../api/client';
 import { getStoryboardFrame, type StoryboardFrame } from './storyboard';
 import { formatDuration, QUALITY_MAP } from '../utils/format';
-import { getProxyBase } from '../utils/proxy';
+import { buildProxyUrl, getProxyBase } from '../utils/proxy';
 import { setCustomKeyHandler } from '../hooks/useFocus';
 import { storage } from '../utils/storage';
 import { applyCdnToDash } from '../utils/cdn';
@@ -36,6 +37,10 @@ const RESUME_REWIND_SEC = 2;
 const RELATED_GRID_COLS = 4;
 const PLAYBACK_SPEEDS = [2, 1.5, 1.25, 1, 0.75, 0.5, 0.25];
 const PLAYBACK_RATE_SYNC_DELAY_MS = 1200;
+const WEBOS_MEDIA_ID_POLL_MS = 100;
+const WEBOS_MEDIA_ID_MAX_POLLS = 100;
+const WEBOS_PLAY_RATE_TIMEOUT_MS = 3000;
+const NATIVE_PLAY_URL_CACHE_MAX_AGE_MS = 30_000;
 const STALL_WATCH_INTERVAL_MS = 1000;
 const STALL_RECOVERY_AFTER_MS = 6000;
 const STALL_RECOVERY_SEEK_SEC = 0.05;
@@ -96,10 +101,74 @@ function getSeekProfile(durationSec) {
   };
 }
 
-function supportsPlaybackSpeedControl() {
-  const appId = window?.PalmSystem?.identifier?.split(' ')[0];
-  if (!appId) return true;
-  return appId === WEBOS_BROWSER_APP_ID;
+function isNativeWebOSRuntime() {
+  if (typeof window === 'undefined') return false;
+  const appId = window.PalmSystem?.identifier?.split(' ')[0];
+  const hasPalmServiceBridge =
+    typeof window.PalmServiceBridge !== 'undefined' ||
+    typeof window.PalmSystem?.serviceBridge === 'function';
+  return (
+    (appId != null || hasPalmServiceBridge) &&
+    appId !== WEBOS_BROWSER_APP_ID &&
+    typeof window.webOS?.service?.request === 'function'
+  );
+}
+
+function setWebOSPlayRate(mediaId, playRate) {
+  return new Promise((resolve) => {
+    const service =
+      typeof window !== 'undefined' ? window.webOS?.service : undefined;
+    if (typeof service?.request !== 'function') {
+      resolve(false);
+      return;
+    }
+
+    let settled = false;
+    let timeoutId;
+    const finish = (success) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      resolve(success);
+    };
+
+    timeoutId = setTimeout(() => finish(false), WEBOS_PLAY_RATE_TIMEOUT_MS);
+    try {
+      service.request('luna://com.webos.media', {
+        method: 'setPlayRate',
+        parameters: { mediaId, playRate, audioOutput: true },
+        onSuccess: (response) => finish(!!response?.returnValue),
+        onFailure: () => finish(false),
+      });
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+function waitForWebOSMediaId(videoElement) {
+  return new Promise((resolve, reject) => {
+    let polls = 0;
+    const poll = () => {
+      const mediaId = videoElement?.mediaId;
+      if (mediaId) {
+        resolve(mediaId);
+        return;
+      }
+      if (polls >= WEBOS_MEDIA_ID_MAX_POLLS) {
+        reject(new Error('webOS mediaId unavailable'));
+        return;
+      }
+      polls += 1;
+      setTimeout(poll, WEBOS_MEDIA_ID_POLL_MS);
+    };
+    poll();
+  });
+}
+
+function buildNativeMediaUrl(url) {
+  const normalized = String(url || '').startsWith('//') ? `https:${url}` : url;
+  return buildProxyUrl(normalized);
 }
 
 type PlayerPageProps = {
@@ -133,6 +202,7 @@ export default function PlayerPage({
   const [videoTitle, setVideoTitle] = useState(video?.title || '');
   const [loading, setLoading] = useState(true);
   const [buffering, setBuffering] = useState(false);
+  const [speedSwitching, setSpeedSwitching] = useState(false);
   const [firstFrameReady, setFirstFrameReady] = useState(false);
   const [ended, setEnded] = useState(false);
   const [relatedVideos, setRelatedVideos] = useState([]);
@@ -181,6 +251,20 @@ export default function PlayerPage({
   const commentAidRequestRef = useRef(0);
   const showCommentRailRef = useRef(showCommentRail);
   showCommentRailRef.current = showCommentRail;
+  const nativeModeRef = useRef(false);
+  const nativeSourceReadyRef = useRef(false);
+  const nativeTransitionPositionRef = useRef(null);
+  const dashRestorePendingRef = useRef(false);
+  const playbackSpeedOperationRef = useRef(0);
+  const recoverNativeSpeedRef = useRef(null);
+  const speedSwitchInFlightRef = useRef(false);
+  const nativePlayUrlCacheRef = useRef(null);
+  const nativeWebOSRuntimeRef = useRef(false);
+
+  const hasNativeWebOSRuntime = useCallback(() => {
+    if (isNativeWebOSRuntime()) nativeWebOSRuntimeRef.current = true;
+    return nativeWebOSRuntimeRef.current;
+  }, []);
 
   const updateLoadingSpeed = useCallback(() => {
     const estimatedBitsPerSecond = Math.max(
@@ -252,7 +336,6 @@ export default function PlayerPage({
     pendingSeekRef.current = null;
   }, []);
 
-  const playbackSpeedSupported = supportsPlaybackSpeedControl();
   const CONTROLS =
     subtitleTracks.length > 0
       ? ['play', 'danmaku', 'quality', 'speed', 'subtitle', 'comments']
@@ -314,11 +397,31 @@ export default function PlayerPage({
   }, [clearSeekCommitTimer]);
 
   const syncPlaybackRate = useCallback(() => {
-    if (videoRef.current) {
-      videoRef.current.defaultPlaybackRate = playbackRate;
-      videoRef.current.playbackRate = playbackRate;
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    if (nativeModeRef.current && hasNativeWebOSRuntime()) {
+      const mediaId = videoElement.mediaId;
+      if (mediaId && playbackRate !== 1) {
+        const operation = playbackSpeedOperationRef.current;
+        setWebOSPlayRate(mediaId, playbackRate).then((success) => {
+          if (!success) {
+            console.warn('[Player] webOS playback-rate reassertion failed');
+            if (
+              operation === playbackSpeedOperationRef.current &&
+              nativeModeRef.current
+            ) {
+              void recoverNativeSpeedRef.current?.(operation);
+            }
+          }
+        });
+      }
+      return;
     }
-  }, [playbackRate]);
+
+    videoElement.defaultPlaybackRate = playbackRate;
+    videoElement.playbackRate = playbackRate;
+  }, [hasNativeWebOSRuntime, playbackRate]);
 
   const schedulePlaybackRateSync = useCallback(() => {
     if (playbackRateSyncTimerRef.current) {
@@ -329,6 +432,37 @@ export default function PlayerPage({
       syncPlaybackRate();
     }, PLAYBACK_RATE_SYNC_DELAY_MS);
   }, [syncPlaybackRate]);
+
+  const prefetchNativePlayUrl = useCallback(() => {
+    const cid = cidRef.current;
+    const identifier = video?.bvid || video?.aid;
+    if (!cid || !identifier) {
+      return Promise.reject(
+        new Error('Native playback identifiers unavailable'),
+      );
+    }
+
+    const key = `${identifier}:${cid}`;
+    const cached = nativePlayUrlCacheRef.current;
+    if (
+      cached?.key === key &&
+      Date.now() - cached.createdAt < NATIVE_PLAY_URL_CACHE_MAX_AGE_MS
+    )
+      return cached.promise;
+
+    const entry = {
+      key,
+      createdAt: Date.now(),
+      promise: getHtml5PlayUrl(video, cid),
+    };
+    nativePlayUrlCacheRef.current = entry;
+    entry.promise.catch(() => {
+      if (nativePlayUrlCacheRef.current === entry) {
+        nativePlayUrlCacheRef.current = null;
+      }
+    });
+    return entry.promise;
+  }, [video]);
 
   const getStablePlaybackTime = useCallback(() => {
     const playerTime = Number(videoRef.current?.currentTime) || 0;
@@ -664,6 +798,13 @@ export default function PlayerPage({
     init();
     return () => {
       mounted = false;
+      playbackSpeedOperationRef.current += 1;
+      nativeModeRef.current = false;
+      nativeSourceReadyRef.current = false;
+      nativeTransitionPositionRef.current = null;
+      dashRestorePendingRef.current = false;
+      videoRef.current?.pause?.();
+      videoRef.current?.removeAttribute?.('src');
       storyboardVideoKeyRef.current = null;
       shakaRef.current?.destroy();
     };
@@ -678,6 +819,15 @@ export default function PlayerPage({
         setLoading(false);
         return;
       }
+      nativeModeRef.current = false;
+      nativeSourceReadyRef.current = false;
+      nativeTransitionPositionRef.current = null;
+      dashRestorePendingRef.current = false;
+      playbackSpeedOperationRef.current += 1;
+      speedSwitchInFlightRef.current = false;
+      nativePlayUrlCacheRef.current = null;
+      setSpeedSwitching(false);
+      setPlaybackRate(1);
       setLoading(true);
       startLoadingSpeed();
       setFirstFrameReady(false);
@@ -991,6 +1141,8 @@ export default function PlayerPage({
       setFirstFrameReady(true);
       stopLoadingSpeed();
       setLoading(false);
+      speedSwitchInFlightRef.current = false;
+      setSpeedSwitching(false);
       syncTimelineFromPlayer();
     };
     const handleRateChange = () => {
@@ -1014,6 +1166,8 @@ export default function PlayerPage({
       setBuffering(false);
       stopLoadingSpeed();
       setLoading(false);
+      speedSwitchInFlightRef.current = false;
+      setSpeedSwitching(false);
       setPlaying(true);
       castReportState({ playState: 'playing' }).catch(() => {});
     };
@@ -1024,6 +1178,7 @@ export default function PlayerPage({
         suppressedBufferingRef.current = true;
         return;
       }
+      if (speedSwitchInFlightRef.current) return;
       setBuffering(true);
       castReportState({ playState: 'loading' }).catch(() => {});
     };
@@ -1042,6 +1197,7 @@ export default function PlayerPage({
     el.addEventListener('loadedmetadata', handleLoadedMetadata);
     el.addEventListener('canplay', handleCanPlay);
     el.addEventListener('loadeddata', handleLoadedData);
+    el.addEventListener('seeked', syncPlaybackRate);
     el.addEventListener('ratechange', handleRateChange);
     el.addEventListener('waiting', handleWaiting);
     el.addEventListener('stalled', handleWaiting);
@@ -1053,6 +1209,7 @@ export default function PlayerPage({
       el.removeEventListener('loadedmetadata', handleLoadedMetadata);
       el.removeEventListener('canplay', handleCanPlay);
       el.removeEventListener('loadeddata', handleLoadedData);
+      el.removeEventListener('seeked', syncPlaybackRate);
       el.removeEventListener('ratechange', handleRateChange);
       el.removeEventListener('waiting', handleWaiting);
       el.removeEventListener('stalled', handleWaiting);
@@ -1330,45 +1487,231 @@ export default function PlayerPage({
 
   // Change quality
   const changeQuality = useCallback(
-    async (qn) => {
-      if ((!video?.bvid && !video?.aid) || !shakaRef.current) return;
+    async (qn, expectedSpeedOperation = null, restorePosition = null) => {
+      if (
+        nativeModeRef.current ||
+        (dashRestorePendingRef.current && expectedSpeedOperation == null) ||
+        (!video?.bvid && !video?.aid) ||
+        !shakaRef.current
+      )
+        return false;
+      const speedOperation =
+        expectedSpeedOperation ?? playbackSpeedOperationRef.current;
       setCurrentQuality(qn);
       storage.setSettings({ ...storage.getSettings(), quality: qn });
       try {
         let cid = video.cid || cidRef.current;
         const res = await getPlayUrl(video, cid, qn);
+        if (
+          speedOperation !== playbackSpeedOperationRef.current ||
+          nativeModeRef.current
+        )
+          return false;
         const dash = res?.data?.dash;
         if (dash) {
-          const pos = videoRef.current.currentTime;
+          const pos =
+            restorePosition == null
+              ? videoRef.current.currentTime
+              : restorePosition;
           const mpd = buildMPD(applyCdnToDash(dash, storage.getSettings()));
           const blob = new Blob([mpd], { type: 'application/dash+xml' });
           const mpdUrl = URL.createObjectURL(blob);
           try {
+            if (
+              speedOperation !== playbackSpeedOperationRef.current ||
+              nativeModeRef.current
+            )
+              return false;
             await shakaRef.current.load(mpdUrl);
           } finally {
             URL.revokeObjectURL(mpdUrl);
           }
+          if (
+            speedOperation !== playbackSpeedOperationRef.current ||
+            nativeModeRef.current
+          )
+            return false;
           videoRef.current.currentTime = pos;
           syncPlaybackRate();
           schedulePlaybackRateSync();
           videoRef.current.play();
           setCurrentQuality(res?.data?.quality || qn);
+          return true;
         }
+        return false;
       } catch (e) {
         console.error('Quality change error:', e);
+        return false;
       }
     },
     [schedulePlaybackRateSync, syncPlaybackRate, video],
   );
 
-  const changePlaybackRate = useCallback((rate) => {
-    const nextRate = Number(rate) || 1;
-    if (videoRef.current) {
-      videoRef.current.defaultPlaybackRate = nextRate;
-      videoRef.current.playbackRate = nextRate;
-    }
-    setPlaybackRate(nextRate);
-  }, []);
+  const restoreDashAfterSpeed = useCallback(
+    async (operation, position) => {
+      if (operation !== playbackSpeedOperationRef.current) return;
+      speedSwitchInFlightRef.current = true;
+      setSpeedSwitching(true);
+      setBuffering(false);
+      dashRestorePendingRef.current = true;
+      let restored = false;
+      try {
+        restored =
+          (await changeQuality(currentQuality, operation, position)) === true;
+        return restored;
+      } finally {
+        if (operation === playbackSpeedOperationRef.current) {
+          dashRestorePendingRef.current = !restored;
+          if (restored) nativeTransitionPositionRef.current = null;
+          speedSwitchInFlightRef.current = false;
+          setSpeedSwitching(false);
+        }
+      }
+    },
+    [changeQuality, currentQuality],
+  );
+
+  const recoverFromNativeSpeedFailure = useCallback(
+    async (operation) => {
+      if (operation !== playbackSpeedOperationRef.current) return;
+      const position =
+        Number(videoRef.current?.currentTime) ||
+        nativeTransitionPositionRef.current ||
+        0;
+      nativeModeRef.current = false;
+      nativeSourceReadyRef.current = false;
+      setPlaybackRate(1);
+      await restoreDashAfterSpeed(operation, position);
+    },
+    [restoreDashAfterSpeed],
+  );
+  recoverNativeSpeedRef.current = recoverFromNativeSpeedFailure;
+
+  const applyNativePlaybackRate = useCallback(
+    async (rate, operation) => {
+      const videoElement = videoRef.current;
+      if (!videoElement) return false;
+      try {
+        const mediaId =
+          videoElement.mediaId || (await waitForWebOSMediaId(videoElement));
+        if (
+          operation !== playbackSpeedOperationRef.current ||
+          !nativeModeRef.current
+        )
+          return false;
+        const applied = await setWebOSPlayRate(mediaId, rate);
+        if (!applied) throw new Error('webOS setPlayRate rejected');
+        if (operation !== playbackSpeedOperationRef.current) return false;
+        setPlaybackRate(rate);
+        speedSwitchInFlightRef.current = false;
+        setSpeedSwitching(false);
+        return true;
+      } catch (error) {
+        console.warn(
+          '[Player] native playback-rate switch failed:',
+          error?.message || error,
+        );
+        await recoverFromNativeSpeedFailure(operation);
+        return false;
+      }
+    },
+    [recoverFromNativeSpeedFailure],
+  );
+
+  const switchToNativeSpeed = useCallback(
+    async (rate) => {
+      const operation = ++playbackSpeedOperationRef.current;
+      const videoElement = videoRef.current;
+      if (!videoElement || !cidRef.current) return false;
+      const position = Number(videoElement.currentTime) || 0;
+      nativeModeRef.current = true;
+      nativeSourceReadyRef.current = false;
+      dashRestorePendingRef.current = false;
+      nativeTransitionPositionRef.current = position;
+      speedSwitchInFlightRef.current = true;
+      setSpeedSwitching(true);
+      setBuffering(false);
+
+      try {
+        const result = await prefetchNativePlayUrl();
+        const durl = result?.data?.durl?.[0]?.url;
+        if (!durl) throw new Error('HTML5 playback URL is unavailable');
+        if (operation !== playbackSpeedOperationRef.current) return false;
+
+        await shakaRef.current?.unload?.();
+        if (operation !== playbackSpeedOperationRef.current) return false;
+
+        videoElement.src = buildNativeMediaUrl(durl);
+        pendingSeekRef.current = position > 0 ? position : null;
+        nativeSourceReadyRef.current = true;
+        videoElement.load?.();
+        const playPromise = videoElement.play?.();
+        playPromise?.catch?.(() => {});
+        return applyNativePlaybackRate(rate, operation);
+      } catch (error) {
+        console.warn(
+          '[Player] native playback switch failed:',
+          error?.message || error,
+        );
+        await recoverFromNativeSpeedFailure(operation);
+        return false;
+      }
+    },
+    [
+      applyNativePlaybackRate,
+      prefetchNativePlayUrl,
+      recoverFromNativeSpeedFailure,
+      video,
+    ],
+  );
+
+  const changePlaybackRate = useCallback(
+    (rate) => {
+      const nextRate = Number(rate) || 1;
+      if (!hasNativeWebOSRuntime()) {
+        if (videoRef.current) {
+          videoRef.current.defaultPlaybackRate = nextRate;
+          videoRef.current.playbackRate = nextRate;
+        }
+        setPlaybackRate(nextRate);
+        return;
+      }
+
+      if (nextRate === 1) {
+        const shouldRestoreDash =
+          nativeModeRef.current || dashRestorePendingRef.current;
+        const position =
+          Number(videoRef.current?.currentTime) ||
+          nativeTransitionPositionRef.current ||
+          0;
+        const operation = ++playbackSpeedOperationRef.current;
+        nativeModeRef.current = false;
+        nativeSourceReadyRef.current = false;
+        setPlaybackRate(1);
+        if (shouldRestoreDash) {
+          void restoreDashAfterSpeed(operation, position);
+        } else {
+          speedSwitchInFlightRef.current = false;
+          setSpeedSwitching(false);
+        }
+        return;
+      }
+
+      if (!nativeModeRef.current || !nativeSourceReadyRef.current) {
+        void switchToNativeSpeed(nextRate);
+        return;
+      }
+
+      const operation = ++playbackSpeedOperationRef.current;
+      void applyNativePlaybackRate(nextRate, operation);
+    },
+    [
+      applyNativePlaybackRate,
+      hasNativeWebOSRuntime,
+      restoreDashAfterSpeed,
+      switchToNativeSpeed,
+    ],
+  );
 
   const changeSubtitle = useCallback(
     async (index) => {
@@ -1680,21 +2023,22 @@ export default function PlayerPage({
           } else if (btn === 'danmaku') {
             setDanmakuEnabled((prev) => !prev);
           } else if (btn === 'quality') {
+            if (nativeModeRef.current || dashRestorePendingRef.current)
+              return true;
             setShowQuality(true);
             setShowSpeed(false);
             setShowSubtitle(false);
             setFocusArea('quality');
             setFocusIdx(0);
           } else if (btn === 'speed') {
+            if (hasNativeWebOSRuntime() && !nativeModeRef.current) {
+              prefetchNativePlayUrl().catch(() => {});
+            }
             setShowQuality(false);
             setShowSpeed(true);
             setShowSubtitle(false);
             setFocusArea('speed');
-            setFocusIdx(
-              playbackSpeedSupported
-                ? Math.max(0, PLAYBACK_SPEEDS.indexOf(playbackRate))
-                : 0,
-            );
+            setFocusIdx(Math.max(0, PLAYBACK_SPEEDS.indexOf(playbackRate)));
           } else if (btn === 'subtitle') {
             setShowQuality(false);
             setShowSpeed(false);
@@ -1759,17 +2103,6 @@ export default function PlayerPage({
 
       // === Speed panel ===
       if (focusArea === 'speed') {
-        if (!playbackSpeedSupported) {
-          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-            e.preventDefault();
-            return true;
-          }
-          if (key === 'Enter') {
-            e.preventDefault();
-            return true;
-          }
-          return false;
-        }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           setFocusIdx((prev) => Math.max(0, prev - 1));
@@ -1980,7 +2313,7 @@ export default function PlayerPage({
           </div>
         )}
 
-        {buffering && !loading && (
+        {buffering && !loading && !speedSwitching && (
           <div className="buffering-overlay">
             <div className="loading">
               <div className="loading-spinner" />
@@ -2034,9 +2367,7 @@ export default function PlayerPage({
                             : '字幕 关'
                           : btn === 'comments'
                             ? '评论'
-                            : playbackSpeedSupported
-                              ? `${playbackRate}x`
-                              : '倍速'}
+                            : `${playbackRate}x`}
                 </button>
               ))}
               <span ref={timeTextRef} className="player-time">
@@ -2133,20 +2464,14 @@ export default function PlayerPage({
 
         {showSpeed && (
           <div className="quality-panel speed-panel">
-            {playbackSpeedSupported ? (
-              PLAYBACK_SPEEDS.map((rate, i) => (
-                <div
-                  key={rate}
-                  className={`quality-option speed-option ${focusArea === 'speed' && focusIdx === i ? 'focused' : ''} ${playbackRate === rate ? 'active' : ''}`}
-                >
-                  {rate}x
-                </div>
-              ))
-            ) : (
-              <div className="quality-option speed-option focused active">
-                此设备不支持倍速
+            {PLAYBACK_SPEEDS.map((rate, i) => (
+              <div
+                key={rate}
+                className={`quality-option speed-option ${focusArea === 'speed' && focusIdx === i ? 'focused' : ''} ${playbackRate === rate ? 'active' : ''}`}
+              >
+                {rate}x
               </div>
-            )}
+            ))}
           </div>
         )}
 

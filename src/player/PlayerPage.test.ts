@@ -35,9 +35,9 @@ const browserAppIdMatch = source.match(
   /const WEBOS_BROWSER_APP_ID = '([^']+)'/,
 );
 if (!browserAppIdMatch) throw new Error('missing WEBOS_BROWSER_APP_ID');
-const supportsPlaybackSpeedControl = new Function(
+const isNativeWebOSRuntime = new Function(
   'WEBOS_BROWSER_APP_ID',
-  `${extractFunction('supportsPlaybackSpeedControl')}; return supportsPlaybackSpeedControl;`,
+  `${extractFunction('isNativeWebOSRuntime')}; return isNativeWebOSRuntime;`,
 )(browserAppIdMatch[1]);
 const getActiveSubtitleText = new Function(
   `${extractFunction('getActiveSubtitleText')}; return getActiveSubtitleText;`,
@@ -85,21 +85,28 @@ test('buildMPD supports empty tracks', () => {
   expect(mpd).toContain('<Period></Period>');
 });
 
-test('supportsPlaybackSpeedControl disables speed in packaged webos apps only', () => {
+test('isNativeWebOSRuntime detects packaged TV media services', () => {
   const originalWindow = globalThis.window;
 
   globalThis.window = {};
-  expect(supportsPlaybackSpeedControl()).toBe(true);
+  expect(isNativeWebOSRuntime()).toBe(false);
+
+  globalThis.window = {
+    webOS: { service: { request() {} } },
+  };
+  expect(isNativeWebOSRuntime()).toBe(false);
 
   globalThis.window = {
     PalmSystem: { identifier: 'com.webos.app.browser' },
+    webOS: { service: { request() {} } },
   };
-  expect(supportsPlaybackSpeedControl()).toBe(true);
+  expect(isNativeWebOSRuntime()).toBe(false);
 
   globalThis.window = {
     PalmSystem: { identifier: 'com.biliwebos.app' },
+    webOS: { service: { request() {} } },
   };
-  expect(supportsPlaybackSpeedControl()).toBe(false);
+  expect(isNativeWebOSRuntime()).toBe(true);
 
   globalThis.window = originalWindow;
 });

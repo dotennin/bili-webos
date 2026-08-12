@@ -14,14 +14,17 @@ import {
   getReplies,
   getReplyReplies,
   likeComment,
+  getHtml5PlayUrl,
   type StoryboardTile,
 } from './client';
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
 const originalStorage = globalThis.localStorage;
+let requestedUrls: string[] = [];
 
 function setupMocks(responseData?: any) {
+  requestedUrls = [];
   globalThis.localStorage = {
     getItem: () => null,
     setItem: () => {},
@@ -32,6 +35,7 @@ function setupMocks(responseData?: any) {
   };
 
   globalThis.fetch = mock((url: string) => {
+    requestedUrls.push(String(url));
     if (String(url).includes('/x/web-interface/nav')) {
       return Promise.resolve({
         ok: true,
@@ -69,6 +73,49 @@ function setupMocks(responseData?: any) {
     location: { hostname: 'localhost', origin: 'http://localhost:5173' },
   } as any;
 }
+
+describe('getHtml5PlayUrl', () => {
+  beforeEach(() => {
+    setupMocks({
+      code: 0,
+      data: { durl: [{ url: 'https://video.test/merged.mp4' }] },
+    });
+  });
+
+  afterEach(() => {
+    teardownMocks();
+  });
+
+  test('requests a merged HTML5 stream with a bounded quality', async () => {
+    const result = await getHtml5PlayUrl({ bvid: 'BV-HTML5' }, 12);
+    const requestUrl = requestedUrls.find((url) =>
+      url.includes('/x/player/playurl'),
+    );
+    const query = new URL(requestUrl!).searchParams;
+
+    expect(result?.data?.durl?.[0]?.url).toBe(
+      'https://video.test/merged.mp4',
+    );
+    expect(query.get('bvid')).toBe('BV-HTML5');
+    expect(query.get('cid')).toBe('12');
+    expect(query.get('platform')).toBe('html5');
+    expect(query.get('high_quality')).toBe('1');
+    expect(query.get('qn')).toBe('80');
+  });
+
+  test('supports string bvid and aid identifiers', async () => {
+    await getHtml5PlayUrl('BV-STRING', 13);
+    await getHtml5PlayUrl({ aid: 456 }, 14);
+
+    const playurlRequests = requestedUrls.filter((url) =>
+      url.includes('/x/player/playurl'),
+    );
+    expect(new URL(playurlRequests[0]).searchParams.get('bvid')).toBe(
+      'BV-STRING',
+    );
+    expect(new URL(playurlRequests[1]).searchParams.get('avid')).toBe('456');
+  });
+});
 
 function teardownMocks() {
   globalThis.fetch = originalFetch;
