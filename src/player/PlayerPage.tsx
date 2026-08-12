@@ -1489,8 +1489,9 @@ export default function PlayerPage({
         if (operation !== playbackSpeedOperationRef.current) return false;
 
         videoElement.src = buildNativeMediaUrl(durl);
-        nativeSourceReadyRef.current = true;
         pendingSeekRef.current = position > 0 ? position : null;
+        nativeSourceReadyRef.current = true;
+        videoElement.load?.();
         const playPromise = videoElement.play?.();
         playPromise?.catch?.(() => {});
         return applyNativePlaybackRate(rate, operation);

@@ -1366,6 +1366,11 @@ describe('PlayerPage', () => {
       }),
       (element) => (element.type === 'video' ? video : null),
     );
+    let nativeLoadCalls = 0;
+    video.element.load = () => {
+      nativeLoadCalls += 1;
+      video.element.mediaId = 'media-1';
+    };
 
     await act(async () => {
       await flush();
@@ -1403,10 +1408,10 @@ describe('PlayerPage', () => {
     expect(video.element.src).toBe(
       'http://proxy.test/proxy/video.test/html5.mp4',
     );
+    expect(nativeLoadCalls).toBe(1);
     expect(video.currentTime).toBe(42);
     expect(video.playCalls).toBeGreaterThan(1);
 
-    video.element.mediaId = 'media-1';
     await interact(() => {
       for (const timer of timers.filter(
         (item) => item.delay === 100 && !item.cleared,
