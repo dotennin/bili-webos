@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.16.0...bili-webos-tv-v1.17.0) (2026-08-12)
+
+
+### Features
+
+* add native webOS playback speed control ([#133](https://github.com/dotennin/bili-webos/issues/133)) ([d639c61](https://github.com/dotennin/bili-webos/commit/d639c61fb3b48a60125776ce2bdba7055f8f6f0d))
+* add video comments ([#135](https://github.com/dotennin/bili-webos/issues/135)) ([6355127](https://github.com/dotennin/bili-webos/commit/63551277d38894979111395b56e87a9f49f1e466))
+
 ## [1.16.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.15.0...bili-webos-tv-v1.16.0) (2026-08-09)
 
 
