@@ -15,12 +15,14 @@ const isolatedTests = [
   'src/api/client.test.ts',
   'src/hooks/useFocus.test.ts',
   'src/hooks/useResponsiveGridCols.test.ts',
+  'src/utils/cdnSpeed.test.ts',
 ];
 const isolatedCoverageFiles = [
   'src/utils/storage.ts',
   'src/api/client.ts',
   'src/hooks/useFocus.ts',
   'src/hooks/useResponsiveGridCols.ts',
+  'src/utils/cdnSpeed.ts',
 ];
 const testRoots = ['webos/service/com.biliwebos.app.service/test', 'src'];
 

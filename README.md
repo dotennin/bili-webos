@@ -81,7 +81,7 @@ Web App (Vite dev server) -> /proxy -> Bilibili API / CDN
 git clone https://github.com/dotennin/bili-webos.git
 cd bili-webos
 bun install
-bun add -g @webos-tools/cli
+bun add -g @webos-tools/cli@3.2.3
 ```
 
 ## Development
