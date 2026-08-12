@@ -11,6 +11,9 @@ import {
   getHistory,
   getFavFolders,
   getFavList,
+  getReplies,
+  getReplyReplies,
+  likeComment,
   getHtml5PlayUrl,
   type StoryboardTile,
 } from './client';
@@ -254,5 +257,101 @@ describe('getStoryboard', () => {
       const result = await getRegionDynamic();
       expect(result?.data?.archives?.[0]?.aid).toBe(222);
     });
+  });
+});
+
+describe('comment APIs', () => {
+  beforeEach(() => {
+    setupMocks({
+      code: 0,
+      data: {
+        replies: [],
+        cursor: {
+          is_end: false,
+          pagination_reply: { next_offset: 'next-page' },
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    teardownMocks();
+  });
+
+  test('getReplies requests hot comments with cursor pagination', async () => {
+    const data = await getReplies(123, 'cursor-value');
+    const url = new URL(String((globalThis.fetch as any).mock.calls[0][0]));
+
+    expect(url.pathname).toContain('/x/v2/reply/main');
+    expect(url.searchParams.get('type')).toBe('1');
+    expect(url.searchParams.get('oid')).toBe('123');
+    expect(url.searchParams.get('mode')).toBe('3');
+    expect(JSON.parse(url.searchParams.get('pagination_str') || '{}')).toEqual(
+      { offset: 'cursor-value' },
+    );
+    expect(data.data.cursor.pagination_reply.next_offset).toBe('next-page');
+  });
+
+  test('getReplies starts with an empty offset and rejects business errors', async () => {
+    await getReplies(321);
+    const url = new URL(String((globalThis.fetch as any).mock.calls[0][0]));
+    expect(JSON.parse(url.searchParams.get('pagination_str') || '{}')).toEqual(
+      { offset: '' },
+    );
+
+    setupMocks({ code: -509, message: '请求过快' });
+    await expect(getReplies(321)).rejects.toThrow('请求过快');
+  });
+
+  test('getReplyReplies requests one nested-reply page', async () => {
+    await getReplyReplies(123, 456, 2);
+    const url = new URL(String((globalThis.fetch as any).mock.calls[0][0]));
+
+    expect(url.pathname).toContain('/x/v2/reply/reply');
+    expect(url.searchParams.get('type')).toBe('1');
+    expect(url.searchParams.get('oid')).toBe('123');
+    expect(url.searchParams.get('root')).toBe('456');
+    expect(url.searchParams.get('pn')).toBe('2');
+    expect(url.searchParams.get('ps')).toBe('10');
+  });
+
+  test('getReplyReplies rejects business errors', async () => {
+    setupMocks({ code: 12006, message: '评论不存在' });
+    await expect(getReplyReplies(123, 456, 1)).rejects.toThrow('评论不存在');
+  });
+
+  test('likeComment posts form data with csrf and supports unlike', async () => {
+    globalThis.localStorage.getItem = (key) =>
+      key === 'bili_auth' ? JSON.stringify({ bili_jct: 'csrf-token' }) : null;
+
+    await likeComment(123, 456, 1);
+    await likeComment(123, 456, 0);
+
+    const firstOptions = (globalThis.fetch as any).mock.calls[0][1];
+    const firstBody = new URLSearchParams(firstOptions.body);
+    expect(firstOptions.method).toBe('POST');
+    expect(firstOptions.headers['Content-Type']).toBe(
+      'application/x-www-form-urlencoded',
+    );
+    expect(firstBody.get('type')).toBe('1');
+    expect(firstBody.get('oid')).toBe('123');
+    expect(firstBody.get('rpid')).toBe('456');
+    expect(firstBody.get('action')).toBe('1');
+    expect(firstBody.get('csrf')).toBe('csrf-token');
+
+    const secondBody = new URLSearchParams(
+      (globalThis.fetch as any).mock.calls[1][1].body,
+    );
+    expect(secondBody.get('action')).toBe('0');
+  });
+
+  test('likeComment rejects missing csrf and business errors', async () => {
+    await expect(likeComment(123, 456, 1)).rejects.toThrow('请先登录');
+    expect((globalThis.fetch as any).mock.calls).toHaveLength(0);
+
+    setupMocks({ code: -111, message: 'csrf 校验失败' });
+    globalThis.localStorage.getItem = (key) =>
+      key === 'bili_auth' ? JSON.stringify({ bili_jct: 'csrf-token' }) : null;
+    await expect(likeComment(123, 456, 1)).rejects.toThrow('csrf 校验失败');
   });
 });
