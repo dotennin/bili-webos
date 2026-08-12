@@ -39,6 +39,7 @@ const PLAYBACK_RATE_SYNC_DELAY_MS = 1200;
 const WEBOS_MEDIA_ID_POLL_MS = 100;
 const WEBOS_MEDIA_ID_MAX_POLLS = 100;
 const WEBOS_PLAY_RATE_TIMEOUT_MS = 3000;
+const NATIVE_PLAY_URL_CACHE_MAX_AGE_MS = 30_000;
 const STALL_WATCH_INTERVAL_MS = 1000;
 const STALL_RECOVERY_AFTER_MS = 6000;
 const STALL_RECOVERY_SEEK_SEC = 0.05;
@@ -200,6 +201,7 @@ export default function PlayerPage({
   const [videoTitle, setVideoTitle] = useState(video?.title || '');
   const [loading, setLoading] = useState(true);
   const [buffering, setBuffering] = useState(false);
+  const [speedSwitching, setSpeedSwitching] = useState(false);
   const [firstFrameReady, setFirstFrameReady] = useState(false);
   const [ended, setEnded] = useState(false);
   const [relatedVideos, setRelatedVideos] = useState([]);
@@ -244,6 +246,8 @@ export default function PlayerPage({
   const dashRestorePendingRef = useRef(false);
   const playbackSpeedOperationRef = useRef(0);
   const recoverNativeSpeedRef = useRef(null);
+  const speedSwitchInFlightRef = useRef(false);
+  const nativePlayUrlCacheRef = useRef(null);
 
   const updateLoadingSpeed = useCallback(() => {
     const estimatedBitsPerSecond = Math.max(
@@ -411,6 +415,37 @@ export default function PlayerPage({
       syncPlaybackRate();
     }, PLAYBACK_RATE_SYNC_DELAY_MS);
   }, [syncPlaybackRate]);
+
+  const prefetchNativePlayUrl = useCallback(() => {
+    const cid = cidRef.current;
+    const identifier = video?.bvid || video?.aid;
+    if (!cid || !identifier) {
+      return Promise.reject(
+        new Error('Native playback identifiers unavailable'),
+      );
+    }
+
+    const key = `${identifier}:${cid}`;
+    const cached = nativePlayUrlCacheRef.current;
+    if (
+      cached?.key === key &&
+      Date.now() - cached.createdAt < NATIVE_PLAY_URL_CACHE_MAX_AGE_MS
+    )
+      return cached.promise;
+
+    const entry = {
+      key,
+      createdAt: Date.now(),
+      promise: getHtml5PlayUrl(video, cid),
+    };
+    nativePlayUrlCacheRef.current = entry;
+    entry.promise.catch(() => {
+      if (nativePlayUrlCacheRef.current === entry) {
+        nativePlayUrlCacheRef.current = null;
+      }
+    });
+    return entry.promise;
+  }, [video]);
 
   const getStablePlaybackTime = useCallback(() => {
     const playerTime = Number(videoRef.current?.currentTime) || 0;
@@ -772,6 +807,9 @@ export default function PlayerPage({
       nativeTransitionPositionRef.current = null;
       dashRestorePendingRef.current = false;
       playbackSpeedOperationRef.current += 1;
+      speedSwitchInFlightRef.current = false;
+      nativePlayUrlCacheRef.current = null;
+      setSpeedSwitching(false);
       setPlaybackRate(1);
       setLoading(true);
       startLoadingSpeed();
@@ -1078,6 +1116,8 @@ export default function PlayerPage({
       setFirstFrameReady(true);
       stopLoadingSpeed();
       setLoading(false);
+      speedSwitchInFlightRef.current = false;
+      setSpeedSwitching(false);
       syncTimelineFromPlayer();
     };
     const handleRateChange = () => {
@@ -1101,6 +1141,8 @@ export default function PlayerPage({
       setBuffering(false);
       stopLoadingSpeed();
       setLoading(false);
+      speedSwitchInFlightRef.current = false;
+      setSpeedSwitching(false);
       setPlaying(true);
       castReportState({ playState: 'playing' }).catch(() => {});
     };
@@ -1111,6 +1153,7 @@ export default function PlayerPage({
         suppressedBufferingRef.current = true;
         return;
       }
+      if (speedSwitchInFlightRef.current) return;
       setBuffering(true);
       castReportState({ playState: 'loading' }).catch(() => {});
     };
@@ -1407,6 +1450,9 @@ export default function PlayerPage({
   const restoreDashAfterSpeed = useCallback(
     async (operation, position) => {
       if (operation !== playbackSpeedOperationRef.current) return;
+      speedSwitchInFlightRef.current = true;
+      setSpeedSwitching(true);
+      setBuffering(false);
       dashRestorePendingRef.current = true;
       let restored = false;
       try {
@@ -1417,6 +1463,8 @@ export default function PlayerPage({
         if (operation === playbackSpeedOperationRef.current) {
           dashRestorePendingRef.current = !restored;
           if (restored) nativeTransitionPositionRef.current = null;
+          speedSwitchInFlightRef.current = false;
+          setSpeedSwitching(false);
         }
       }
     },
@@ -1455,6 +1503,8 @@ export default function PlayerPage({
         if (!applied) throw new Error('webOS setPlayRate rejected');
         if (operation !== playbackSpeedOperationRef.current) return false;
         setPlaybackRate(rate);
+        speedSwitchInFlightRef.current = false;
+        setSpeedSwitching(false);
         return true;
       } catch (error) {
         console.warn(
@@ -1478,9 +1528,12 @@ export default function PlayerPage({
       nativeSourceReadyRef.current = false;
       dashRestorePendingRef.current = false;
       nativeTransitionPositionRef.current = position;
+      speedSwitchInFlightRef.current = true;
+      setSpeedSwitching(true);
+      setBuffering(false);
 
       try {
-        const result = await getHtml5PlayUrl(video, cidRef.current);
+        const result = await prefetchNativePlayUrl();
         const durl = result?.data?.durl?.[0]?.url;
         if (!durl) throw new Error('HTML5 playback URL is unavailable');
         if (operation !== playbackSpeedOperationRef.current) return false;
@@ -1504,7 +1557,12 @@ export default function PlayerPage({
         return false;
       }
     },
-    [applyNativePlaybackRate, recoverFromNativeSpeedFailure, video],
+    [
+      applyNativePlaybackRate,
+      prefetchNativePlayUrl,
+      recoverFromNativeSpeedFailure,
+      video,
+    ],
   );
 
   const changePlaybackRate = useCallback(
@@ -1532,6 +1590,9 @@ export default function PlayerPage({
         setPlaybackRate(1);
         if (shouldRestoreDash) {
           void restoreDashAfterSpeed(operation, position);
+        } else {
+          speedSwitchInFlightRef.current = false;
+          setSpeedSwitching(false);
         }
         return;
       }
@@ -1853,6 +1914,9 @@ export default function PlayerPage({
             setFocusArea('quality');
             setFocusIdx(0);
           } else if (btn === 'speed') {
+            if (isNativeWebOSRuntime() && !nativeModeRef.current) {
+              prefetchNativePlayUrl().catch(() => {});
+            }
             setShowQuality(false);
             setShowSpeed(true);
             setShowSubtitle(false);
@@ -2099,7 +2163,7 @@ export default function PlayerPage({
           </div>
         )}
 
-      {loading && (
+      {loading && !speedSwitching && (
         <div
           style={{
             position: 'absolute',
@@ -2128,7 +2192,7 @@ export default function PlayerPage({
         </div>
       )}
 
-      {buffering && !loading && (
+      {buffering && !loading && !speedSwitching && (
         <div className="buffering-overlay">
           <div className="loading">
             <div className="loading-spinner" />
