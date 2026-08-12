@@ -163,8 +163,32 @@ beforeEach(() => {
     getStoryboard: mock(async () => null),
     getPlayerSubtitles: mock(async () => []),
     getSubtitleCues: mock(async () => []),
+    getReplies: mock(async () => ({
+      replies: [
+        {
+          rpid: 91,
+          member: { uname: '评论用户', avatar: '' },
+          content: { message: '播放器评论' },
+          like: 3,
+          action: 0,
+          rcount: 0,
+          replies: [],
+        },
+      ],
+      cursor: {
+        all_count: 1,
+        is_end: true,
+        pagination_reply: { next_offset: '' },
+      },
+    })),
+    getReplyReplies: mock(async () => ({
+      replies: [],
+      page: { count: 0, num: 1, size: 10 },
+    })),
+    likeComment: mock(async () => ({ code: 0 })),
   };
   storageState = {
+    auth: { SESSDATA: 'sess', bili_jct: 'csrf-token' },
     settings: { danmaku: true, quality: 80 },
     resumeProgress: {},
   };
@@ -251,11 +275,15 @@ beforeEach(() => {
     getStoryboard: (...args) => api.getStoryboard(...args),
     getPlayerSubtitles: (...args) => api.getPlayerSubtitles(...args),
     getSubtitleCues: (...args) => api.getSubtitleCues(...args),
+    getReplies: (...args) => api.getReplies(...args),
+    getReplyReplies: (...args) => api.getReplyReplies(...args),
+    likeComment: (...args) => api.likeComment(...args),
   }));
   mock.module(storagePath, () => ({
     ...realStorage,
     storage: {
       ...realStorage.storage,
+      getAuth: () => storageState.auth,
       getSettings: (...args) =>
         realStorage.storage.getSettings
           ? storageState.settings
@@ -432,6 +460,96 @@ describe('DanmakuLayer', () => {
 });
 
 describe('PlayerPage', () => {
+  test('opens the comment rail, shrinks the whole player stage, and restores focus on back', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { aid: 123, bvid: 'BV-COMMENT', cid: 7, title: '评论视频' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+    await interact(() => video.dispatch('loadeddata'));
+
+    const initialStage = renderer.container.querySelector('.player-stage');
+    expect(initialStage?.querySelector('.player-video')).not.toBeNull();
+    expect(initialStage?.querySelector('danmaku-layer')).not.toBeNull();
+    expect(initialStage?.querySelector('.player-controls')).not.toBeNull();
+    expect(initialStage?.classList.contains('comments-open')).toBe(false);
+
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    for (let index = 0; index < 4; index += 1) {
+      await interact(() => customKeyHandler(event('ArrowRight')));
+    }
+    expect(
+      renderer.container.querySelector('.player-btn.focused')?.textContent,
+    ).toContain('评论');
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+
+    expect(renderer.container.querySelector('.comment-rail')).not.toBeNull();
+    expect(
+      renderer.container
+        .querySelector('.player-stage')
+        ?.classList.contains('comments-open'),
+    ).toBe(true);
+    expect(renderer.container.querySelector('.player-stage .comment-rail')).toBeNull();
+    expect(api.getReplies).toHaveBeenCalledWith(123, '', expect.anything());
+
+    await interact(() => customKeyHandler(event('Backspace', 461)));
+    expect(renderer.container.querySelector('.comment-rail')).toBeNull();
+    expect(
+      renderer.container.querySelector('.player-btn.focused')?.textContent,
+    ).toContain('评论');
+
+    renderer.unmount();
+  });
+
+  test('resolves aid lazily for a bvid-only comment request', async () => {
+    api.getVideoInfo = mock(async () => ({
+      data: { aid: 777, bvid: 'BV-ONLY', cid: 8, title: '只有 BV' },
+    }));
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-ONLY', cid: 8, title: '只有 BV' },
+      }),
+      (element) => (element.type === 'video' ? createVideoMock() : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    expect(api.getVideoInfo).not.toHaveBeenCalled();
+
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    for (let index = 0; index < 4; index += 1) {
+      await interact(() => customKeyHandler(event('ArrowRight')));
+    }
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    expect(api.getVideoInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV-ONLY' }),
+    );
+    expect(api.getReplies).toHaveBeenCalledWith(777, '', expect.anything());
+    renderer.unmount();
+  });
+
   test('updates the displayed quality after automatic adaptation', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();
@@ -1357,7 +1475,6 @@ describe('PlayerPage', () => {
 
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
-    expect(customKeyHandler(event('ArrowRight'))).toBe(true);
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('Enter')));
 

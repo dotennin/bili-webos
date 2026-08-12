@@ -664,6 +664,74 @@ export async function getSubscriptionVideos(params) {
   };
 }
 
+// ============ Video comments ============
+
+function requireBiliSuccess(response, fallbackMessage) {
+  if (response?.code !== 0) {
+    throw new Error(response?.message || fallbackMessage);
+  }
+  return response;
+}
+
+export async function getReplies(aid, cursor = '', signal?: AbortSignal) {
+  const response = await apiFetch(
+    '/x/v2/reply/main',
+    {
+      type: 1,
+      oid: aid,
+      mode: 3,
+      pagination_str: JSON.stringify({ offset: cursor || '' }),
+    },
+    { signal },
+  );
+  return requireBiliSuccess(response, '评论加载失败');
+}
+
+export async function getReplyReplies(
+  aid,
+  root,
+  page = 1,
+  signal?: AbortSignal,
+) {
+  const response = await apiFetch(
+    '/x/v2/reply/reply',
+    {
+      type: 1,
+      oid: aid,
+      root,
+      pn: page || 1,
+      ps: 10,
+    },
+    { signal },
+  );
+  return requireBiliSuccess(response, '回复加载失败');
+}
+
+export async function likeComment(
+  aid,
+  rpid,
+  action: 0 | 1,
+  signal?: AbortSignal,
+) {
+  const csrf = storage.getAuth()?.bili_jct || '';
+  if (!csrf) throw new Error('请先登录');
+
+  const body = new URLSearchParams({
+    type: '1',
+    oid: String(aid),
+    rpid: String(rpid),
+    action: String(action),
+    csrf,
+  }).toString();
+  const response = await smartFetch(API_HOST, '/x/v2/reply/action', {
+    method: 'POST',
+    body,
+    contentType: 'application/x-www-form-urlencoded',
+    signal,
+  });
+  return requireBiliSuccess(response, '评论点赞失败');
+}
+
 // ============ Heartbeat ============
 
 export async function reportHeartbeat(bvid, cid, playedTime, realTime) {

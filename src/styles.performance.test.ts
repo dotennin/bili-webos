@@ -78,3 +78,21 @@ test('video cards retain the TV-proven layout and transform-only focus style', (
     'box-shadow: 0 15px 30px rgba(0, 0, 0, 0.25)',
   );
 });
+
+test('comment rail keeps player resizing and focus effects lightweight', () => {
+  const stageRule = getBlockBody('.player-stage {');
+  const openStageRule = getBlockBody('.player-stage.comments-open {');
+  const cardRule = getBlockBody('.comment-card {');
+  const focusRule = getBlockBody('.comment-card.focused {');
+  const likeFocusRule = getBlockBody('.comment-like.focused {');
+
+  expect(stageRule).not.toContain('transition');
+  expect(openStageRule).toContain('right: 420px');
+  expect(openStageRule).not.toContain('transition');
+  expect(getTransitionProperties(cardRule)).toEqual(['transform']);
+  expect(cardRule).toContain('transition: transform 0.15s ease');
+  expect(cardRule).not.toContain('box-shadow');
+  expect(focusRule).toContain('transform: scale(1.03)');
+  expect(focusRule).not.toContain('box-shadow');
+  expect(likeFocusRule).not.toContain('box-shadow');
+});

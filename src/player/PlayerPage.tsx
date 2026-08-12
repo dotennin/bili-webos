@@ -19,6 +19,7 @@ import { setCustomKeyHandler } from '../hooks/useFocus';
 import { storage } from '../utils/storage';
 import { applyCdnToDash } from '../utils/cdn';
 import DanmakuLayer from './DanmakuLayer';
+import CommentRail, { type CommentRailHandle } from './CommentRail';
 
 const SEEK_BASE_STEP_SEC = 5;
 const SEEK_IDLE_RESET_MS = 500;
@@ -135,7 +136,12 @@ export default function PlayerPage({
   const [firstFrameReady, setFirstFrameReady] = useState(false);
   const [ended, setEnded] = useState(false);
   const [relatedVideos, setRelatedVideos] = useState([]);
-  // Focus: 'none' (no UI) | 'timeline' | 'controls' | 'quality' | 'speed' | 'related' | 'endscreen'
+  const [showCommentRail, setShowCommentRail] = useState(false);
+  const [videoAid, setVideoAid] = useState(video?.aid || null);
+  const [commentAidLoading, setCommentAidLoading] = useState(false);
+  const [commentAidError, setCommentAidError] = useState('');
+  const [commentNotice, setCommentNotice] = useState('');
+  // Focus: 'none' (no UI) | 'timeline' | 'controls' | 'quality' | 'speed' | 'related' | 'comments' | 'endscreen'
   const [focusArea, setFocusArea] = useState('none');
   const [focusIdx, setFocusIdx] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -170,6 +176,11 @@ export default function PlayerPage({
 
   const pendingSeekRef = useRef(null);
   const endedRef = useRef(false);
+  const commentRailRef = useRef<CommentRailHandle>(null);
+  const videoAidRef = useRef(video?.aid || null);
+  const commentAidRequestRef = useRef(0);
+  const showCommentRailRef = useRef(showCommentRail);
+  showCommentRailRef.current = showCommentRail;
 
   const updateLoadingSpeed = useCallback(() => {
     const estimatedBitsPerSecond = Math.max(
@@ -244,8 +255,8 @@ export default function PlayerPage({
   const playbackSpeedSupported = supportsPlaybackSpeedControl();
   const CONTROLS =
     subtitleTracks.length > 0
-      ? ['play', 'danmaku', 'quality', 'speed', 'subtitle']
-      : ['play', 'danmaku', 'quality', 'speed'];
+      ? ['play', 'danmaku', 'quality', 'speed', 'subtitle', 'comments']
+      : ['play', 'danmaku', 'quality', 'speed', 'comments'];
 
   const getGridVerticalTarget = useCallback((currentIdx, direction, total) => {
     const nextIdx = currentIdx + direction * RELATED_GRID_COLS;
@@ -683,6 +694,10 @@ export default function PlayerPage({
           const info = await getVideoInfo(video);
           if (!isActive()) return;
           cid = info?.data?.cid;
+          if (info?.data?.aid) {
+            videoAidRef.current = info.data.aid;
+            setVideoAid(info.data.aid);
+          }
           if (info?.data?.title) {
             setVideoTitle(info.data.title);
             titleNeedsResolution = false;
@@ -693,6 +708,10 @@ export default function PlayerPage({
           if (video?.bvid || video?.aid) {
             const info = await getVideoInfo(video);
             if (!isActive()) return;
+            if (info?.data?.aid) {
+              videoAidRef.current = info.data.aid;
+              setVideoAid(info.data.aid);
+            }
             if (!video.bvid && info?.data?.bvid) video.bvid = info.data.bvid;
             if (info?.data?.title) {
               setVideoTitle(info.data.title);
@@ -1121,6 +1140,17 @@ export default function PlayerPage({
     };
   }, [resetSeekController, video?.bvid]);
 
+  useEffect(() => {
+    const nextAid = video?.aid || null;
+    commentAidRequestRef.current += 1;
+    videoAidRef.current = nextAid;
+    setVideoAid(nextAid);
+    setCommentAidLoading(false);
+    setCommentAidError('');
+    setCommentNotice('');
+    setShowCommentRail(false);
+  }, [video?.aid, video?.bvid]);
+
   // Heartbeat
   useEffect(() => {
     const hb = setInterval(() => {
@@ -1147,7 +1177,7 @@ export default function PlayerPage({
   const hideControlsLater = useCallback(() => {
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
     controlsTimer.current = setTimeout(() => {
-      if (!endedRef.current) {
+      if (!endedRef.current && !showCommentRailRef.current) {
         commitPreviewSeek();
         hideScrubThumbnail();
         setShowControls(false);
@@ -1159,6 +1189,70 @@ export default function PlayerPage({
       }
     }, 5000);
   }, [commitPreviewSeek]);
+
+  const notifyComment = useCallback((message) => {
+    setCommentNotice(message || '评论操作失败');
+  }, []);
+
+  const resolveCommentAid = useCallback(async () => {
+    if (videoAidRef.current) {
+      setCommentAidError('');
+      return videoAidRef.current;
+    }
+    const requestId = commentAidRequestRef.current + 1;
+    commentAidRequestRef.current = requestId;
+    if (!video?.bvid && !video?.aid) {
+      setCommentAidError('视频信息获取失败');
+      return null;
+    }
+    setCommentAidLoading(true);
+    setCommentAidError('');
+    try {
+      const info = await getVideoInfo(video);
+      const aid = info?.data?.aid || video?.aid;
+      if (!aid) throw new Error('视频信息获取失败');
+      if (commentAidRequestRef.current !== requestId) return null;
+      videoAidRef.current = aid;
+      setVideoAid(aid);
+      return aid;
+    } catch (error) {
+      if (commentAidRequestRef.current !== requestId) return null;
+      setCommentAidError(error?.message || '视频信息获取失败');
+      return null;
+    } finally {
+      if (commentAidRequestRef.current === requestId) {
+        setCommentAidLoading(false);
+      }
+    }
+  }, [video]);
+
+  const closeCommentRail = useCallback(() => {
+    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    setShowCommentRail(false);
+    setCommentNotice('');
+    setShowControls(true);
+    setShowQuality(false);
+    setShowSpeed(false);
+    setShowSubtitle(false);
+    setShowRelated(false);
+    setFocusArea('controls');
+    setFocusIdx(CONTROLS.indexOf('comments'));
+    hideControlsLater();
+  }, [CONTROLS, hideControlsLater]);
+
+  const openCommentRail = useCallback(() => {
+    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    setCommentNotice('');
+    setShowControls(true);
+    setShowQuality(false);
+    setShowSpeed(false);
+    setShowSubtitle(false);
+    setShowRelated(false);
+    setShowCommentRail(true);
+    setFocusArea('comments');
+    setFocusIdx(0);
+    resolveCommentAid();
+  }, [resolveCommentAid]);
 
   const showTimelineControls = useCallback(() => {
     setShowControls(true);
@@ -1409,7 +1503,9 @@ export default function PlayerPage({
         e.preventDefault();
         e.stopPropagation();
 
-        if (ended) {
+        if (showCommentRail) {
+          closeCommentRail();
+        } else if (ended) {
           // End screen: back exits player
           commitPreviewSeek();
           persistResumeFromPlayer();
@@ -1516,6 +1612,12 @@ export default function PlayerPage({
         return false;
       }
 
+      if (focusArea === 'comments') {
+        e.preventDefault();
+        commentRailRef.current?.handleKey(key);
+        return true;
+      }
+
       // === Controls visible ===
       if (focusArea === 'controls') {
         if (key === 'ArrowLeft') {
@@ -1552,6 +1654,10 @@ export default function PlayerPage({
         if (key === 'Enter') {
           e.preventDefault();
           const btn = CONTROLS[focusIdx];
+          if (btn === 'comments') {
+            openCommentRail();
+            return true;
+          }
           if (btn === 'play') {
             commitPreviewSeek();
             if (isMediaPause) {
@@ -1802,6 +1908,7 @@ export default function PlayerPage({
     showRelated,
     ended,
     relatedVideos,
+    showCommentRail,
     onBack,
     onPlayNext,
     applySeekInput,
@@ -1815,131 +1922,281 @@ export default function PlayerPage({
     subtitleTracks,
     currentSubtitleIndex,
     showTimelineControls,
+    closeCommentRail,
+    openCommentRail,
   ]);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="player-page">
-      <video
-        ref={videoRef}
-        className="player-video"
-        preload="auto"
-        playsInline
-      />
+      <div className={`player-stage ${showCommentRail ? 'comments-open' : ''}`}>
+        <video
+          ref={videoRef}
+          className="player-video"
+          preload="auto"
+          playsInline
+        />
 
-      <DanmakuLayer
-        danmakus={danmakus}
-        currentTime={currentTime}
-        enabled={danmakuEnabled && firstFrameReady}
-      />
+        <DanmakuLayer
+          danmakus={danmakus}
+          currentTime={currentTime}
+          enabled={danmakuEnabled && firstFrameReady}
+        />
 
-      {currentSubtitleIndex >= 0 &&
-        getActiveSubtitleText(subtitleCues, currentTime) && (
-          <div className="player-subtitle">
-            {getActiveSubtitleText(subtitleCues, currentTime)}
+        {currentSubtitleIndex >= 0 &&
+          getActiveSubtitleText(subtitleCues, currentTime) && (
+            <div className="player-subtitle">
+              {getActiveSubtitleText(subtitleCues, currentTime)}
+            </div>
+          )}
+
+        {loading && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(0,0,0,0.8)',
+              zIndex: 50,
+            }}
+          >
+            <div className="loading">
+              <div className="loading-spinner" />
+              <div className="loading-copy">
+                <div>加载中...</div>
+                <div
+                  ref={loadingSpeedTextRef}
+                  className="loading-speed"
+                  style={{ display: 'none' }}
+                />
+              </div>
+            </div>
           </div>
         )}
 
-      {loading && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.8)',
-            zIndex: 50,
-          }}
-        >
-          <div className="loading">
-            <div className="loading-spinner" />
-            <div className="loading-copy">
-              <div>加载中...</div>
-              <div
-                ref={loadingSpeedTextRef}
-                className="loading-speed"
-                style={{ display: 'none' }}
-              />
+        {buffering && !loading && (
+          <div className="buffering-overlay">
+            <div className="loading">
+              <div className="loading-spinner" />
+              缓冲中...
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {buffering && !loading && (
-        <div className="buffering-overlay">
-          <div className="loading">
-            <div className="loading-spinner" />
-            缓冲中...
-          </div>
-        </div>
-      )}
-
-      {/* Controls bar */}
-      <div className={`player-controls ${showControls ? '' : 'hidden'}`}>
-        <div
-          ref={progressBarRef}
-          className={`player-progress-bar ${focusArea === 'timeline' ? 'focused' : ''}`}
-        >
+        {/* Controls bar */}
+        <div className={`player-controls ${showControls ? '' : 'hidden'}`}>
           <div
-            ref={progressFillRef}
-            className="player-progress-fill"
-            style={{ width: `${progress}%` }}
-          />
-          <div ref={previewThumbRef} className="player-scrub-thumb" />
-        </div>
-        <div className="player-controls-scroll">
-          <div className="player-title">{videoTitle}</div>
-          {video?.owner?.name && (
-            <div style={{ fontSize: 18, color: '#999', marginBottom: 4 }}>
-              {video.owner.name}
-              {video.pubdate &&
-                ` · ${new Date(video.pubdate * 1000).toLocaleDateString('zh-CN')}`}
-            </div>
-          )}
-          <div className="player-btns">
-            {CONTROLS.map((btn, i) => (
-              <button
-                key={btn}
-                className={`player-btn ${focusArea === 'controls' && focusIdx === i ? 'focused' : ''}`}
-              >
-                {btn === 'play'
-                  ? playing
-                    ? '⏸ 暂停'
-                    : '▶ 播放'
-                  : btn === 'danmaku'
-                    ? danmakuEnabled
-                      ? '弹幕 开'
-                      : '弹幕 关'
-                    : btn === 'quality'
-                      ? QUALITY_MAP[currentQuality] || `${currentQuality}`
-                      : btn === 'subtitle'
-                        ? currentSubtitleIndex >= 0
-                          ? `字幕 ${subtitleTracks[currentSubtitleIndex]?.lan_doc || '开'}`
-                          : '字幕 关'
-                        : playbackSpeedSupported
-                          ? `${playbackRate}x`
-                          : '倍速'}
-              </button>
-            ))}
-            <span ref={timeTextRef} className="player-time">
-              {formatDuration(currentTime)} / {formatDuration(duration)}
-            </span>
+            ref={progressBarRef}
+            className={`player-progress-bar ${focusArea === 'timeline' ? 'focused' : ''}`}
+          >
+            <div
+              ref={progressFillRef}
+              className="player-progress-fill"
+              style={{ width: `${progress}%` }}
+            />
+            <div ref={previewThumbRef} className="player-scrub-thumb" />
           </div>
+          <div className="player-controls-scroll">
+            <div className="player-title">{videoTitle}</div>
+            {video?.owner?.name && (
+              <div style={{ fontSize: 18, color: '#999', marginBottom: 4 }}>
+                {video.owner.name}
+                {video.pubdate &&
+                  ` · ${new Date(video.pubdate * 1000).toLocaleDateString('zh-CN')}`}
+              </div>
+            )}
+            <div className="player-btns">
+              {CONTROLS.map((btn, i) => (
+                <button
+                  key={btn}
+                  className={`player-btn ${focusArea === 'controls' && focusIdx === i ? 'focused' : ''}`}
+                  onClick={btn === 'comments' ? openCommentRail : undefined}
+                >
+                  {btn === 'play'
+                    ? playing
+                      ? '⏸ 暂停'
+                      : '▶ 播放'
+                    : btn === 'danmaku'
+                      ? danmakuEnabled
+                        ? '弹幕 开'
+                        : '弹幕 关'
+                      : btn === 'quality'
+                        ? QUALITY_MAP[currentQuality] || `${currentQuality}`
+                        : btn === 'subtitle'
+                          ? currentSubtitleIndex >= 0
+                            ? `字幕 ${subtitleTracks[currentSubtitleIndex]?.lan_doc || '开'}`
+                            : '字幕 关'
+                          : btn === 'comments'
+                            ? '评论'
+                            : playbackSpeedSupported
+                              ? `${playbackRate}x`
+                              : '倍速'}
+                </button>
+              ))}
+              <span ref={timeTextRef} className="player-time">
+                {formatDuration(currentTime)} / {formatDuration(duration)}
+              </span>
+            </div>
 
-          {/* Related videos panel (4-column grid below controls) */}
-          {showRelated && relatedVideos.length > 0 && (
+            {/* Related videos panel (4-column grid below controls) */}
+            {showRelated && relatedVideos.length > 0 && (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: 14,
+                  marginTop: 16,
+                  paddingBottom: 10,
+                }}
+              >
+                {relatedVideos.map((rv, i) => {
+                  const thumb = (rv.pic || '').startsWith('//')
+                    ? 'https:' + rv.pic
+                    : rv.pic;
+                  return (
+                    <div
+                      key={rv.bvid || i}
+                      className="related-card"
+                      onClick={() => onPlayNext?.(rv)}
+                      style={{
+                        cursor: 'pointer',
+                        outline:
+                          focusArea === 'related' && focusIdx === i
+                            ? '4px solid #00a1d6'
+                            : 'none',
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '100%',
+                          aspectRatio: '16/9',
+                          background: '#1a1a2e',
+                          borderRadius: 6,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {thumb && (
+                          <img
+                            src={thumb}
+                            alt=""
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          padding: '6px 4px',
+                          fontSize: 18,
+                          color: '#ccc',
+                          lineHeight: 1.3,
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: 'vertical',
+                        }}
+                      >
+                        {rv.title}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Quality panel */}
+        {showQuality && (
+          <div className="quality-panel">
+            {qualities.map((q, i) => (
+              <div
+                key={q.qn}
+                className={`quality-option ${focusArea === 'quality' && focusIdx === i ? 'focused' : ''} ${currentQuality === q.qn ? 'active' : ''}`}
+              >
+                {q.label}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showSpeed && (
+          <div className="quality-panel speed-panel">
+            {playbackSpeedSupported ? (
+              PLAYBACK_SPEEDS.map((rate, i) => (
+                <div
+                  key={rate}
+                  className={`quality-option speed-option ${focusArea === 'speed' && focusIdx === i ? 'focused' : ''} ${playbackRate === rate ? 'active' : ''}`}
+                >
+                  {rate}x
+                </div>
+              ))
+            ) : (
+              <div className="quality-option speed-option focused active">
+                此设备不支持倍速
+              </div>
+            )}
+          </div>
+        )}
+
+        {showSubtitle && (
+          <div className="quality-panel subtitle-panel">
+            <div
+              className={`quality-option ${focusArea === 'subtitle' && focusIdx === 0 ? 'focused' : ''} ${currentSubtitleIndex === -1 ? 'active' : ''}`}
+            >
+              关闭字幕
+            </div>
+            {subtitleTracks.map((track, i) => (
+              <div
+                key={track.id || track.lan || i}
+                className={`quality-option ${focusArea === 'subtitle' && focusIdx === i + 1 ? 'focused' : ''} ${currentSubtitleIndex === i ? 'active' : ''}`}
+              >
+                {track.lan_doc || track.lan || `字幕 ${i + 1}`}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* End screen */}
+        {ended && relatedVideos.length > 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              background: 'rgba(0,0,0,0.85)',
+              zIndex: 60,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div style={{ fontSize: 28, color: '#fff', marginBottom: 30 }}>
+              播放结束
+            </div>
+            <div style={{ fontSize: 20, color: '#aaa', marginBottom: 20 }}>
+              接下来播放
+            </div>
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 14,
-                marginTop: 16,
-                paddingBottom: 10,
+                gridTemplateColumns: `repeat(${RELATED_GRID_COLS}, minmax(0, 280px))`,
+                gap: 20,
+                justifyContent: 'center',
               }}
             >
               {relatedVideos.map((rv, i) => {
@@ -1949,15 +2206,15 @@ export default function PlayerPage({
                 return (
                   <div
                     key={rv.bvid || i}
-                    className="related-card"
                     onClick={() => onPlayNext?.(rv)}
                     style={{
+                      width: 280,
                       cursor: 'pointer',
                       outline:
-                        focusArea === 'related' && focusIdx === i
+                        focusArea === 'endscreen' && focusIdx === i
                           ? '4px solid #00a1d6'
                           : 'none',
-                      borderRadius: 6,
+                      borderRadius: 8,
                       overflow: 'hidden',
                     }}
                   >
@@ -1966,7 +2223,7 @@ export default function PlayerPage({
                         width: '100%',
                         aspectRatio: '16/9',
                         background: '#1a1a2e',
-                        borderRadius: 6,
+                        borderRadius: 8,
                         overflow: 'hidden',
                       }}
                     >
@@ -1984,13 +2241,13 @@ export default function PlayerPage({
                     </div>
                     <div
                       style={{
-                        padding: '6px 4px',
-                        fontSize: 18,
+                        padding: '8px 4px',
+                        fontSize: 14,
                         color: '#ccc',
                         lineHeight: 1.3,
                         overflow: 'hidden',
                         display: '-webkit-box',
-                        WebkitLineClamp: 1,
+                        WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
                       }}
                     >
@@ -2000,151 +2257,20 @@ export default function PlayerPage({
                 );
               })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+        {commentNotice && <div className="comment-notice">{commentNotice}</div>}
       </div>
-
-      {/* Quality panel */}
-      {showQuality && (
-        <div className="quality-panel">
-          {qualities.map((q, i) => (
-            <div
-              key={q.qn}
-              className={`quality-option ${focusArea === 'quality' && focusIdx === i ? 'focused' : ''} ${currentQuality === q.qn ? 'active' : ''}`}
-            >
-              {q.label}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showSpeed && (
-        <div className="quality-panel speed-panel">
-          {playbackSpeedSupported ? (
-            PLAYBACK_SPEEDS.map((rate, i) => (
-              <div
-                key={rate}
-                className={`quality-option speed-option ${focusArea === 'speed' && focusIdx === i ? 'focused' : ''} ${playbackRate === rate ? 'active' : ''}`}
-              >
-                {rate}x
-              </div>
-            ))
-          ) : (
-            <div className="quality-option speed-option focused active">
-              此设备不支持倍速
-            </div>
-          )}
-        </div>
-      )}
-
-      {showSubtitle && (
-        <div className="quality-panel subtitle-panel">
-          <div
-            className={`quality-option ${focusArea === 'subtitle' && focusIdx === 0 ? 'focused' : ''} ${currentSubtitleIndex === -1 ? 'active' : ''}`}
-          >
-            关闭字幕
-          </div>
-          {subtitleTracks.map((track, i) => (
-            <div
-              key={track.id || track.lan || i}
-              className={`quality-option ${focusArea === 'subtitle' && focusIdx === i + 1 ? 'focused' : ''} ${currentSubtitleIndex === i ? 'active' : ''}`}
-            >
-              {track.lan_doc || track.lan || `字幕 ${i + 1}`}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* End screen */}
-      {ended && relatedVideos.length > 0 && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            background: 'rgba(0,0,0,0.85)',
-            zIndex: 60,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{ fontSize: 28, color: '#fff', marginBottom: 30 }}>
-            播放结束
-          </div>
-          <div style={{ fontSize: 20, color: '#aaa', marginBottom: 20 }}>
-            接下来播放
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(${RELATED_GRID_COLS}, minmax(0, 280px))`,
-              gap: 20,
-              justifyContent: 'center',
-            }}
-          >
-            {relatedVideos.map((rv, i) => {
-              const thumb = (rv.pic || '').startsWith('//')
-                ? 'https:' + rv.pic
-                : rv.pic;
-              return (
-                <div
-                  key={rv.bvid || i}
-                  onClick={() => onPlayNext?.(rv)}
-                  style={{
-                    width: 280,
-                    cursor: 'pointer',
-                    outline:
-                      focusArea === 'endscreen' && focusIdx === i
-                        ? '4px solid #00a1d6'
-                        : 'none',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '100%',
-                      aspectRatio: '16/9',
-                      background: '#1a1a2e',
-                      borderRadius: 8,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {thumb && (
-                      <img
-                        src={thumb}
-                        alt=""
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      padding: '8px 4px',
-                      fontSize: 14,
-                      color: '#ccc',
-                      lineHeight: 1.3,
-                      overflow: 'hidden',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                    }}
-                  >
-                    {rv.title}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {showCommentRail && (
+        <CommentRail
+          ref={commentRailRef}
+          aid={videoAid}
+          visible={showCommentRail}
+          aidLoading={commentAidLoading}
+          aidError={commentAidError}
+          onRetryAid={resolveCommentAid}
+          onNotify={notifyComment}
+        />
       )}
     </div>
   );
