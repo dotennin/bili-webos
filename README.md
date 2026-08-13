@@ -34,6 +34,10 @@ The TV-first interface uses high-contrast D-pad focus states, natural grid scrol
 | --- | --- |
 | <img src="docs/screenshots/player.jpg" width="320" alt="Player screen"> | <img src="docs/screenshots/scrub-preview.png" width="320" alt="Scrub preview thumbnails"> |
 
+| Post-playback |
+| --- |
+| <img src="docs/screenshots/post-playback-comments.png" width="640" alt="Post-playback screen with recommendations on the left and comments on the right"> |
+
 ## Architecture
 
 ```text

@@ -362,8 +362,9 @@ const CommentRail = forwardRef<CommentRailHandle, CommentRailProps>(
             return true;
           }
           if (key === 'ArrowLeft') {
+            const shouldLeaveRail = focusTargetRef.current === 'body';
             setFocusTarget('body');
-            return true;
+            return !shouldLeaveRail;
           }
           if (key === 'Enter') {
             if (focusTargetRef.current === 'like') toggleLike(index);

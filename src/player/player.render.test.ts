@@ -1781,6 +1781,103 @@ describe('PlayerPage', () => {
     });
   });
 
+  test('opens recommendations on the left and comments on the right after playback ends', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const onPlayNext = mock(() => {});
+
+    api.getRelated.mockResolvedValueOnce({
+      data: [{ bvid: 'BV-END-1', title: '播放结束推荐', pic: '//img/end.jpg' }],
+    });
+    api.getReplies.mockResolvedValueOnce({
+      replies: [
+        {
+          rpid: 901,
+          member: { uname: '结束评论用户', avatar: '' },
+          content: { message: '播放结束评论' },
+          like: 2,
+          action: 0,
+          rcount: 0,
+          replies: [],
+        },
+      ],
+      cursor: { all_count: 1, is_end: true, pagination_reply: { next_offset: '' } },
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { aid: 456, bvid: 'BV-END', cid: 15, title: '播放结束视频' },
+        onPlayNext,
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    await interact(() => video.dispatch('ended'));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+
+    expect(renderer.container.querySelector('.endscreen-recommendations')).not.toBeNull();
+    expect(renderer.container.querySelector('.endscreen-card')).not.toBeNull();
+    expect(renderer.container.querySelector('.comment-rail')).not.toBeNull();
+    expect(renderer.container.querySelector('.player-stage')?.classList.contains('comments-open')).toBe(true);
+    expect(api.getReplies).toHaveBeenCalledWith(456, '', expect.anything());
+
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
+    expect(renderer.container.querySelector('.comment-like.focused')).not.toBeNull();
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+    expect(renderer.container.querySelector('.comment-card.focused')).not.toBeNull();
+    expect(renderer.container.querySelector('.comment-like.focused')).toBeNull();
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(onPlayNext).toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV-END-1' }),
+    );
+
+    await act(async () => renderer.unmount());
+  });
+
+  test('keeps the ended focus in comments when recommendations are unavailable', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+
+    api.getRelated.mockResolvedValueOnce({ data: [] });
+    api.getReplies.mockResolvedValueOnce({
+      replies: [],
+      cursor: { all_count: 0, is_end: true, pagination_reply: { next_offset: '' } },
+    });
+
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { aid: 457, bvid: 'BV-END-EMPTY', cid: 16, title: '无推荐视频' },
+      }),
+      (element) => (element.type === 'video' ? video : null),
+    );
+    await act(async () => {
+      await flush();
+      await flush();
+      await flush();
+    });
+
+    await interact(() => video.dispatch('ended'));
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    await interact(() => customKeyHandler(event('ArrowLeft')));
+    expect(renderer.container.querySelector('.comment-rail')).not.toBeNull();
+    expect(renderer.container.querySelector('.endscreen-recommendations')).toBeNull();
+
+    await act(async () => renderer.unmount());
+  });
+
   test('uses timeline preview seeking with debounced commit and control-focus commit handoff', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();

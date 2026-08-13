@@ -1383,6 +1383,13 @@ export default function PlayerPage({
     }
   }, [video]);
 
+  useEffect(() => {
+    if (!ended) return;
+    setShowCommentRail(true);
+    if (relatedVideos.length === 0) setFocusArea('comments');
+    if (!showCommentRail) resolveCommentAid();
+  }, [ended, relatedVideos.length, resolveCommentAid, showCommentRail]);
+
   const closeCommentRail = useCallback(() => {
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
     setShowCommentRail(false);
@@ -1846,7 +1853,7 @@ export default function PlayerPage({
         e.preventDefault();
         e.stopPropagation();
 
-        if (showCommentRail) {
+        if (showCommentRail && !ended) {
           closeCommentRail();
         } else if (ended) {
           // End screen: back exits player
@@ -1957,7 +1964,16 @@ export default function PlayerPage({
 
       if (focusArea === 'comments') {
         e.preventDefault();
-        commentRailRef.current?.handleKey(key);
+        const handled = commentRailRef.current?.handleKey(key);
+        if (
+          !handled &&
+          ended &&
+          relatedVideos.length > 0 &&
+          key === 'ArrowLeft'
+        ) {
+          setFocusArea('endscreen');
+          setFocusIdx(0);
+        }
         return true;
       }
 
@@ -2128,9 +2144,9 @@ export default function PlayerPage({
       }
 
       // Scroll the focused related card into view
-      function scrollRelatedIntoView(idx) {
+      function scrollRelatedIntoView(idx, selector = '.related-card') {
         setTimeout(() => {
-          const cards = document.querySelectorAll('.related-card');
+          const cards = document.querySelectorAll(selector);
           if (cards[idx]) {
             cards[idx].scrollIntoView({ block: 'nearest' });
           }
@@ -2194,26 +2210,47 @@ export default function PlayerPage({
       if (focusArea === 'endscreen') {
         if (key === 'ArrowLeft') {
           e.preventDefault();
-          setFocusIdx((prev) => Math.max(0, prev - 1));
+          const nextIdx = Math.max(0, focusIdx - 1);
+          setFocusIdx(nextIdx);
+          scrollRelatedIntoView(nextIdx, '.endscreen-card');
           return true;
         }
         if (key === 'ArrowRight') {
           e.preventDefault();
-          setFocusIdx((prev) => Math.min(relatedVideos.length - 1, prev + 1));
+          if (
+            showCommentRail &&
+            (focusIdx % RELATED_GRID_COLS === RELATED_GRID_COLS - 1 ||
+              focusIdx === relatedVideos.length - 1)
+          ) {
+            setFocusArea('comments');
+            setFocusIdx(0);
+            return true;
+          }
+          const nextIdx = Math.min(relatedVideos.length - 1, focusIdx + 1);
+          setFocusIdx(nextIdx);
+          scrollRelatedIntoView(nextIdx, '.endscreen-card');
           return true;
         }
         if (key === 'ArrowUp') {
           e.preventDefault();
-          setFocusIdx((prev) =>
-            getGridVerticalTarget(prev, -1, relatedVideos.length),
+          const nextIdx = getGridVerticalTarget(
+            focusIdx,
+            -1,
+            relatedVideos.length,
           );
+          setFocusIdx(nextIdx);
+          scrollRelatedIntoView(nextIdx, '.endscreen-card');
           return true;
         }
         if (key === 'ArrowDown') {
           e.preventDefault();
-          setFocusIdx((prev) =>
-            getGridVerticalTarget(prev, 1, relatedVideos.length),
+          const nextIdx = getGridVerticalTarget(
+            focusIdx,
+            1,
+            relatedVideos.length,
           );
+          setFocusIdx(nextIdx);
+          scrollRelatedIntoView(nextIdx, '.endscreen-card');
           return true;
         }
         if (key === 'Enter') {
@@ -2495,35 +2532,14 @@ export default function PlayerPage({
 
         {/* End screen */}
         {ended && relatedVideos.length > 0 && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              background: 'rgba(0,0,0,0.85)',
-              zIndex: 60,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+          <div className="endscreen-recommendations">
             <div style={{ fontSize: 28, color: '#fff', marginBottom: 30 }}>
               播放结束
             </div>
             <div style={{ fontSize: 20, color: '#aaa', marginBottom: 20 }}>
               接下来播放
             </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${RELATED_GRID_COLS}, minmax(0, 280px))`,
-                gap: 20,
-                justifyContent: 'center',
-              }}
-            >
+            <div className="endscreen-recommendations-grid">
               {relatedVideos.map((rv, i) => {
                 const thumb = (rv.pic || '').startsWith('//')
                   ? 'https:' + rv.pic
@@ -2531,9 +2547,9 @@ export default function PlayerPage({
                 return (
                   <div
                     key={rv.bvid || i}
+                    className="related-card endscreen-card"
                     onClick={() => onPlayNext?.(rv)}
                     style={{
-                      width: 280,
                       cursor: 'pointer',
                       outline:
                         focusArea === 'endscreen' && focusIdx === i
