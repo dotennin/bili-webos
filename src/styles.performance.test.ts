@@ -96,3 +96,14 @@ test('comment rail keeps player resizing and focus effects lightweight', () => {
   expect(focusRule).not.toContain('box-shadow');
   expect(likeFocusRule).not.toContain('box-shadow');
 });
+
+test('endscreen recommendations fit the player stage beside the comment rail', () => {
+  const recommendationsRule = getBlockBody('.endscreen-recommendations {');
+  const gridRule = getBlockBody('.endscreen-recommendations-grid {');
+
+  expect(recommendationsRule).toContain('inset: 0');
+  expect(recommendationsRule).toContain('overflow: hidden');
+  expect(gridRule).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
+  expect(gridRule).toContain('max-width: 1200px');
+  expect(gridRule).toContain('overflow-y: auto');
+});
