@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.18.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.17.0...bili-webos-tv-v1.18.0) (2026-08-13)
+
+
+### Features
+
+* split post-playback recommendations and comments ([#138](https://github.com/dotennin/bili-webos/issues/138)) ([818986e](https://github.com/dotennin/bili-webos/commit/818986e7a4e756e4ba9455a84baa822bddd3aed9))
+
+
+### Bug Fixes
+
+* restore TV screenshot capture ([#136](https://github.com/dotennin/bili-webos/issues/136)) ([a1d1310](https://github.com/dotennin/bili-webos/commit/a1d13105bed303d5336456d7b97fee8ac7c2aae0))
+
 ## [1.17.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.16.0...bili-webos-tv-v1.17.0) (2026-08-12)
 
 
