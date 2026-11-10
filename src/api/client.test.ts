@@ -11,6 +11,7 @@ import {
   getHistory,
   getFavFolders,
   getFavList,
+  setVideoFavorite,
   getReplies,
   getReplyReplies,
   likeComment,
@@ -114,6 +115,52 @@ describe('getHtml5PlayUrl', () => {
       'BV-STRING',
     );
     expect(new URL(playurlRequests[1]).searchParams.get('avid')).toBe('456');
+  });
+});
+
+describe('video favorites', () => {
+  beforeEach(() => setupMocks());
+  afterEach(() => teardownMocks());
+
+  test('loads folder membership for a video', async () => {
+    await getFavFolders(456, 123);
+    const requestUrl = requestedUrls.find((url) => url.includes('/x/v3/fav/folder/created/list-all'));
+    const params = new URL(requestUrl!).searchParams;
+    expect(params.get('up_mid')).toBe('456');
+    expect(params.get('rid')).toBe('123');
+    expect(params.get('type')).toBe('2');
+  });
+
+  test('adds and removes from the selected folder with csrf', async () => {
+    globalThis.localStorage.getItem = (key) =>
+      key === 'bili_auth' ? JSON.stringify({ SESSDATA: 'sess', bili_jct: 'csrf-token' }) : null;
+
+    await setVideoFavorite(123, 456, true);
+    await setVideoFavorite(123, 456, false);
+
+    const calls = (globalThis.fetch as any).mock.calls;
+    const first = new URLSearchParams(calls[0][1].body);
+    const second = new URLSearchParams(calls[1][1].body);
+    expect(calls[0][0]).toContain('/x/v3/fav/resource/deal');
+    expect(calls[0][1].method).toBe('POST');
+    expect(calls[0][1].headers['Content-Type']).toBe('application/x-www-form-urlencoded');
+    expect(first.get('rid')).toBe('123');
+    expect(first.get('type')).toBe('2');
+    expect(first.get('csrf')).toBe('csrf-token');
+    expect(first.get('add_media_ids')).toBe('456');
+    expect(first.get('del_media_ids')).toBe('');
+    expect(second.get('add_media_ids')).toBe('');
+    expect(second.get('del_media_ids')).toBe('456');
+  });
+
+  test('requires login and propagates Bilibili errors', async () => {
+    await expect(setVideoFavorite(123, 456, true)).rejects.toThrow('请先登录');
+    expect((globalThis.fetch as any).mock.calls).toHaveLength(0);
+
+    setupMocks({ code: -111, message: 'csrf 校验失败' });
+    globalThis.localStorage.getItem = (key) =>
+      key === 'bili_auth' ? JSON.stringify({ SESSDATA: 'sess', bili_jct: 'csrf-token' }) : null;
+    await expect(setVideoFavorite(123, 456, true)).rejects.toThrow('csrf 校验失败');
   });
 });
 

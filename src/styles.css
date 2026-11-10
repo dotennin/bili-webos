@@ -889,6 +889,36 @@ body,
   color: #00a1d6;
 }
 
+.favorite-panel {
+  min-width: 300px;
+  max-width: min(480px, 45vw);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.favorite-panel-title {
+  padding: 8px 20px 12px;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+}
+.favorite-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  font-family: inherit;
+}
+.favorite-option:disabled {
+  cursor: wait;
+}
+.favorite-option.active.focused {
+  color: #fff;
+}
+
 /* ===== Tabs ===== */
 :root {
   --tab-focus-bg: var(--bg-raised);
