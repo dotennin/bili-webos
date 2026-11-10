@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.19.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.18.1...bili-webos-tv-v1.19.0) (2026-11-10)
+
+
+### Features
+
+* **player:** add favorites to overlay controls ([#141](https://github.com/dotennin/bili-webos/issues/141)) ([4fa12d5](https://github.com/dotennin/bili-webos/commit/4fa12d5c2650388580f3017f7409fab9d8535d0d))
+
 ## [1.18.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.18.0...bili-webos-tv-v1.18.1) (2026-11-10)
 
 
