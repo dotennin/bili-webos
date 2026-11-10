@@ -192,6 +192,15 @@ beforeEach(() => {
       page: { count: 0, num: 1, size: 10 },
     })),
     likeComment: mock(async () => ({ code: 0 })),
+    getNavInfo: mock(async () => ({ data: { mid: 456 } })),
+    getFavFolders: mock(async () => ({
+      code: 0,
+      data: { list: [
+        { id: 10, title: '默认收藏夹', fav_state: 0 },
+        { id: 20, title: '稍后看', fav_state: 1 },
+      ] },
+    })),
+    setVideoFavorite: mock(async () => ({ code: 0 })),
   };
   storageState = {
     auth: { SESSDATA: 'sess', bili_jct: 'csrf-token' },
@@ -288,6 +297,9 @@ beforeEach(() => {
     getReplies: (...args) => api.getReplies(...args),
     getReplyReplies: (...args) => api.getReplyReplies(...args),
     likeComment: (...args) => api.likeComment(...args),
+    getNavInfo: (...args) => api.getNavInfo(...args),
+    getFavFolders: (...args) => api.getFavFolders(...args),
+    setVideoFavorite: (...args) => api.setVideoFavorite(...args),
   }));
   mock.module(storagePath, () => ({
     ...realStorage,
@@ -473,6 +485,87 @@ describe('DanmakuLayer', () => {
 });
 
 describe('PlayerPage', () => {
+  test('renders player controls in the requested order even without subtitles', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { aid: 123, bvid: 'BV-ORDER', cid: 7, title: '测试视频' },
+      }),
+      (element) => (element.type === 'video' ? createVideoMock() : null),
+    );
+    await act(async () => { await flush(); await flush(); });
+    const labels = [...renderer.container.querySelectorAll('.player-btn')].map((el) => el.textContent);
+    expect(labels).toEqual(['⏸ 暂停', '弹幕 开', '字幕 关', '1080P', '1x', '收藏', '评论']);
+    renderer.unmount();
+  });
+
+  test('opens favorite folders, toggles membership, and restores remote focus', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { aid: 123, bvid: 'BV-FAVORITE', cid: 7, title: '收藏视频' },
+      }),
+      (element) => (element.type === 'video' ? createVideoMock() : null),
+    );
+    await act(async () => { await flush(); await flush(); });
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    for (let i = 0; i < 5; i++) {
+      await interact(() => customKeyHandler(event('ArrowRight')));
+    }
+    expect(renderer.container.querySelector('.player-btn.focused')?.textContent).toBe('收藏');
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => { await flush(); await flush(); });
+    expect(api.getFavFolders).toHaveBeenCalledWith(456, 123);
+    expect(renderer.container.querySelectorAll('.favorite-option')).toHaveLength(2);
+    expect(renderer.container.querySelector('.player-btn:nth-child(6)')?.textContent).toContain('已收藏');
+
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => { await flush(); });
+    expect(api.setVideoFavorite).toHaveBeenCalledWith(123, 10, true);
+    expect(renderer.container.querySelectorAll('.favorite-option.active')).toHaveLength(2);
+
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => { await flush(); });
+    expect(api.setVideoFavorite).toHaveBeenCalledWith(123, 20, false);
+    expect(renderer.container.querySelectorAll('.favorite-option.active')).toHaveLength(1);
+
+    await interact(() => customKeyHandler(event('Backspace', 461)));
+    expect(renderer.container.querySelector('.favorite-panel')).toBeNull();
+    expect(renderer.container.querySelector('.player-btn.focused')?.textContent).toContain('收藏');
+    renderer.unmount();
+  });
+
+  test('reports login and mutation failures without claiming collection succeeded', async () => {
+    storageState.auth = null;
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { aid: 123, bvid: 'BV-LOGIN', cid: 7, title: '未登录' },
+      }),
+      (element) => (element.type === 'video' ? createVideoMock() : null),
+    );
+    await act(async () => { await flush(); await flush(); });
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowDown')));
+    for (let i = 0; i < 5; i++) await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('Enter')));
+    expect(renderer.container.textContent).toContain('请先登录');
+    expect(api.getFavFolders).not.toHaveBeenCalled();
+
+    storageState.auth = { SESSDATA: 'sess', bili_jct: 'csrf-token' };
+    api.setVideoFavorite = mock(async () => { throw new Error('操作频繁'); });
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => { await flush(); await flush(); });
+    await interact(() => customKeyHandler(event('Enter')));
+    await act(async () => { await flush(); });
+    expect(renderer.container.textContent).toContain('操作频繁');
+    expect(renderer.container.querySelector('.favorite-option.active')).not.toBeNull();
+    expect(renderer.container.querySelectorAll('.favorite-option.active')).toHaveLength(1);
+    renderer.unmount();
+  });
+
   test('opens the comment rail, shrinks the whole player stage, and restores focus on back', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const video = createVideoMock();
@@ -497,7 +590,7 @@ describe('PlayerPage', () => {
 
     await interact(() => customKeyHandler(event('ArrowDown')));
     await interact(() => customKeyHandler(event('ArrowDown')));
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 6; index += 1) {
       await interact(() => customKeyHandler(event('ArrowRight')));
     }
     expect(
@@ -546,7 +639,7 @@ describe('PlayerPage', () => {
 
     await interact(() => customKeyHandler(event('ArrowDown')));
     await interact(() => customKeyHandler(event('ArrowDown')));
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 6; index += 1) {
       await interact(() => customKeyHandler(event('ArrowRight')));
     }
     await interact(() => customKeyHandler(event('Enter')));
@@ -729,6 +822,7 @@ describe('PlayerPage', () => {
     await interact(() => customKeyHandler(event('Enter')));
     expect(JSON.stringify(renderer.toJSON())).toContain('弹幕 关');
 
+    await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('Enter')));
     expect(JSON.stringify(renderer.toJSON())).toContain('quality-panel');
@@ -1328,6 +1422,7 @@ describe('PlayerPage', () => {
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('Enter')));
 
     expect(JSON.stringify(renderer.toJSON())).toContain('speed-panel');
@@ -1384,7 +1479,7 @@ describe('PlayerPage', () => {
 
     await interact(() => customKeyHandler(event('ArrowUp')));
     await interact(() => customKeyHandler(event('ArrowDown')));
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 2; i += 1) {
       await interact(() => customKeyHandler(event('ArrowRight')));
     }
     await interact(() => customKeyHandler(event('Enter')));
@@ -1505,6 +1600,7 @@ describe('PlayerPage', () => {
 
     expect(JSON.stringify(renderer.toJSON())).toContain('1x');
 
+    await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
@@ -1632,6 +1728,7 @@ describe('PlayerPage', () => {
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('Enter')));
     await interact(() => customKeyHandler(event('ArrowDown')));
     await interact(() => customKeyHandler(event('ArrowDown')));
@@ -1709,6 +1806,7 @@ describe('PlayerPage', () => {
     await interact(() => video.dispatch('play'));
     await interact(() => customKeyHandler(event('ArrowUp')));
     await interact(() => customKeyHandler(event('ArrowDown')));
+    await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));
     await interact(() => customKeyHandler(event('ArrowRight')));

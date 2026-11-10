@@ -562,8 +562,11 @@ export async function getHistory(max, viewAt, ps) {
   });
 }
 
-export async function getFavFolders(mid) {
-  return wbiFetch('/x/v3/fav/folder/created/list-all', { up_mid: mid });
+export async function getFavFolders(mid, aid?) {
+  return wbiFetch('/x/v3/fav/folder/created/list-all', {
+    up_mid: mid,
+    ...(aid ? { rid: aid, type: 2 } : {}),
+  });
 }
 
 export async function getFavList(mediaId, pn, ps) {
@@ -573,6 +576,29 @@ export async function getFavList(mediaId, pn, ps) {
     ps: ps || 20,
     platform: 'web',
   });
+}
+
+export async function setVideoFavorite(aid, mediaId, shouldFavorite: boolean) {
+  const auth = storage.getAuth();
+  if (!auth?.SESSDATA || !auth?.bili_jct) throw new Error('请先登录');
+  if (!aid || !mediaId) throw new Error('视频或收藏夹信息无效');
+
+  const body = new URLSearchParams({
+    rid: String(aid),
+    type: '2',
+    add_media_ids: shouldFavorite ? String(mediaId) : '',
+    del_media_ids: shouldFavorite ? '' : String(mediaId),
+    csrf: auth.bili_jct,
+  }).toString();
+  const response = await smartFetch(API_HOST, '/x/v3/fav/resource/deal', {
+    method: 'POST',
+    body,
+    contentType: 'application/x-www-form-urlencoded',
+  });
+  if (response?.code !== 0) {
+    throw new Error(response?.message || '收藏操作失败');
+  }
+  return response;
 }
 
 function normalizeSubscriptionRow(item) {

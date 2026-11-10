@@ -3,6 +3,9 @@ import {
   getPlayUrl,
   getDanmaku,
   getVideoInfo,
+  getNavInfo,
+  getFavFolders,
+  setVideoFavorite,
   reportHeartbeat,
   getRelated,
   getStoryboard,
@@ -36,6 +39,15 @@ const SEEK_LONG_VIDEO_SEC = 60 * 60;
 const RESUME_REWIND_SEC = 2;
 const RELATED_GRID_COLS = 4;
 const PLAYBACK_SPEEDS = [2, 1.5, 1.25, 1, 0.75, 0.5, 0.25];
+const CONTROLS = [
+  'play',
+  'danmaku',
+  'subtitle',
+  'quality',
+  'speed',
+  'favorites',
+  'comments',
+];
 const PLAYBACK_RATE_SYNC_DELAY_MS = 1200;
 const WEBOS_MEDIA_ID_POLL_MS = 100;
 const WEBOS_MEDIA_ID_MAX_POLLS = 100;
@@ -211,7 +223,14 @@ export default function PlayerPage({
   const [commentAidLoading, setCommentAidLoading] = useState(false);
   const [commentAidError, setCommentAidError] = useState('');
   const [commentNotice, setCommentNotice] = useState('');
-  // Focus: 'none' (no UI) | 'timeline' | 'controls' | 'quality' | 'speed' | 'related' | 'comments' | 'endscreen'
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [favoriteFolders, setFavoriteFolders] = useState([]);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [favoriteError, setFavoriteError] = useState('');
+  const [favoriteNotice, setFavoriteNotice] = useState('');
+  const favoritePanelRef = useRef<HTMLDivElement>(null);
+  // Focus: 'none' | 'timeline' | 'controls' | 'quality' | 'speed' | 'subtitle' | 'favorites' | 'related' | 'comments' | 'endscreen'
   const [focusArea, setFocusArea] = useState('none');
   const [focusIdx, setFocusIdx] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -248,6 +267,7 @@ export default function PlayerPage({
   const endedRef = useRef(false);
   const commentRailRef = useRef<CommentRailHandle>(null);
   const videoAidRef = useRef(video?.aid || null);
+  const favoriteRequestRef = useRef(0);
   const commentAidRequestRef = useRef(0);
   const showCommentRailRef = useRef(showCommentRail);
   showCommentRailRef.current = showCommentRail;
@@ -335,11 +355,6 @@ export default function PlayerPage({
     );
     pendingSeekRef.current = null;
   }, []);
-
-  const CONTROLS =
-    subtitleTracks.length > 0
-      ? ['play', 'danmaku', 'quality', 'speed', 'subtitle', 'comments']
-      : ['play', 'danmaku', 'quality', 'speed', 'comments'];
 
   const getGridVerticalTarget = useCallback((currentIdx, direction, total) => {
     const nextIdx = currentIdx + direction * RELATED_GRID_COLS;
@@ -1300,12 +1315,19 @@ export default function PlayerPage({
   useEffect(() => {
     const nextAid = video?.aid || null;
     commentAidRequestRef.current += 1;
+    favoriteRequestRef.current += 1;
     videoAidRef.current = nextAid;
     setVideoAid(nextAid);
     setCommentAidLoading(false);
     setCommentAidError('');
     setCommentNotice('');
     setShowCommentRail(false);
+    setShowFavorites(false);
+    setFavoriteFolders([]);
+    setFavoriteLoading(false);
+    setFavoriteBusy(false);
+    setFavoriteError('');
+    setFavoriteNotice('');
   }, [video?.aid, video?.bvid]);
 
   // Heartbeat
@@ -1350,6 +1372,105 @@ export default function PlayerPage({
   const notifyComment = useCallback((message) => {
     setCommentNotice(message || '评论操作失败');
   }, []);
+
+  const openFavorites = useCallback(async () => {
+    const auth = storage.getAuth();
+    if (!auth?.SESSDATA || !auth?.bili_jct) {
+      setFavoriteNotice('请先登录后收藏');
+      hideControlsLater();
+      return;
+    }
+
+    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    const requestId = ++favoriteRequestRef.current;
+    setFavoriteNotice('');
+    setFavoriteError('');
+    setFavoriteFolders([]);
+    setFavoriteLoading(true);
+    setShowQuality(false);
+    setShowSpeed(false);
+    setShowSubtitle(false);
+    setShowRelated(false);
+    setShowFavorites(true);
+    setFocusArea('favorites');
+    setFocusIdx(0);
+
+    try {
+      let aid = videoAidRef.current;
+      if (!aid) {
+        const info = await getVideoInfo(video);
+        aid = info?.data?.aid;
+        if (!aid) throw new Error('视频信息获取失败');
+        if (favoriteRequestRef.current !== requestId) return;
+        videoAidRef.current = aid;
+        setVideoAid(aid);
+      }
+      const mid = auth.DedeUserID || (await getNavInfo())?.data?.mid;
+      if (!mid) throw new Error('无法获取登录用户信息');
+      const result = await getFavFolders(mid, aid);
+      if (result?.code !== 0) {
+        throw new Error(result?.message || '收藏夹加载失败');
+      }
+      if (favoriteRequestRef.current !== requestId) return;
+      setFavoriteFolders(result?.data?.list || []);
+    } catch (error) {
+      if (favoriteRequestRef.current !== requestId) return;
+      setFavoriteError(
+        error instanceof Error ? error.message : '收藏夹加载失败',
+      );
+    } finally {
+      if (favoriteRequestRef.current === requestId) setFavoriteLoading(false);
+    }
+  }, [video, hideControlsLater]);
+
+  const closeFavorites = useCallback(() => {
+    favoriteRequestRef.current += 1;
+    setShowFavorites(false);
+    setFavoriteLoading(false);
+    setFavoriteBusy(false);
+    setFavoriteNotice('');
+    setFocusArea('controls');
+    setFocusIdx(CONTROLS.indexOf('favorites'));
+    hideControlsLater();
+  }, [hideControlsLater]);
+
+  const toggleFavorite = useCallback(
+    async (index) => {
+      const folder = favoriteFolders[index];
+      if (!folder || favoriteBusy || !videoAidRef.current) return;
+      const requestId = favoriteRequestRef.current;
+      const nextFavorite = Number(folder.fav_state) !== 1;
+      setFavoriteBusy(true);
+      setFavoriteNotice('');
+      try {
+        await setVideoFavorite(videoAidRef.current, folder.id, nextFavorite);
+        if (favoriteRequestRef.current !== requestId) return;
+        setFavoriteFolders((previous) =>
+          previous.map((entry) =>
+            entry.id === folder.id
+              ? { ...entry, fav_state: nextFavorite ? 1 : 0 }
+              : entry,
+          ),
+        );
+        setFavoriteNotice(nextFavorite ? '收藏成功' : '已取消收藏');
+      } catch (error) {
+        if (favoriteRequestRef.current !== requestId) return;
+        setFavoriteNotice(
+          error instanceof Error ? error.message : '收藏操作失败',
+        );
+      } finally {
+        if (favoriteRequestRef.current === requestId) setFavoriteBusy(false);
+      }
+    },
+    [favoriteFolders, favoriteBusy],
+  );
+
+  useEffect(() => {
+    if (!showFavorites || focusArea !== 'favorites') return;
+    const option =
+      favoritePanelRef.current?.querySelectorAll('.favorite-option')[focusIdx];
+    option?.scrollIntoView?.({ block: 'nearest' });
+  }, [showFavorites, favoriteFolders, focusArea, focusIdx]);
 
   const resolveCommentAid = useCallback(async () => {
     if (videoAidRef.current) {
@@ -1399,6 +1520,7 @@ export default function PlayerPage({
     setShowSpeed(false);
     setShowSubtitle(false);
     setShowRelated(false);
+    setShowFavorites(false);
     setFocusArea('controls');
     setFocusIdx(CONTROLS.indexOf('comments'));
     hideControlsLater();
@@ -1412,6 +1534,7 @@ export default function PlayerPage({
     setShowSpeed(false);
     setShowSubtitle(false);
     setShowRelated(false);
+    setShowFavorites(false);
     setShowCommentRail(true);
     setFocusArea('comments');
     setFocusIdx(0);
@@ -1421,6 +1544,7 @@ export default function PlayerPage({
   const showTimelineControls = useCallback(() => {
     setShowControls(true);
     setShowRelated(false);
+    setShowFavorites(false);
     setShowQuality(false);
     setShowSpeed(false);
     setShowSubtitle(false);
@@ -1853,7 +1977,9 @@ export default function PlayerPage({
         e.preventDefault();
         e.stopPropagation();
 
-        if (showCommentRail && !ended) {
+        if (showFavorites && !ended) {
+          closeFavorites();
+        } else if (showCommentRail && !ended) {
           closeCommentRail();
         } else if (ended) {
           // End screen: back exits player
@@ -1977,6 +2103,20 @@ export default function PlayerPage({
         return true;
       }
 
+      if (focusArea === 'favorites') {
+        e.preventDefault();
+        if (key === 'ArrowUp') {
+          setFocusIdx((prev) => Math.max(0, prev - 1));
+        } else if (key === 'ArrowDown') {
+          setFocusIdx((prev) =>
+            Math.max(0, Math.min(favoriteFolders.length - 1, prev + 1)),
+          );
+        } else if (key === 'Enter') {
+          void toggleFavorite(focusIdx);
+        }
+        return true;
+      }
+
       // === Controls visible ===
       if (focusArea === 'controls') {
         if (key === 'ArrowLeft') {
@@ -2015,6 +2155,10 @@ export default function PlayerPage({
           const btn = CONTROLS[focusIdx];
           if (btn === 'comments') {
             openCommentRail();
+            return true;
+          }
+          if (btn === 'favorites') {
+            void openFavorites();
             return true;
           }
           if (btn === 'play') {
@@ -2085,7 +2229,7 @@ export default function PlayerPage({
           changeSubtitle(focusIdx - 1);
           setShowSubtitle(false);
           setFocusArea('controls');
-          setFocusIdx(4);
+          setFocusIdx(CONTROLS.indexOf('subtitle'));
           return true;
         }
         return false;
@@ -2110,7 +2254,7 @@ export default function PlayerPage({
             changeQuality(q.qn);
             setShowQuality(false);
             setFocusArea('controls');
-            setFocusIdx(2);
+            setFocusIdx(CONTROLS.indexOf('quality'));
           }
           return true;
         }
@@ -2136,7 +2280,7 @@ export default function PlayerPage({
             changePlaybackRate(rate);
             setShowSpeed(false);
             setFocusArea('controls');
-            setFocusIdx(3);
+            setFocusIdx(CONTROLS.indexOf('speed'));
           }
           return true;
         }
@@ -2276,6 +2420,8 @@ export default function PlayerPage({
     showSpeed,
     showSubtitle,
     showRelated,
+    showFavorites,
+    favoriteFolders,
     ended,
     relatedVideos,
     showCommentRail,
@@ -2294,6 +2440,9 @@ export default function PlayerPage({
     showTimelineControls,
     closeCommentRail,
     openCommentRail,
+    openFavorites,
+    closeFavorites,
+    toggleFavorite,
   ]);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -2386,7 +2535,13 @@ export default function PlayerPage({
                 <button
                   key={btn}
                   className={`player-btn ${focusArea === 'controls' && focusIdx === i ? 'focused' : ''}`}
-                  onClick={btn === 'comments' ? openCommentRail : undefined}
+                  onClick={
+                    btn === 'comments'
+                      ? openCommentRail
+                      : btn === 'favorites'
+                        ? () => void openFavorites()
+                        : undefined
+                  }
                 >
                   {btn === 'play'
                     ? playing
@@ -2402,9 +2557,15 @@ export default function PlayerPage({
                           ? currentSubtitleIndex >= 0
                             ? `字幕 ${subtitleTracks[currentSubtitleIndex]?.lan_doc || '开'}`
                             : '字幕 关'
-                          : btn === 'comments'
-                            ? '评论'
-                            : `${playbackRate}x`}
+                          : btn === 'favorites'
+                            ? favoriteFolders.some(
+                                (folder) => Number(folder.fav_state) === 1,
+                              )
+                              ? '已收藏'
+                              : '收藏'
+                            : btn === 'comments'
+                              ? '评论'
+                              : `${playbackRate}x`}
                 </button>
               ))}
               <span ref={timeTextRef} className="player-time">
@@ -2527,6 +2688,40 @@ export default function PlayerPage({
                 {track.lan_doc || track.lan || `字幕 ${i + 1}`}
               </div>
             ))}
+            {subtitleTracks.length === 0 && (
+              <div className="quality-option">暂无可用字幕</div>
+            )}
+          </div>
+        )}
+
+        {showFavorites && (
+          <div ref={favoritePanelRef} className="quality-panel favorite-panel">
+            <div className="favorite-panel-title">选择收藏夹</div>
+            {favoriteLoading ? (
+              <div className="quality-option">加载收藏夹…</div>
+            ) : favoriteError ? (
+              <div className="quality-option">{favoriteError}</div>
+            ) : favoriteFolders.length === 0 ? (
+              <div className="quality-option">暂无收藏夹</div>
+            ) : (
+              favoriteFolders.map((folder, index) => (
+                <button
+                  type="button"
+                  key={folder.id}
+                  className={`quality-option favorite-option ${focusArea === 'favorites' && focusIdx === index ? 'focused' : ''} ${Number(folder.fav_state) === 1 ? 'active' : ''}`}
+                  disabled={favoriteBusy}
+                  onClick={() => {
+                    setFocusIdx(index);
+                    void toggleFavorite(index);
+                  }}
+                >
+                  <span>{folder.title || '未命名收藏夹'}</span>
+                  <span aria-hidden="true">
+                    {Number(folder.fav_state) === 1 ? '✓' : '+'}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         )}
 
@@ -2601,6 +2796,9 @@ export default function PlayerPage({
           </div>
         )}
         {commentNotice && <div className="comment-notice">{commentNotice}</div>}
+        {favoriteNotice && (
+          <div className="comment-notice">{favoriteNotice}</div>
+        )}
       </div>
       {showCommentRail && (
         <CommentRail
