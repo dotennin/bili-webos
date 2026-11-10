@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.18.0...bili-webos-tv-v1.18.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **cast:** restore first-attempt playback after cold start ([#139](https://github.com/dotennin/bili-webos/issues/139)) ([965b1e8](https://github.com/dotennin/bili-webos/commit/965b1e80171f19ffb0d740f71c2742a36ef22139))
+
 ## [1.18.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.17.0...bili-webos-tv-v1.18.0) (2026-08-13)
 
 
