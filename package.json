@@ -33,7 +33,7 @@
     "build": "tsc -p tsconfig.service.json && vite build",
     "preview": "vite preview",
     "package": "tsc -p tsconfig.service.json && vite build && cp -r webos/meta/* dist/ && cd dist && ares-package .",
-    "package:release": "tsc -p tsconfig.service.json && vite build && cp -r webos/meta/* dist/ && cd dist && ares-package --no-minify . ../webos/service/com.biliwebos.app.service",
+    "package:release": "tsc -p tsconfig.service.json && vite build && cp -r webos/meta/* dist/ && bun tools/package-webos.ts",
     "release:manifest": "BUN_BIN=${BUN_BIN:-$HOME/.bun/bin/bun}; \"$BUN_BIN\" tools/release-manifest.ts --template com.biliwebos.app.manifest.json --dist dist --output dist/com.biliwebos.app.manifest.release.json",
     "commitlint": "commitlint",
     "format": "biome format --write .",

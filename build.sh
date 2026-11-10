@@ -9,7 +9,6 @@ echo "=== .env variables ==="
 echo "TV_HOST: $TV_HOST"
 echo "TV_PORT: $TV_PORT"
 echo "TV_USER: $TV_USER"
-echo "TV_PASS: $TV_PASS"
 echo "SSH_KEY_PATH: $SSH_KEY_PATH"
 echo "====================="
 set -e
@@ -33,7 +32,7 @@ echo "=== [1/3] Build & Package ==="
 
 echo ""
 echo "=== [2/3] Deploy ==="
-"$BUN_BIN" tools/deploy.ts 2>&1 | grep -E "Done|Error|Connected"
+"$BUN_BIN" tools/deploy.ts
 
 echo ""
 echo "=== [3/3] Done ==="
