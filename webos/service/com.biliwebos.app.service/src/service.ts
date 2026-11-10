@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import { CastController } from './cast/castController.js';
+import { CastEventRelay } from './cast/castEventRelay.js';
 import { createDeviceProfile } from './cast/deviceProfile.js';
 import { rewriteHlsPlaylist } from './cast/hlsPlaylist.js';
 import { CastLanServer } from './cast/ssdpServer.js';
@@ -228,8 +229,7 @@ function getCastFriendlyName() {
 }
 
 export const castController = new CastController();
-let castSubscribers = [];
-let pendingCastEvent = null;
+const castEventRelay = new CastEventRelay(() => castController.getStatus());
 const castProfile = createDeviceProfile({
   uuid: castConfig.uuid,
   friendlyName: getCastFriendlyName(),
@@ -241,21 +241,7 @@ castConfig.uuid = castProfile.uuid;
 saveCastConfig();
 
 function notifyCastSubscribers(event) {
-  pendingCastEvent = event;
-  castSubscribers = castSubscribers.filter((message) => {
-    try {
-      message.respond({
-        returnValue: true,
-        subscribed: true,
-        event,
-        status: castController.getStatus(),
-      });
-      pendingCastEvent = null;
-      return true;
-    } catch {
-      return false;
-    }
-  });
+  castEventRelay.notify(event);
 }
 
 function launchAppForCast() {
@@ -280,7 +266,7 @@ function launchAppForCast() {
 }
 
 castController.onIntent((intent) => {
-  launchAppForCast();
+  if (intent.type === 'play') launchAppForCast();
   notifyCastSubscribers({ kind: 'command', command: intent });
 });
 
@@ -302,6 +288,10 @@ const castLanServer = new CastLanServer({
 
     if (intent) {
       session.sendEmpty();
+      if (intent.type === 'play') {
+        // Let the sender know playback is starting while webOS launches the UI.
+        castController.reportState({ playState: 'loading' });
+      }
     } else {
       session.sendReply({});
     }
@@ -517,13 +507,7 @@ service.register('castSubscribe', (message) => {
     message.respond({ returnValue: false, error: 'Subscription required' });
     return;
   }
-  castSubscribers.push(message);
-  message.respond({
-    returnValue: true,
-    subscribed: true,
-    event: pendingCastEvent || { kind: 'ready' },
-    status: castController.getStatus(),
-  });
+  castEventRelay.subscribe(message);
 });
 
 service.register('castAck', (message) => {

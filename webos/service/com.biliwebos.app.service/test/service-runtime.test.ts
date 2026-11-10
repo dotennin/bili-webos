@@ -503,9 +503,13 @@ test('cast intents launch app, keep healthy subscribers, and drop broken ones', 
     throw new Error('subscriber closed');
   };
 
-  serviceModule.castController.emitIntent({ type: 'pause' });
+  serviceModule.castController.emitIntent({
+    type: 'play',
+    contentType: 'video',
+    bvid: 'BV-start',
+  });
   expect(goodResponses.at(-1)).toMatchObject({
-    event: { kind: 'command', command: { type: 'pause' } },
+    event: { kind: 'command', command: { type: 'play', bvid: 'BV-start' } },
   });
   expect(infoLogs).toEqual(
     expect.arrayContaining([
@@ -514,10 +518,37 @@ test('cast intents launch app, keep healthy subscribers, and drop broken ones', 
     ]),
   );
 
-  serviceModule.castController.emitIntent({ type: 'resume' });
+  serviceModule.castController.emitIntent({ type: 'pause' });
+  expect(goodResponses.at(-1).event.command.type).toBe('pause');
+  expect(childProcess.execFile).toHaveBeenCalledTimes(1);
+
+  const sent = [];
+  const session = {
+    id: 'session-loading-test',
+    sendEmpty() {
+      sent.push('ack');
+    },
+    sendCommand(action, payload) {
+      sent.push([action, payload]);
+    },
+  };
+  serviceModule.castController.attachSession(session);
+  serviceModule.__testing.getCastServer().onFrame(session, {
+    type: 'command',
+    action: 'Play',
+    body: JSON.stringify({ bvid: 'BV-loading' }),
+  });
+  expect(sent).toEqual([
+    'ack',
+    ['OnPlayState', { playState: 3 }],
+  ]);
+  expect(goodResponses.at(-1).event.command.bvid).toBe('BV-loading');
   expect(errorLogs).toEqual(
     expect.arrayContaining([['[Cast] launch app failed:', 'launch failed']]),
   );
+  serviceModule.castController.emitIntent({ type: 'resume' });
+  expect(childProcess.execFile).toHaveBeenCalledTimes(2);
+  serviceModule.castController.detachSession(session.id);
 
   const stateResult = await new Promise((resolve) =>
     handlers.castReportState({
