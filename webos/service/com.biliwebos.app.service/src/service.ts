@@ -91,13 +91,14 @@ export { rewriteHlsPlaylist };
 
 const UPSTREAM_REQUEST_TIMEOUT_MS = 20_000;
 
-// The client authenticates main API calls, QR login, and live API calls on
-// these exact hosts. The loopback media proxy never uses the session jar.
-const COOKIE_HOSTS = new Set([
-  'api.bilibili.com',
-  'passport.bilibili.com',
-  'api.live.bilibili.com',
-]);
+// The client retries main and live API reads through loopback. QR login
+// uses Passport through Luna, which owns upstream cookie ingestion.
+const API_COOKIE_HOSTS = new Set(['api.bilibili.com', 'api.live.bilibili.com']);
+const PASSPORT_HOST = 'passport.bilibili.com';
+
+function isCanonicalHttps(url: URL) {
+  return url.protocol === 'https:' && !url.port;
+}
 
 function ingestCookies(setCookieHeaders: string[]) {
   for (const header of setCookieHeaders) {
@@ -114,6 +115,7 @@ function withoutCookieHeaders(headers: http.IncomingHttpHeaders) {
   const {
     'set-cookie': _setCookie,
     'set-cookie2': _setCookie2,
+    'x-set-cookie': _cookieBridge,
     ...rest
   } = headers;
   return rest;
@@ -131,13 +133,12 @@ export function isAllowedHost(host) {
     'i2.hdslb.com',
     'comment.bilibili.com',
   ];
-  for (let i = 0; i < allowed.length; i += 1) {
-    if (host === allowed[i]) return true;
-  }
   return (
-    host.indexOf('.bilivideo.') >= 0 ||
-    host.indexOf('.hdslb.com') >= 0 ||
-    host.indexOf('.akamaized.net') >= 0
+    allowed.includes(host) ||
+    host.endsWith('.bilivideo.com') ||
+    host.endsWith('.bilivideo.cn') ||
+    host.endsWith('.hdslb.com') ||
+    host.endsWith('.akamaized.net')
   );
 }
 
@@ -352,18 +353,30 @@ export function createLocalProxyHandler({
         return;
       }
 
-      const host = pathMatch[1];
-      if (!isAllowedHost(host)) {
+      const authority = pathMatch[1];
+      const upstreamPath = (pathMatch[2] || '/') + url.search;
+      const parsedUrl = new URL(`https://${authority}${upstreamPath}`);
+      const { hostname } = parsedUrl;
+      const canonicalHttps = isCanonicalHttps(parsedUrl);
+      const authorityMatches =
+        authority === parsedUrl.host ||
+        (canonicalHttps && authority === `${hostname}:443`);
+      if (!authorityMatches || !isAllowedHost(hostname)) {
         res.writeHead(403, { 'Content-Type': 'text/plain' });
         res.end('Forbidden');
         return;
       }
 
-      const upstreamPath = (pathMatch[2] || '/') + (url.search || '');
-      const parsedUrl = new URL(`https://${host}${upstreamPath}`);
+      const method = req.method;
       const range = req.headers.range || '';
+      const cookieHeader =
+        canonicalHttps &&
+        (method === 'GET' || method === 'HEAD') &&
+        API_COOKIE_HOSTS.has(hostname)
+          ? serializeCookies(storedCookies)
+          : '';
 
-      makeRequest(parsedUrl, req.method, '', '', range, (err, proxyRes) => {
+      const onResponse = (err, proxyRes) => {
         if (err) {
           console.error('[LocalProxy] request failed:', err.message);
           res.writeHead(502, { 'Content-Type': 'text/plain' });
@@ -421,7 +434,8 @@ export function createLocalProxyHandler({
             res.end('Playlist rewrite failed');
           }
         });
-      });
+      };
+      makeRequest(parsedUrl, method, '', '', range, onResponse, cookieHeader);
     } catch (error) {
       res.writeHead(400, { 'Content-Type': 'text/plain' });
       res.end(error.message);
@@ -466,9 +480,9 @@ service.register('fetch', (message) => {
   }
 
   const allowCookies =
-    parsedUrl.protocol === 'https:' &&
-    !parsedUrl.port &&
-    COOKIE_HOSTS.has(parsedUrl.hostname);
+    isCanonicalHttps(parsedUrl) &&
+    (API_COOKIE_HOSTS.has(parsedUrl.hostname) ||
+      parsedUrl.hostname === PASSPORT_HOST);
 
   makeRequest(
     parsedUrl,

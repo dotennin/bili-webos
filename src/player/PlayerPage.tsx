@@ -934,11 +934,7 @@ export default function PlayerPage({
             setVideoTitle('投屏视频');
           }
         }
-        if (!cid) {
-          stopLoadingSpeed();
-          setLoading(false);
-          return;
-        }
+        if (!cid) throw new Error('missing-cid');
         cidRef.current = cid;
 
         const videoKey = `${video.bvid}:${cid}`;
@@ -953,11 +949,7 @@ export default function PlayerPage({
         const res = await getPlayUrl(video, cid, settings.quality || 80);
         if (!isCurrentVideo()) return;
         const dash = res?.data?.dash;
-        if (!dash) {
-          stopLoadingSpeed();
-          setLoading(false);
-          return;
-        }
+        if (!dash) throw new Error('missing-dash');
 
         setQualities(
           (res?.data?.accept_quality || []).map((q) => ({

@@ -149,20 +149,7 @@ test('Luna fetch limits cookies to the expected API origins', async () => {
   });
 });
 
-test('loopback media proxy streams a byte range without upstream cookies', async () => {
-  await invoke('setCookies', { cookies: { SESSDATA: 'stub-session' } });
-  writeFile.mockClear();
-  stubUpstream(
-    206,
-    {
-      'content-type': 'video/mp2t',
-      'content-range': 'bytes 0-3/8',
-      'set-cookie': ['SESSDATA=stub-upstream; Secure'],
-      'set-cookie2': ['legacy=stub-upstream'],
-    },
-    'data',
-  );
-
+function requestLoopback(path, method, headers = {}) {
   const requestHandler = serviceModule.__testing
     .getLocalProxy()
     .listeners('request')[0];
@@ -174,29 +161,125 @@ test('loopback media proxy streams a byte range without upstream cookies', async
     writeHead: mock(() => {}),
     end: mock(() => {}),
   });
-  requestHandler(
+  requestHandler({ url: '/proxy/' + path, method, headers }, response);
+  return { response, responseHeaders };
+}
+
+test('loopback GET and HEAD fallbacks use the API session and discard upstream cookies', async () => {
+  await invoke('setCookies', { cookies: { SESSDATA: 'stub-session' } });
+  writeFile.mockClear();
+  stubUpstream(
+    200,
     {
-      url: '/proxy/api.live.bilibili.com/live/segment.ts',
-      method: 'GET',
-      headers: { range: 'bytes=0-3', cookie: 'local=stub-browser' },
+      'content-type': 'application/json',
+      'set-cookie': ['SESSDATA=stub-upstream; Secure'],
+      'set-cookie2': ['legacy=stub-upstream'],
+      'x-set-cookie': '{"SESSDATA":"stub-bridge"}',
     },
-    response,
+    '{"code":0}',
   );
 
-  const [[options]] = upstreamRequest.mock.calls;
-  expect(options.rejectUnauthorized).toBe(true);
-  expect(options.headers.Range).toBe('bytes=0-3');
-  expect(options.headers.Cookie).toBeUndefined();
+  for (const [path, method, hostname] of [
+    ['api.bilibili.com/x/web-interface/nav', 'GET', 'api.bilibili.com'],
+    [
+      'api.live.bilibili.com:443/xlive/web-room',
+      'HEAD',
+      'api.live.bilibili.com',
+    ],
+  ]) {
+    const { response, responseHeaders } = requestLoopback(path, method, {
+      cookie: 'SESSDATA=stub-browser',
+    });
+    expect(upstreamRequest.mock.calls.at(-1)?.[0]).toMatchObject({
+      hostname,
+      port: 443,
+      method,
+      rejectUnauthorized: true,
+      headers: { Cookie: 'SESSDATA=stub-session' },
+    });
+    expect(response.writeHead).toHaveBeenCalledWith(200);
+    expect(responseHeaders).toEqual({ 'content-type': 'application/json' });
+  }
+
+  expect(writeFile).not.toHaveBeenCalled();
+  expect((await invoke('getCookies')).cookies).toEqual({
+    SESSDATA: 'stub-session',
+  });
+});
+
+test('loopback preserves custom HTTPS ports and withholds cookies outside canonical API reads', async () => {
+  await invoke('setCookies', { cookies: { SESSDATA: 'stub-session' } });
+  stubUpstream(
+    206,
+    {
+      'content-type': 'video/mp2t',
+      'content-range': 'bytes 0-3/8',
+      'set-cookie': ['SESSDATA=stub-upstream; Secure'],
+    },
+    'data',
+  );
+
+  const { response, responseHeaders } = requestLoopback(
+    'media.bilivideo.cn:8443/live/segment.ts',
+    'GET',
+    { range: 'bytes=0-3', cookie: 'local=stub-browser' },
+  );
+  expect(upstreamRequest.mock.calls[0]?.[0]).toMatchObject({
+    hostname: 'media.bilivideo.cn',
+    port: 8443,
+    rejectUnauthorized: true,
+    headers: { Range: 'bytes=0-3' },
+  });
   expect(response.writeHead).toHaveBeenCalledWith(206);
   expect(response.end).toHaveBeenCalledWith('data');
   expect(responseHeaders).toEqual({
     'content-type': 'video/mp2t',
     'content-range': 'bytes 0-3/8',
   });
-  expect(writeFile).not.toHaveBeenCalled();
-  expect((await invoke('getCookies')).cookies).toEqual({
-    SESSDATA: 'stub-session',
+
+  requestLoopback(
+    'passport.bilibili.com/x/passport-login/web/qrcode/poll',
+    'GET',
+  );
+  requestLoopback('api.bilibili.com/x/reply/action', 'POST');
+  const { response: customApiResponse } = requestLoopback(
+    'api.bilibili.com:8443/x',
+    'GET',
+  );
+  expect(customApiResponse.writeHead).toHaveBeenCalledWith(206);
+  expect(upstreamRequest.mock.calls.at(-1)?.[0]).toMatchObject({
+    hostname: 'api.bilibili.com',
+    port: 8443,
   });
+  expect(upstreamRequest).toHaveBeenCalledTimes(4);
+  for (const [options] of upstreamRequest.mock.calls) {
+    expect(options.headers.Cookie).toBeUndefined();
+  }
+});
+
+test('proxy host allowlist matches supported CDN suffixes and exact API hosts', () => {
+  for (const host of [
+    'api.bilibili.com',
+    'passport.bilibili.com',
+    'api.live.bilibili.com',
+    'archive.biliimg.com',
+    'comment.bilibili.com',
+    'media.bilivideo.com',
+    'media.bilivideo.cn',
+    'image.hdslb.com',
+    'media.akamaized.net',
+  ]) {
+    expect(serviceModule.isAllowedHost(host)).toBe(true);
+  }
+  for (const host of [
+    'api.bilibili.com.example',
+    'other.api.bilibili.com',
+    'media.bilivideo.example',
+    'image.hdslb.com.example',
+    'media.akamaized.net.example',
+  ]) {
+    expect(serviceModule.isAllowedHost(host)).toBe(false);
+  }
 });
 
 test('startup binds media to loopback and starts separate LAN casting listeners', () => {

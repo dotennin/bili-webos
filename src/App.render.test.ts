@@ -477,3 +477,35 @@ test('App ignores saved resume progress when it is older or from another cid', a
 
   await interact(() => renderer.unmount());
 });
+
+test('a new cast Play remounts playback even when the video or room is the same', async () => {
+  const { default: App } = await import('./App.tsx');
+  const renderer = await render(React.createElement(App));
+  const play = (command) =>
+    interact(() =>
+      castSubscription({
+        kind: 'command',
+        command: { type: 'play', ...command },
+      }),
+    );
+
+  await play({ contentType: 'video', bvid: 'BV-cast', cid: 1 });
+  const firstVideo = renderer.container.querySelector('mock-playerpage');
+  expect(firstVideo).not.toBeNull();
+
+  await play({ contentType: 'video', bvid: 'BV-cast', cid: 2, seekTs: 30 });
+  expect(playerProps.video.video).toMatchObject({ cid: 2, progress: 30 });
+  expect(firstVideo.isConnected).toBe(false);
+  const secondVideo = renderer.container.querySelector('mock-playerpage');
+  await play({ contentType: 'video', bvid: 'BV-cast', cid: 2, seekTs: 60 });
+  expect(playerProps.video.video).toMatchObject({ cid: 2, progress: 60 });
+  expect(secondVideo.isConnected).toBe(false);
+
+  await play({ contentType: 'live', roomId: 42 });
+  const firstLive = renderer.container.querySelector('mock-liveplayerpage');
+  expect(firstLive).not.toBeNull();
+
+  await play({ contentType: 'live', roomId: 42 });
+  expect(firstLive.isConnected).toBe(false);
+  renderer.unmount();
+});

@@ -113,6 +113,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const pendingCastAckRef = useRef(null);
+  const castPlayIdRef = useRef(0);
 
   useEffect(() => {
     initKeyboardNav();
@@ -131,10 +132,12 @@ export default function App() {
         const command = event.command;
 
         if (command.type === 'play') {
+          const castPlayId = ++castPlayIdRef.current;
           pendingCastAckRef.current = command;
           if (command.contentType === 'live') {
             setPlayerVideo(null);
             setLiveRoom({
+              castPlayId,
               roomid: command.roomId,
               title: command.title || '投屏直播',
               owner: { name: '' },
@@ -142,6 +145,7 @@ export default function App() {
           } else {
             setLiveRoom(null);
             setPlayerVideo({
+              castPlayId,
               aid: command.aid,
               bvid: command.bvid,
               cid: command.cid,
@@ -366,7 +370,11 @@ export default function App() {
 
       {playerVideo && (
         <PlayerPage
-          key={playerVideo.bvid || playerVideo.aid || playerVideo.cid}
+          key={
+            playerVideo.castPlayId
+              ? `cast-${playerVideo.castPlayId}`
+              : `${playerVideo.bvid || playerVideo.aid}:${playerVideo.cid ?? ''}`
+          }
           video={playerVideo}
           onBack={() => setPlayerVideo(null)}
           onPlayNext={(v) => setPlayerVideo(v)}
@@ -374,7 +382,11 @@ export default function App() {
       )}
       {liveRoom && (
         <LivePlayerPage
-          key={liveRoom.roomid}
+          key={
+            liveRoom.castPlayId
+              ? `cast-${liveRoom.castPlayId}`
+              : liveRoom.roomid
+          }
           room={liveRoom}
           onBack={() => setLiveRoom(null)}
         />

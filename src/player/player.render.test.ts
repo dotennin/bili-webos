@@ -1042,6 +1042,10 @@ describe('PlayerPage', () => {
       expect.anything(),
     );
     expect(JSON.stringify(noCidRenderer.toJSON())).not.toContain('加载中...');
+    expect(api.castReportState).toHaveBeenCalledWith({
+      playState: 'error',
+      error: 'missing-cid',
+    });
     await act(async () => {
       noCidRenderer.unmount();
     });
@@ -1061,6 +1065,10 @@ describe('PlayerPage', () => {
     });
     expect(shakaLoads).not.toContain('blob:test');
     expect(JSON.stringify(noDashRenderer.toJSON())).not.toContain('加载中...');
+    expect(api.castReportState).toHaveBeenCalledWith({
+      playState: 'error',
+      error: 'missing-dash',
+    });
     await act(async () => {
       noDashRenderer.unmount();
     });
