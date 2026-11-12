@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import {
   React,
   render,
+  update,
   flush,
   createEventTarget,
   interact,
@@ -206,8 +207,18 @@ test('HomePage loads by mode, dedupes items, focuses first content, and loads mo
   );
   await flush();
   timers.at(-1)?.fn();
-  expect(api.getRecommend).toHaveBeenCalledWith(4, 20);
+  expect(api.getRecommend).toHaveBeenCalledWith(4, 20, 2);
   expect(setFocusCalls).toEqual(['content-0-0']);
+
+  api.getRecommend.mockResolvedValueOnce({
+    data: { item: [{ bvid: 'BV6', title: '推荐2' }] },
+  });
+  await interact(() => focusListener?.('content-0-0'));
+  expect(api.getRecommend).toHaveBeenLastCalledWith(4, 20, 3);
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual([
+    'BV2',
+    'BV6',
+  ]);
 
   await render(
     React.createElement(HomePage, {
@@ -289,4 +300,134 @@ test('HomePage handles initial and pagination failures without leaving loading s
 
   expect(failedRenderer).toBeTruthy();
   expect(pagingRenderer).toBeTruthy();
+});
+
+test('HomePage loads more on scroll without focus changes and avoids concurrent requests', async () => {
+  let resolveNext;
+  const { default: HomePage } = await importFresh();
+  const renderer = await render(
+    React.createElement(HomePage, { mode: 'recommend', refreshKey: 0 }),
+  );
+  await flush();
+
+  api.getRecommend.mockImplementationOnce(
+    () => new Promise((resolve) => { resolveNext = resolve; }),
+  );
+  const scroll = renderer.container.querySelector('.page-scroll');
+  Object.defineProperties(scroll, {
+    scrollHeight: { configurable: true, value: 2400 },
+    clientHeight: { configurable: true, value: 600 },
+    scrollTop: { configurable: true, writable: true, value: 200 },
+  });
+  await interact(() => scroll.dispatchEvent(new Event('scroll', { bubbles: true })));
+  expect(api.getRecommend).toHaveBeenCalledTimes(1);
+
+  scroll.scrollTop = 1650;
+  await interact(() => {
+    scroll.dispatchEvent(new Event('scroll', { bubbles: true }));
+    scroll.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+  expect(api.getRecommend).toHaveBeenCalledTimes(2);
+  expect(api.getRecommend).toHaveBeenLastCalledWith(4, 20, 2);
+
+  await interact(() => resolveNext({ data: { item: [{ bvid: 'BV9', title: '推荐9' }] } }));
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual(['BV2', 'BV9']);
+  renderer.unmount();
+});
+
+test('HomePage skips duplicate recommendation pages to find new videos', async () => {
+  const { default: HomePage } = await importFresh();
+  const renderer = await render(
+    React.createElement(HomePage, { mode: 'recommend', refreshKey: 0 }),
+  );
+  await flush();
+  api.getRecommend.mockResolvedValueOnce({
+    data: { item: [{ bvid: 'BV2', title: '重复推荐' }] },
+  });
+  api.getRecommend.mockResolvedValueOnce({
+    data: { item: [{ bvid: 'BV11', title: '新推荐' }] },
+  });
+
+  await interact(() => focusListener?.('content-0-0'));
+  expect(api.getRecommend).toHaveBeenCalledTimes(3);
+  expect(api.getRecommend).toHaveBeenLastCalledWith(4, 20, 3);
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual([
+    'BV2',
+    'BV11',
+  ]);
+  renderer.unmount();
+});
+
+test('HomePage ignores old pagination results after refresh', async () => {
+  let resolveOldPage;
+  const { default: HomePage } = await importFresh();
+  const renderer = await render(
+    React.createElement(HomePage, { mode: 'recommend', refreshKey: 0 }),
+  );
+  await flush();
+
+  api.getRecommend.mockImplementationOnce(
+    () => new Promise((resolve) => { resolveOldPage = resolve; }),
+  );
+  await interact(() => focusListener?.('content-0-0'));
+  expect(api.getRecommend).toHaveBeenCalledTimes(2);
+
+  api.getRecommend.mockResolvedValueOnce({
+    data: { item: [{ bvid: 'BV10', title: '刷新后' }] },
+  });
+  await update(
+    renderer,
+    React.createElement(HomePage, { mode: 'recommend', refreshKey: 1 }),
+  );
+  await flush();
+  expect(api.getRecommend).toHaveBeenLastCalledWith(4, 20, 2);
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual(['BV10']);
+
+  await interact(() => resolveOldPage({ data: { item: [{ bvid: 'OLD' }] } }));
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual(['BV10']);
+  renderer.unmount();
+});
+
+test('HomePage can continue after reaching the duplicate-page limit', async () => {
+  const { default: HomePage } = await importFresh();
+  const renderer = await render(
+    React.createElement(HomePage, { mode: 'recommend', refreshKey: 0 }),
+  );
+  const duplicate = { data: { item: [{ bvid: 'BV2' }] } };
+  api.getRecommend
+    .mockResolvedValueOnce(duplicate)
+    .mockResolvedValueOnce(duplicate)
+    .mockResolvedValueOnce(duplicate)
+    .mockResolvedValueOnce({ data: { item: [{ bvid: 'BV12' }] } });
+
+  await interact(() => focusListener?.('content-0-0'));
+  expect(api.getRecommend).toHaveBeenLastCalledWith(4, 20, 4);
+
+  await interact(() => focusListener?.('content-0-0'));
+  expect(api.getRecommend).toHaveBeenLastCalledWith(4, 20, 5);
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual([
+    'BV2',
+    'BV12',
+  ]);
+  renderer.unmount();
+});
+
+test('HomePage retries the same page after a Bilibili API error', async () => {
+  const { default: HomePage } = await importFresh();
+  const renderer = await render(
+    React.createElement(HomePage, { mode: 'recommend', refreshKey: 0 }),
+  );
+  api.getRecommend
+    .mockResolvedValueOnce({ code: -412, data: null })
+    .mockResolvedValueOnce({ data: { item: [{ bvid: 'BV13' }] } });
+
+  await interact(() => focusListener?.('content-0-0'));
+  await interact(() => focusListener?.('content-0-0'));
+
+  expect(api.getRecommend.mock.calls.map((call) => call[2])).toEqual([1, 2, 2]);
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual([
+    'BV2',
+    'BV13',
+  ]);
+  renderer.unmount();
 });
