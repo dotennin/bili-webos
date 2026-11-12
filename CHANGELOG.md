@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.19.1](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.19.0...bili-webos-tv-v1.19.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **home:** keep recommendation pagination moving ([#144](https://github.com/dotennin/bili-webos/issues/144)) ([459da40](https://github.com/dotennin/bili-webos/commit/459da40a0cd6ca606815978482388ecda8bc570f))
+* **webos:** improve playback lifecycle and runtime reliability ([#143](https://github.com/dotennin/bili-webos/issues/143)) ([e9f3fa8](https://github.com/dotennin/bili-webos/commit/e9f3fa8d694e856ba54933509d6393fae20cc7b1))
+
 ## [1.19.0](https://github.com/dotennin/bili-webos/compare/bili-webos-tv-v1.18.1...bili-webos-tv-v1.19.0) (2026-11-10)
 
 
