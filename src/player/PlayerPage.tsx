@@ -158,10 +158,14 @@ function setWebOSPlayRate(mediaId, playRate) {
   });
 }
 
-function waitForWebOSMediaId(videoElement) {
+function waitForWebOSMediaId(videoElement, isActive: () => boolean) {
   return new Promise((resolve, reject) => {
     let polls = 0;
     const poll = () => {
+      if (!isActive()) {
+        resolve(null);
+        return;
+      }
       const mediaId = videoElement?.mediaId;
       if (mediaId) {
         resolve(mediaId);
@@ -420,14 +424,13 @@ export default function PlayerPage({
       if (mediaId && playbackRate !== 1) {
         const operation = playbackSpeedOperationRef.current;
         setWebOSPlayRate(mediaId, playbackRate).then((success) => {
-          if (!success) {
+          if (
+            !success &&
+            operation === playbackSpeedOperationRef.current &&
+            nativeModeRef.current
+          ) {
             console.warn('[Player] webOS playback-rate reassertion failed');
-            if (
-              operation === playbackSpeedOperationRef.current &&
-              nativeModeRef.current
-            ) {
-              void recoverNativeSpeedRef.current?.(operation);
-            }
+            void recoverNativeSpeedRef.current?.(operation);
           }
         });
       }
@@ -773,44 +776,86 @@ export default function PlayerPage({
 
   // Initialize Shaka Player
   useEffect(() => {
+    const media = videoRef.current;
     let mounted = true;
+    let player;
+    const isActive = () => mounted && videoRef.current === media;
+
+    const handleEnded = () => {
+      if (!isActive()) return;
+      endedRef.current = true;
+      if (controlsTimer.current) clearTimeout(controlsTimer.current);
+      setEnded(true);
+      setShowControls(true);
+      setFocusArea('endscreen');
+      setFocusIdx(0);
+      if (video?.bvid) storage.clearResumeProgress(video.bvid);
+      castReportState({ playState: 'end' }).catch(() => {});
+    };
+
+    async function destroyPlayer() {
+      const instance = player;
+      player = null;
+      if (shakaRef.current === instance) shakaRef.current = null;
+      await instance?.destroy();
+    }
+
     async function init() {
-      const shaka: any = await import('shaka-player');
-      shaka.polyfill.installAll();
-      if (!shaka.Player.isBrowserSupported()) {
+      try {
+        const shaka: any = await import('shaka-player');
+        if (!isActive()) return;
+        shaka.polyfill.installAll();
+        if (!shaka.Player.isBrowserSupported()) {
+          throw new Error('shaka-not-supported');
+        }
+
+        player = new shaka.Player();
+        player.configure({
+          streaming: {
+            bufferingGoal: 15,
+            rebufferingGoal: 5,
+            bufferBehind: 30,
+          },
+          abr: {
+            defaultBandwidthEstimate: 2_000_000,
+          },
+        });
+        await player.attach(media);
+        if (!isActive()) return;
+
+        shakaRef.current = player;
+        player.addEventListener('error', (e) => {
+          if (!isActive()) return;
+          console.error('Shaka error:', e.detail);
+          castReportState({
+            playState: 'error',
+            error: e.detail?.message || 'shaka-error',
+          }).catch(() => {});
+        });
+        player.addEventListener('adaptation', (e) => {
+          if (!isActive()) return;
+          const quality = Number(e.newTrack?.originalVideoId);
+          if (Number.isFinite(quality) && quality > 0) {
+            setCurrentQuality(quality);
+          }
+        });
+        const loaded = await loadVideo(player, isActive);
+        if (loaded && isActive()) media.addEventListener('ended', handleEnded);
+      } catch (err) {
+        if (!isActive()) return;
+        mounted = false;
+        console.error('Shaka initialization error:', err);
         stopLoadingSpeed();
         setLoading(false);
-        return;
-      }
-      const player = new shaka.Player();
-      player.configure({
-        streaming: {
-          bufferingGoal: 15,
-          rebufferingGoal: 5,
-          bufferBehind: 30,
-        },
-        abr: {
-          defaultBandwidthEstimate: 2_000_000,
-        },
-      });
-      await player.attach(videoRef.current);
-      shakaRef.current = player;
-      player.addEventListener('error', (e) => {
-        console.error('Shaka error:', e.detail);
         castReportState({
           playState: 'error',
-          error: e.detail?.message || 'shaka-error',
+          error: err?.message || 'shaka-init-failed',
         }).catch(() => {});
-      });
-      player.addEventListener('adaptation', (e) => {
-        const quality = Number(e.newTrack?.originalVideoId);
-        if (Number.isFinite(quality) && quality > 0) {
-          setCurrentQuality(quality);
-        }
-      });
-      if (mounted) loadVideo(player, () => mounted);
+        destroyPlayer().catch(() => {});
+      }
     }
-    init();
+
+    if (media) void init();
     return () => {
       mounted = false;
       playbackSpeedOperationRef.current += 1;
@@ -818,15 +863,17 @@ export default function PlayerPage({
       nativeSourceReadyRef.current = false;
       nativeTransitionPositionRef.current = null;
       dashRestorePendingRef.current = false;
-      videoRef.current?.pause?.();
-      videoRef.current?.removeAttribute?.('src');
+      media?.removeEventListener('ended', handleEnded);
+      media?.pause();
+      media?.removeAttribute('src');
+      if (controlsTimer.current) clearTimeout(controlsTimer.current);
       storyboardVideoKeyRef.current = null;
-      shakaRef.current?.destroy();
+      destroyPlayer().catch(() => {});
     };
   }, []);
 
   const loadVideo = useCallback(
-    async (player, isActive: () => boolean = () => true) => {
+    async (player, isActive: () => boolean) => {
       if (!isActive()) return;
       if (!video?.bvid && !video?.aid) {
         if (!video?.title && video?.fromCast) setVideoTitle('投屏视频');
@@ -899,10 +946,12 @@ export default function PlayerPage({
         spriteCacheRef.current.clear();
         hideScrubThumbnail();
         storyboardVideoKeyRef.current = videoKey;
+        const isCurrentVideo = () =>
+          isActive() && storyboardVideoKeyRef.current === videoKey;
 
         const settings = storage.getSettings();
         const res = await getPlayUrl(video, cid, settings.quality || 80);
-        if (!isActive() || storyboardVideoKeyRef.current !== videoKey) return;
+        if (!isCurrentVideo()) return;
         const dash = res?.data?.dash;
         if (!dash) {
           stopLoadingSpeed();
@@ -950,19 +999,19 @@ export default function PlayerPage({
 
         getDanmaku(cid)
           .then((danmakuData) => {
-            if (storyboardVideoKeyRef.current !== videoKey) return;
+            if (!isCurrentVideo()) return;
             setDanmakus(danmakuData);
           })
           .catch(() => {});
         getRelated(video.bvid)
           .then((relatedRes) => {
-            if (storyboardVideoKeyRef.current !== videoKey) return;
+            if (!isCurrentVideo()) return;
             setRelatedVideos((relatedRes?.data || []).slice(0, 12));
           })
           .catch(() => {});
         getStoryboard(video.bvid, cid)
           .then((storyboardData) => {
-            if (storyboardVideoKeyRef.current !== videoKey) return;
+            if (!isCurrentVideo()) return;
             storyboardRef.current = storyboardData;
             if (!storyboardData && typeof console !== 'undefined') {
               console.warn('[Player] No storyboard data for', video.bvid, cid);
@@ -971,7 +1020,7 @@ export default function PlayerPage({
           .catch(() => {});
         getPlayerSubtitles(video, cid)
           .then((availableSubtitles) => {
-            if (storyboardVideoKeyRef.current !== videoKey) return;
+            if (!isCurrentVideo()) return;
             setSubtitleTracks(availableSubtitles);
             const preferredSubtitleIndex = getPreferredSubtitleIndex(
               availableSubtitles,
@@ -982,7 +1031,7 @@ export default function PlayerPage({
               availableSubtitles[preferredSubtitleIndex].subtitle_url,
             )
               .then((cues) => {
-                if (storyboardVideoKeyRef.current !== videoKey) return;
+                if (!isCurrentVideo()) return;
                 setCurrentSubtitleIndex(preferredSubtitleIndex);
                 setSubtitleCues(cues);
               })
@@ -1009,18 +1058,7 @@ export default function PlayerPage({
         setPlaying(true);
         castReportState({ playState: 'playing' }).catch(() => {});
 
-        videoRef.current.addEventListener('ended', () => {
-          endedRef.current = true;
-          if (controlsTimer.current) clearTimeout(controlsTimer.current);
-          setEnded(true);
-          setShowControls(true);
-          setFocusArea('endscreen');
-          setFocusIdx(0);
-          if (video?.bvid) {
-            storage.clearResumeProgress(video.bvid);
-          }
-          castReportState({ playState: 'end' }).catch(() => {});
-        });
+        return true;
       } catch (err) {
         if (!isActive()) return;
         console.error('Load video error:', err);
@@ -1722,22 +1760,24 @@ export default function PlayerPage({
     async (rate, operation) => {
       const videoElement = videoRef.current;
       if (!videoElement) return false;
+      const isActive = () =>
+        operation === playbackSpeedOperationRef.current &&
+        nativeModeRef.current &&
+        videoRef.current === videoElement;
       try {
         const mediaId =
-          videoElement.mediaId || (await waitForWebOSMediaId(videoElement));
-        if (
-          operation !== playbackSpeedOperationRef.current ||
-          !nativeModeRef.current
-        )
-          return false;
+          videoElement.mediaId ||
+          (await waitForWebOSMediaId(videoElement, isActive));
+        if (!mediaId || !isActive()) return false;
         const applied = await setWebOSPlayRate(mediaId, rate);
+        if (!isActive()) return false;
         if (!applied) throw new Error('webOS setPlayRate rejected');
-        if (operation !== playbackSpeedOperationRef.current) return false;
         setPlaybackRate(rate);
         speedSwitchInFlightRef.current = false;
         setSpeedSwitching(false);
         return true;
       } catch (error) {
+        if (!isActive()) return false;
         console.warn(
           '[Player] native playback-rate switch failed:',
           error?.message || error,
@@ -2458,6 +2498,7 @@ export default function PlayerPage({
         />
 
         <DanmakuLayer
+          seekable
           danmakus={danmakus}
           currentTime={currentTime}
           enabled={danmakuEnabled && firstFrameReady}

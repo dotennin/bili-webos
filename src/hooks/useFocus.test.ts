@@ -92,6 +92,21 @@ test('register/setFocus/onFocusChange update DOM focus classes', async () => {
   expect(getCurrentFocusId()).toBe('sidebar-0-0');
 });
 
+test('focus uses the registered element even when a DOM lookup would miss', async () => {
+  const { registerFocusable, setFocus } = await loadModule();
+  const { element, scrollIntoViewCalls } = createFocusableNode('other-id');
+  registerFocusable('content-0-0', {
+    row: 0,
+    col: 0,
+    group: 'content',
+    elementRef: { current: element },
+  });
+
+  setFocus('content-0-0');
+  expect(element.classList.contains('focused')).toBe(true);
+  expect(scrollIntoViewCalls).toEqual([{ block: 'nearest' }]);
+});
+
 test('createFocusableHandlers focuses on hover and selects on click', async () => {
   const mod = await loadModule();
   const { createFocusableHandlers, getCurrentFocusId, registerFocusable } = mod;

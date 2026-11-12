@@ -1,19 +1,28 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  lazy,
+  Suspense,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import { initKeyboardNav, setFocus, useFocusable } from './hooks/useFocus';
 import { castAck, castSubscribe, getNavInfo } from './api/client';
 import { storage } from './utils/storage';
 import SidebarItem from './components/SidebarItem';
+import PageState from './components/PageState';
 import type { AppIconName } from './components/AppIcon';
 import packageJson from '../package.json';
 
-import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import HistoryPage from './pages/HistoryPage';
-import FavoritesPage from './pages/FavoritesPage';
-import SettingsPage from './pages/SettingsPage';
 import PlayerPage from './player/PlayerPage';
 import LivePlayerPage from './player/LivePlayerPage';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const FavoritesPage = lazy(() => import('./pages/FavoritesPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 type NavItem = {
   key: string;
@@ -336,16 +345,21 @@ export default function App() {
           )}
           {page === 'search' && <SearchPage onPlayVideo={handlePlayVideo} />}
           {page === 'history' && <HistoryPage onPlayVideo={handlePlayVideo} />}
-          {page === 'favorites' && (
-            <FavoritesPage userMid={user?.mid} onPlayVideo={handlePlayVideo} />
-          )}
-          {page === 'settings' && (
-            <SettingsPage
-              onLogout={handleLogout}
-              user={user}
-              onPlayVideo={handlePlayVideo}
-            />
-          )}
+          <Suspense fallback={<PageState state="loading" />}>
+            {page === 'favorites' && (
+              <FavoritesPage
+                userMid={user?.mid}
+                onPlayVideo={handlePlayVideo}
+              />
+            )}
+            {page === 'settings' && (
+              <SettingsPage
+                onLogout={handleLogout}
+                user={user}
+                onPlayVideo={handlePlayVideo}
+              />
+            )}
+          </Suspense>
         </div>
         {toast && <div className="toast">{toast}</div>}
       </div>
@@ -368,7 +382,9 @@ export default function App() {
 
       {showLogin && (
         <div className="login-overlay">
-          <LoginPage onLogin={handleLogin} />
+          <Suspense fallback={<PageState state="loading" />}>
+            <LoginPage onLogin={handleLogin} />
+          </Suspense>
         </div>
       )}
     </>

@@ -269,10 +269,21 @@ describe('getStoryboard', () => {
       expect(result?.data?.archives?.[0]?.aid).toBe(77);
     });
 
-    test('searchVideo returns proxy-fetched data', async () => {
+    test('searchVideo forwards cancellation and returns proxy-fetched data', async () => {
       setupMocks({ code: 0, data: { result: [{ aid: 66 }] } });
-      const result = await searchVideo('test');
+      const fetchMock = mock(globalThis.fetch);
+      globalThis.fetch = fetchMock;
+      const { signal } = new AbortController();
+
+      const result = await searchVideo('test', undefined, undefined, signal);
+
       expect(result?.data?.result?.[0]?.aid).toBe(66);
+      expect(fetchMock.mock.lastCall?.[1]?.signal).toBe(signal);
+    });
+
+    test('searchVideo rejects Bilibili error responses', async () => {
+      setupMocks({ code: -412, message: '请求过快' });
+      await expect(searchVideo('test')).rejects.toThrow('请求过快');
     });
 
     test('getHistory returns proxy-fetched data', async () => {

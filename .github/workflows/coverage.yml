@@ -34,7 +34,7 @@ jobs:
       - name: Verify coverage summary exists
         run: test -f coverage/coverage-summary.json
 
-      - name: Read weighted line coverage
+      - name: Read average line coverage
         id: line_cov
         run: |
           LINES=$(node -e "import fs from 'node:fs'; const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')); process.stdout.write(String((s.average ?? s.total).lines.pct));")
@@ -47,13 +47,13 @@ jobs:
           git fetch origin document:refs/remotes/origin/document || true
           git show origin/document:coverage/coverage-summary.json > coverage/base/coverage-summary.json || true
 
-      - name: Build weighted coverage comparison
+      - name: Build average coverage comparison
         if: github.event_name == 'pull_request'
         run: |
           bun run coverage:compare -- \
             --current coverage/coverage-summary.json \
             --base coverage/base/coverage-summary.json \
-            --threshold 80 \
+            --threshold 90 \
             --baseline-label main \
             --result-out coverage/compare-result.json \
             --comment-out coverage/pr-comment.md
@@ -92,10 +92,10 @@ jobs:
               await github.rest.issues.createComment({ owner, repo, issue_number, body: finalBody });
             }
 
-      - name: Enforce weighted coverage threshold
+      - name: Enforce average coverage threshold
         if: github.event_name == 'pull_request'
         run: |
-          node -e "const fs=require('fs'); const report=JSON.parse(fs.readFileSync('coverage/compare-result.json','utf8')); if (report.failed) { console.error('Weighted coverage below threshold:', report.belowThreshold.join(', ')); process.exit(1); }"
+          node -e "const fs=require('fs'); const report=JSON.parse(fs.readFileSync('coverage/compare-result.json','utf8')); if (report.failed) { console.error('Average coverage must exceed the threshold:', report.failingMetrics.join(', ')); process.exit(1); }"
 
       - name: Update badge json in document branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

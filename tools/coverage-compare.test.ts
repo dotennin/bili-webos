@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import {
   buildCoverageReport,
-  findBelowThresholdMetrics,
+  findFailingMetrics,
   formatDeltaPct,
   renderPullRequestComment,
 } from './coverage-compare.ts';
 
 describe('coverage compare', () => {
-  it('computes weighted current main and delta rows', () => {
+  it('computes current, baseline, and delta rows', () => {
     const report = buildCoverageReport(
       {
         total: {
@@ -100,7 +100,7 @@ describe('coverage compare', () => {
     });
   });
 
-  it('flags below-threshold weighted metrics and renders warning text', () => {
+  it('flags failing coverage metrics and renders warning text', () => {
     const report = buildCoverageReport(
       {
         total: {
@@ -121,7 +121,7 @@ describe('coverage compare', () => {
       90,
     );
 
-    expect(findBelowThresholdMetrics(report.currentTotal, 90)).toEqual([
+    expect(findFailingMetrics(report.currentTotal, 90)).toEqual([
       'Lines',
       'Functions',
     ]);
@@ -134,6 +134,20 @@ describe('coverage compare', () => {
     expect(renderPullRequestComment(report, { baselineLabel: 'main' })).toContain(
       '- Functions: 88.00%',
     );
+  });
+
+  it('requires each coverage metric to exceed the configured threshold', () => {
+    expect(
+      findFailingMetrics(
+        {
+          lines: { pct: 90 },
+          statements: { pct: 90.01 },
+          functions: { pct: 90.01 },
+          branches: { pct: 100 },
+        },
+        90,
+      ),
+    ).toEqual(['Lines']);
   });
 
   it('handles missing baseline summary without inventing deltas', () => {

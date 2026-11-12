@@ -18,33 +18,60 @@ type SearchPageProps = {
   onPlayVideo?: (video: any) => void;
 };
 
+type SearchState =
+  | { status: 'idle' | 'loading' }
+  | { status: 'error'; query: string }
+  | {
+      status: 'success';
+      results: React.ComponentProps<typeof VideoGrid>['videos'];
+    };
+
 export default function SearchPage({ onPlayVideo }: SearchPageProps) {
   const [keyword, setKeyword] = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [search, setSearch] = useState<SearchState>({ status: 'idle' });
+  const requestRef = useRef<AbortController | null>(null);
+  const resultCount = search.status === 'success' ? search.results.length : 0;
+  const query = keyword.trim();
+  const canRetry = search.status === 'error' && search.query === query;
   const gridCols = useResponsiveGridCols();
   const previousGridColsRef = useRef(gridCols);
 
   useEffect(() => {
     if (previousGridColsRef.current === gridCols) return;
     previousGridColsRef.current = gridCols;
-    if (results.length === 0) return;
+    if (resultCount === 0) return;
 
     const timer = globalThis.setTimeout(
       () => restoreFocusIfMissing('content-10-0'),
       0,
     );
     return () => globalThis.clearTimeout(timer);
-  }, [gridCols, results.length]);
+  }, [gridCols, resultCount]);
+
+  useEffect(() => {
+    return () => {
+      const request = requestRef.current;
+      requestRef.current = null;
+      request?.abort();
+    };
+  }, []);
 
   async function doSearch() {
-    if (!keyword.trim()) return;
-    setLoading(true);
-    setSearched(true);
+    if (!query) return;
+    requestRef.current?.abort();
+    const request = new AbortController();
+    requestRef.current = request;
+    setSearch({ status: 'loading' });
+
     try {
-      const res = await searchVideo(keyword.trim());
-      const items = (res?.data?.result || []).map((item) => ({
+      const res = await searchVideo(
+        query,
+        undefined,
+        undefined,
+        request.signal,
+      );
+      if (requestRef.current !== request) return;
+      const results = (res?.data?.result || []).map((item) => ({
         ...item,
         title: item.title?.replace(/<[^>]+>/g, '') || '',
         pic: item.pic,
@@ -53,11 +80,12 @@ export default function SearchPage({ onPlayVideo }: SearchPageProps) {
         stat: { view: item.play },
         duration: item.duration,
       }));
-      setResults(items);
-    } catch (err) {
-      console.error('Search error:', err);
+      setSearch({ status: 'success', results });
+    } catch {
+      if (requestRef.current === request) setSearch({ status: 'error', query });
+    } finally {
+      if (requestRef.current === request) requestRef.current = null;
     }
-    setLoading(false);
   }
 
   return (
@@ -88,7 +116,7 @@ export default function SearchPage({ onPlayVideo }: SearchPageProps) {
                   row={rowIdx}
                   col={colIdx}
                   group="content"
-                  label={key}
+                  label={key === '搜索' && canRetry ? '重试' : key}
                   isAction={isAction}
                   onPress={() => {
                     if (key === '删除') setKeyword((prev) => prev.slice(0, -1));
@@ -102,21 +130,29 @@ export default function SearchPage({ onPlayVideo }: SearchPageProps) {
         ))}
       </div>
 
-      {loading ? (
+      {search.status === 'loading' && (
         <PageState state="loading" message="搜索中..." />
-      ) : searched && results.length === 0 ? (
+      )}
+      {search.status === 'error' && (
+        <PageState
+          state="error"
+          message={canRetry ? '搜索失败，请选择重试' : '搜索失败'}
+        />
+      )}
+      {search.status === 'success' && resultCount === 0 && (
         <PageState state="empty" message="未找到相关视频" />
-      ) : results.length > 0 ? (
+      )}
+      {search.status === 'success' && resultCount > 0 && (
         <div className="search-results">
           <VideoGrid
-            videos={results}
+            videos={search.results}
             startRow={10}
             cols={gridCols}
             group="content"
             onSelect={onPlayVideo}
           />
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

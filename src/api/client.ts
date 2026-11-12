@@ -539,16 +539,22 @@ export async function searchVideo(
   keyword: string,
   page?: number,
   pageSize?: number,
+  signal?: AbortSignal,
 ) {
-  return wbiFetch('/x/web-interface/search/type', {
-    search_type: 'video',
-    keyword: keyword,
-    page: page || 1,
-    page_size: pageSize || 20,
-    order: '',
-    duration: 0,
-    tids: 0,
-  });
+  const response = await wbiFetch(
+    '/x/web-interface/search/type',
+    {
+      search_type: 'video',
+      keyword: keyword,
+      page: page || 1,
+      page_size: pageSize || 20,
+      order: '',
+      duration: 0,
+      tids: 0,
+    },
+    { signal },
+  );
+  return requireBiliSuccess(response, '搜索失败');
 }
 
 // ============ History & Favorites ============

@@ -19,3 +19,4 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run build
+      - run: bun test tools/*.test.ts

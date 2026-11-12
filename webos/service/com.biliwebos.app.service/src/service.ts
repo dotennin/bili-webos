@@ -91,6 +91,34 @@ export { rewriteHlsPlaylist };
 
 const UPSTREAM_REQUEST_TIMEOUT_MS = 20_000;
 
+// The client authenticates main API calls, QR login, and live API calls on
+// these exact hosts. The loopback media proxy never uses the session jar.
+const COOKIE_HOSTS = new Set([
+  'api.bilibili.com',
+  'passport.bilibili.com',
+  'api.live.bilibili.com',
+]);
+
+function ingestCookies(setCookieHeaders: string[]) {
+  for (const header of setCookieHeaders) {
+    const pair = header.split(';', 1)[0];
+    const eqIdx = pair.indexOf('=');
+    if (eqIdx > 0) {
+      storedCookies[pair.slice(0, eqIdx).trim()] = pair.slice(eqIdx + 1).trim();
+    }
+  }
+  saveCookies();
+}
+
+function withoutCookieHeaders(headers: http.IncomingHttpHeaders) {
+  const {
+    'set-cookie': _setCookie,
+    'set-cookie2': _setCookie2,
+    ...rest
+  } = headers;
+  return rest;
+}
+
 export function isAllowedHost(host) {
   const allowed = [
     'api.bilibili.com',
@@ -113,7 +141,15 @@ export function isAllowedHost(host) {
   );
 }
 
-function makeRequest(parsedUrl, method, body, contentType, range, callback) {
+function makeRequest(
+  parsedUrl,
+  method,
+  body,
+  contentType,
+  range,
+  callback,
+  cookieHeader = '',
+) {
   const hostname = parsedUrl.hostname;
   const port = parsedUrl.port ? Number.parseInt(parsedUrl.port, 10) : 443;
   const isCDN =
@@ -129,8 +165,8 @@ function makeRequest(parsedUrl, method, body, contentType, range, callback) {
     Accept: isCDN ? '*/*' : 'application/json, text/plain, */*',
     'Accept-Language': 'zh-CN,zh;q=0.9',
     'Accept-Encoding': isCDN ? 'identity' : 'gzip, deflate',
-    Cookie: serializeCookies(storedCookies),
   };
+  if (cookieHeader) headers.Cookie = cookieHeader;
   if (!isCDN) headers.Origin = 'https://www.bilibili.com';
   if (contentType) headers['Content-Type'] = contentType;
   if (range) headers.Range = range;
@@ -141,7 +177,7 @@ function makeRequest(parsedUrl, method, body, contentType, range, callback) {
     path: parsedUrl.pathname + (parsedUrl.search || ''),
     method: method || 'GET',
     headers,
-    rejectUnauthorized: false,
+    rejectUnauthorized: true,
   };
 
   let completed = false;
@@ -156,19 +192,6 @@ function makeRequest(parsedUrl, method, body, contentType, range, callback) {
     res.setTimeout?.(UPSTREAM_REQUEST_TIMEOUT_MS, () => {
       res.destroy?.(new Error('Response timeout'));
     });
-    const setCookieHeaders = res.headers['set-cookie'];
-    if (setCookieHeaders) {
-      setCookieHeaders.forEach((sc) => {
-        const parts = sc.split(';')[0];
-        const eqIdx = parts.indexOf('=');
-        if (eqIdx > 0) {
-          storedCookies[parts.substring(0, eqIdx).trim()] = parts
-            .substring(eqIdx + 1)
-            .trim();
-        }
-      });
-      saveCookies();
-    }
     callback(null, res);
   });
 
@@ -354,8 +377,9 @@ export function createLocalProxyHandler({
           parsedUrl.pathname.endsWith('.m3u8');
 
         if (!isPlaylist) {
-          Object.keys(proxyRes.headers).forEach((key) => {
-            const value = proxyRes.headers[key];
+          const headers = withoutCookieHeaders(proxyRes.headers);
+          Object.keys(headers).forEach((key) => {
+            const value = headers[key];
             if (value != null) res.setHeader(key, value);
           });
           proxyRes.on('error', (proxyError) => {
@@ -416,7 +440,7 @@ const localProxy = http.createServer(
 );
 
 if (!disableNetworkServers) {
-  localProxy.listen(localProxyPort, '0.0.0.0', () => {
+  localProxy.listen(localProxyPort, '127.0.0.1', () => {
     console.log(`[BiliService] Local proxy on port ${localProxyPort}`);
   });
 }
@@ -441,6 +465,11 @@ service.register('fetch', (message) => {
     return;
   }
 
+  const allowCookies =
+    parsedUrl.protocol === 'https:' &&
+    !parsedUrl.port &&
+    COOKIE_HOSTS.has(parsedUrl.hostname);
+
   makeRequest(
     parsedUrl,
     message.payload.method,
@@ -452,13 +481,17 @@ service.register('fetch', (message) => {
         message.respond({ returnValue: false, error: err.message });
         return;
       }
+      const setCookieHeaders = res.headers['set-cookie'];
+      if (allowCookies && setCookieHeaders) ingestCookies(setCookieHeaders);
       decompressResponse(res, (buf) => {
         const response: any = {
           returnValue: true,
           status: res.statusCode,
-          headers: res.headers,
-          newCookies: storedCookies,
+          headers: allowCookies
+            ? res.headers
+            : withoutCookieHeaders(res.headers),
         };
+        if (allowCookies) response.newCookies = storedCookies;
 
         const contentType = String(res.headers['content-type'] || '');
         const isText =
@@ -475,6 +508,7 @@ service.register('fetch', (message) => {
         message.respond(response);
       });
     },
+    allowCookies ? serializeCookies(storedCookies) : '',
   );
 });
 
