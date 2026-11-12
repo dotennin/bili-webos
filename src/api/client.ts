@@ -362,10 +362,10 @@ export async function getPopular(pn, ps) {
   return wbiFetch('/x/web-interface/popular', { pn: pn || 1, ps: ps || 20 });
 }
 
-export async function getRecommend(freshType, ps) {
+export async function getRecommend(freshType, ps, freshIdx = 1) {
   return wbiFetch('/x/web-interface/wbi/index/top/feed/rcmd', {
-    fresh_idx: 1,
-    fresh_idx_1h: 1,
+    fresh_idx: freshIdx,
+    fresh_idx_1h: freshIdx,
     fresh_type: freshType || 4,
     ps: ps || 10,
   });
