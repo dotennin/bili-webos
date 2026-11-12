@@ -387,3 +387,47 @@ test('HomePage ignores old pagination results after refresh', async () => {
   expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual(['BV10']);
   renderer.unmount();
 });
+
+test('HomePage can continue after reaching the duplicate-page limit', async () => {
+  const { default: HomePage } = await importFresh();
+  const renderer = await render(
+    React.createElement(HomePage, { mode: 'recommend', refreshKey: 0 }),
+  );
+  const duplicate = { data: { item: [{ bvid: 'BV2' }] } };
+  api.getRecommend
+    .mockResolvedValueOnce(duplicate)
+    .mockResolvedValueOnce(duplicate)
+    .mockResolvedValueOnce(duplicate)
+    .mockResolvedValueOnce({ data: { item: [{ bvid: 'BV12' }] } });
+
+  await interact(() => focusListener?.('content-0-0'));
+  expect(api.getRecommend).toHaveBeenLastCalledWith(4, 20, 4);
+
+  await interact(() => focusListener?.('content-0-0'));
+  expect(api.getRecommend).toHaveBeenLastCalledWith(4, 20, 5);
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual([
+    'BV2',
+    'BV12',
+  ]);
+  renderer.unmount();
+});
+
+test('HomePage retries the same page after a Bilibili API error', async () => {
+  const { default: HomePage } = await importFresh();
+  const renderer = await render(
+    React.createElement(HomePage, { mode: 'recommend', refreshKey: 0 }),
+  );
+  api.getRecommend
+    .mockResolvedValueOnce({ code: -412, data: null })
+    .mockResolvedValueOnce({ data: { item: [{ bvid: 'BV13' }] } });
+
+  await interact(() => focusListener?.('content-0-0'));
+  await interact(() => focusListener?.('content-0-0'));
+
+  expect(api.getRecommend.mock.calls.map((call) => call[2])).toEqual([1, 2, 2]);
+  expect(videoGridCalls.at(-1).videos.map((v) => v.bvid)).toEqual([
+    'BV2',
+    'BV13',
+  ]);
+  renderer.unmount();
+});

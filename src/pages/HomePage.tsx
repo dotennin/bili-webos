@@ -25,12 +25,19 @@ const MODE_COPY = {
 };
 
 async function fetchByMode(mode, pn, recommendOffset = 0) {
+  function getFeedData(response) {
+    if (response?.code != null && response.code !== 0) {
+      throw new Error(response.message || '内容加载失败');
+    }
+    return response?.data;
+  }
+
   if (mode === 'hot') {
-    const res = await getPopular(pn, FETCH_SIZE);
-    return res?.data?.list || [];
+    const data = getFeedData(await getPopular(pn, FETCH_SIZE));
+    return data?.list || [];
   } else if (mode === 'live') {
-    const res = await getLiveList(pn, FETCH_SIZE);
-    const items = res?.data?.list || res?.data?.recommend_room_list || [];
+    const data = getFeedData(await getLiveList(pn, FETCH_SIZE));
+    const items = data?.list || data?.recommend_room_list || [];
     return items.map((item) => ({
       bvid: `live-${item.roomid}`,
       title: item.title,
@@ -43,11 +50,11 @@ async function fetchByMode(mode, pn, recommendOffset = 0) {
   } else if (mode === 'partition') {
     const rids = [1, 3, 4, 5, 17, 36, 160, 188, 211];
     const rid = rids[Math.floor(Math.random() * rids.length)];
-    const res = await getRegionDynamic(rid, pn, FETCH_SIZE);
-    return res?.data?.archives || [];
+    const data = getFeedData(await getRegionDynamic(rid, pn, FETCH_SIZE));
+    return data?.archives || [];
   } else if (mode === 'follow') {
-    const res = await getFollowFeed(pn, FETCH_SIZE);
-    return (res?.data?.items || [])
+    const data = getFeedData(await getFollowFeed(pn, FETCH_SIZE));
+    return (data?.items || [])
       .map((item) => {
         const archive = item.modules?.module_dynamic?.major?.archive;
         if (!archive) return null;
@@ -63,8 +70,10 @@ async function fetchByMode(mode, pn, recommendOffset = 0) {
       })
       .filter(Boolean);
   } else {
-    const res = await getRecommend(4, FETCH_SIZE, pn + recommendOffset);
-    return res?.data?.item || [];
+    const data = getFeedData(
+      await getRecommend(4, FETCH_SIZE, pn + recommendOffset),
+    );
+    return data?.item || [];
   }
 }
 
@@ -162,15 +171,17 @@ export default function HomePage({
       for (let attempt = 0; attempt < MAX_DUPLICATE_PAGES; attempt++) {
         const items = await fetchByMode(mode, pageRef.current, refreshKey);
         if (generation !== generationRef.current) return;
+        if (items.length === 0) {
+          hasMoreRef.current = false;
+          return;
+        }
         pageRef.current++;
         const unique = dedupe(items);
         if (unique.length > 0) {
           setVideos((prev) => [...prev, ...unique]);
           return;
         }
-        if (items.length === 0) break;
       }
-      hasMoreRef.current = false;
     } catch {
       // A later focus/scroll event can retry a failed request.
     } finally {
