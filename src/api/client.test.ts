@@ -263,6 +263,16 @@ describe('getStoryboard', () => {
       expect(result?.data?.item?.[0]?.aid).toBe(88);
     });
 
+    test('getRecommend advances recommendation refresh index for each page', async () => {
+      setupMocks({ code: 0, data: { item: [] } });
+      await getRecommend(4, 20, 3);
+      const url = requestedUrls.find((value) => value.includes('/feed/rcmd'));
+      const params = new URL(url!).searchParams;
+      expect(params.get('fresh_idx')).toBe('3');
+      expect(params.get('fresh_idx_1h')).toBe('3');
+      expect(params.get('ps')).toBe('20');
+    });
+
     test('getRegionDynamic returns proxy-fetched data', async () => {
       setupMocks({ code: 0, data: { archives: [{ aid: 77 }] } });
       const result = await getRegionDynamic(1, 1, 6);
