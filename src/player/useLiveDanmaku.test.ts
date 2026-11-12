@@ -35,9 +35,7 @@ class FakeWebSocket {
   }
 }
 
-async function importFreshHook() {
-  return import(`./useLiveDanmaku.ts?t=${Date.now()}-${Math.random()}`);
-}
+const liveDanmakuFixture = './useLiveDanmaku.ts?fixture=live-danmaku';
 
 function Probe({ roomId = 1, enabled = true }) {
   const { useLiveDanmaku } = latestState.module;
@@ -50,7 +48,7 @@ function Probe({ roomId = 1, enabled = true }) {
 }
 
 async function renderProbe(props = {}) {
-  latestState = { module: await importFreshHook(), value: null };
+  latestState = { module: await import(liveDanmakuFixture), value: null };
   const renderer = await render(React.createElement(Probe, props));
   await flush();
   await flush();
@@ -160,4 +158,24 @@ test('useLiveDanmaku connects, parses live messages, and cleans up', async () =>
   renderer.unmount();
   expect(intervals[0].cleared).toBe(true);
   expect(sockets[0].closed).toBe(true);
+});
+
+test('useLiveDanmaku discards credentials that arrive after unmount', async () => {
+  const credentials = Promise.withResolvers();
+  getLiveDanmakuInfo.mockReturnValueOnce(credentials.promise);
+  const renderer = await renderProbe({ roomId: 88, enabled: true });
+
+  renderer.unmount();
+  await act(async () => {
+    credentials.resolve({
+      data: {
+        token: 'token-test',
+        host_list: [{ host: 'danmaku.test', wss_port: 2245 }],
+      },
+    });
+    await flush();
+  });
+
+  expect(sockets).toHaveLength(0);
+  expect(intervals).toHaveLength(0);
 });

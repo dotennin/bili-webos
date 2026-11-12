@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
 type FocusableEntry = {
@@ -6,6 +6,7 @@ type FocusableEntry = {
   col: number;
   group: string;
   onSelect?: () => void;
+  elementRef?: { current: HTMLElement | null };
 };
 
 type FocusDirection = 'up' | 'down' | 'left' | 'right';
@@ -46,7 +47,10 @@ function applyFocus(newId: string | null) {
 
   // Add focus to new element
   if (newId) {
-    const newEl = document.querySelector(`[data-focus-id="${newId}"]`);
+    const elementRef = focusRegistry.get(newId)?.elementRef;
+    const newEl = elementRef
+      ? elementRef.current
+      : document.querySelector(`[data-focus-id="${newId}"]`);
     if (newEl) {
       currentFocusElement = newEl;
       newEl.classList.add('focused');
@@ -58,7 +62,7 @@ function applyFocus(newId: string | null) {
   globalListeners.forEach((fn) => fn(newId));
 }
 
-export function registerFocusable(id, data) {
+export function registerFocusable(id: string, data: FocusableEntry) {
   focusRegistry.set(id, data);
 }
 
@@ -230,6 +234,10 @@ export function useFocusable({
 }: FocusableOptions) {
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const elementRef = useRef<HTMLElement | null>(null);
+  const setElement = useCallback((element: HTMLElement | null) => {
+    elementRef.current = element;
+  }, []);
 
   useEffect(() => {
     registerFocusable(id, {
@@ -237,6 +245,7 @@ export function useFocusable({
       col,
       group,
       onSelect: () => onSelectRef.current?.(),
+      elementRef,
     });
     return () => unregisterFocusable(id);
   }, [id, row, col, group]);
@@ -247,6 +256,7 @@ export function useFocusable({
     isFocused: currentFocusId === id, // Only accurate at render time, not reactive
     props: {
       'data-focus-id': id,
+      ref: setElement,
       onClick: handlers.onClick,
       onMouseEnter: handlers.onMouseEnter,
       style: { cursor: 'pointer' },

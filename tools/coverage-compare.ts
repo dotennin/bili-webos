@@ -36,16 +36,16 @@ export function formatDeltaPct(value) {
   return `${numeric >= 0 ? '+' : ''}${numeric.toFixed(2)}%`;
 }
 
-export function findBelowThresholdMetrics(total, threshold) {
+export function findFailingMetrics(total, threshold) {
   return METRICS.filter(
-    (metric) => Number(total?.[metric]?.pct ?? 0) < threshold,
+    (metric) => Number(total?.[metric]?.pct ?? 0) <= threshold,
   ).map(metricLabel);
 }
 
 export function buildCoverageReport(
   currentSummary,
   baseSummary,
-  threshold = 80,
+  threshold = 90,
 ) {
   const currentTotal = pickCoverageSection(currentSummary);
   const baseTotal = baseSummary ? pickCoverageSection(baseSummary) : null;
@@ -60,16 +60,16 @@ export function buildCoverageReport(
       delta: basePct == null ? 'N/A' : formatDeltaPct(currentPct - basePct),
     };
   });
-  const belowThreshold = findBelowThresholdMetrics(currentTotal, threshold);
+  const failingMetrics = findFailingMetrics(currentTotal, threshold);
 
   return {
     threshold,
     currentTotal,
     baseTotal,
     rows,
-    belowThreshold,
+    failingMetrics,
     baselineMissing: !baseTotal,
-    failed: belowThreshold.length > 0,
+    failed: failingMetrics.length > 0,
   };
 }
 
@@ -78,18 +78,13 @@ export function renderPullRequestComment(
   options: PullRequestCommentOptions = {},
 ) {
   const baselineLabel = options.baselineLabel ?? 'main';
-  const lines = [
-    '## Coverage Report',
-    '',
-    'Build weighted coverage comparison',
-    '',
-  ];
+  const lines = ['## Coverage Report', '', 'Build coverage comparison', ''];
 
   if (report.failed) {
     lines.push(
-      `Coverage gate failed: weighted coverage is below ${report.threshold}%`,
+      `Coverage gate failed: coverage must exceed ${report.threshold}%`,
       '',
-      ...report.belowThreshold.map((metric) => {
+      ...report.failingMetrics.map((metric) => {
         const row = report.rows.find((entry) => entry.metric === metric);
         return `- ${metric}: ${row?.current ?? 'N/A'}`;
       }),
@@ -104,7 +99,7 @@ export function renderPullRequestComment(
     );
   }
 
-  lines.push(`Weighted LCOV total vs ${baselineLabel}:`, '');
+  lines.push(`LCOV coverage vs ${baselineLabel}:`, '');
   lines.push('| Metric | Current | Main | Delta |');
   lines.push('| --- | ---: | ---: | ---: |');
   for (const row of report.rows) {

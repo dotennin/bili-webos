@@ -934,7 +934,12 @@ describe('page rendering', () => {
 
     await interact(() => keyByLabel('A').onPress());
     await interact(() => keyByLabel('搜索').onPress());
-    expect(api.searchVideo).toHaveBeenCalledWith('a');
+    expect(api.searchVideo).toHaveBeenCalledWith(
+      'a',
+      undefined,
+      undefined,
+      expect.any(AbortSignal),
+    );
     expect(textOf(renderer.toJSON())).toContain('未找到相关视频');
 
     await interact(() => keyByLabel('B').onPress());
@@ -972,6 +977,101 @@ describe('page rendering', () => {
     await flush();
     await interact(() => timeouts.at(-1)?.fn());
     expect(restoreFocusCalls.at(-1)).toBe('content-10-0');
+  });
+
+  test('SearchPage keeps the latest loading state and results across out-of-order replies', async () => {
+    const { default: SearchPage } = await importFresh('./SearchPage.tsx');
+    const renderer = await render(React.createElement(SearchPage));
+    const press = (label) =>
+      interact(() => {
+        oskKeys.findLast((key) => key.label === label).onPress();
+      });
+    const early = Promise.withResolvers();
+    const late = Promise.withResolvers();
+    const latest = Promise.withResolvers();
+    api.searchVideo
+      .mockReturnValueOnce(early.promise)
+      .mockReturnValueOnce(late.promise)
+      .mockReturnValueOnce(latest.promise);
+
+    await press('A');
+    await press('搜索');
+    await press('B');
+    await press('搜索');
+    await press('C');
+    await press('搜索');
+
+    await interact(() => early.reject(new Error('superseded')));
+    expect(
+      renderer.container.querySelector('.page-state-loading'),
+    ).not.toBeNull();
+    expect(renderer.container.querySelector('.page-state-error')).toBeNull();
+
+    await interact(() =>
+      latest.resolve({ code: 0, data: { result: [{ title: '最新结果' }] } }),
+    );
+    await interact(() =>
+      late.resolve({ code: 0, data: { result: [{ title: '旧结果' }] } }),
+    );
+    expect(textOf(renderer.toJSON())).toContain('最新结果');
+    expect(textOf(renderer.toJSON())).not.toContain('旧结果');
+
+    const signals = api.searchVideo.mock.calls.map((call) => call[3]);
+    expect(signals.map((signal) => signal.aborted)).toEqual([
+      true,
+      true,
+      false,
+    ]);
+
+    const pending = Promise.withResolvers();
+    api.searchVideo.mockReturnValueOnce(pending.promise);
+    await press('搜索');
+    renderer.unmount();
+    expect(api.searchVideo.mock.calls.at(-1)[3].aborted).toBe(true);
+    await interact(() => pending.resolve({ code: 0, data: { result: [] } }));
+  });
+
+  test('SearchPage offers retry on the same remote key after a failed search', async () => {
+    const { default: SearchPage } = await importFresh('./SearchPage.tsx');
+    const renderer = await render(React.createElement(SearchPage));
+    const getKey = (label) => oskKeys.findLast((key) => key.label === label);
+    const press = (label) =>
+      interact(() => {
+        getKey(label).onPress();
+      });
+    api.searchVideo.mockRejectedValueOnce(new Error('request failed'));
+
+    const searchKey = getKey('搜索');
+    const searchKeyElement = renderer.container.querySelector(
+      'mock-key[label="搜索"]',
+    );
+    await press('A');
+    await press('搜索');
+    expect(
+      renderer.container.querySelector('.page-state-error'),
+    ).not.toBeNull();
+    expect(renderer.container.querySelector('.page-state-empty')).toBeNull();
+    expect(getKey('重试')).toMatchObject({
+      id: searchKey.id,
+      row: searchKey.row,
+      col: searchKey.col,
+    });
+    expect(renderer.container.querySelector('mock-key[label="重试"]')).toBe(
+      searchKeyElement,
+    );
+    expect(setFocusCalls).toEqual([]);
+
+    api.searchVideo.mockResolvedValueOnce({ code: 0, data: { result: [] } });
+    await press('重试');
+    expect(api.searchVideo.mock.calls.map(([keyword]) => keyword)).toEqual([
+      'a',
+      'a',
+    ]);
+    expect(renderer.container.querySelector('.page-state-error')).toBeNull();
+    expect(
+      renderer.container.querySelector('.page-state-empty'),
+    ).not.toBeNull();
+    renderer.unmount();
   });
 
   test('SettingsPage opens the CDN picker, selects routes, and logs out', async () => {

@@ -25,6 +25,8 @@ let mpegtsDestroyed;
 let originalConsoleError;
 let shakaSupported;
 let shakaLoadError;
+let shakaAttach;
+let mpegtsPlay;
 let shakaPlayers;
 let revokedObjectUrls;
 let mpegtsSupported;
@@ -220,6 +222,8 @@ beforeEach(() => {
   mpegtsDestroyed = 0;
   shakaSupported = true;
   shakaLoadError = null;
+  shakaAttach = mock(async () => {});
+  mpegtsPlay = mock(async () => {});
   shakaPlayers = [];
   revokedObjectUrls = [];
   mpegtsSupported = true;
@@ -370,7 +374,9 @@ beforeEach(() => {
       configure(config) {
         this.config = config;
       }
-      async attach() {}
+      async attach() {
+        await shakaAttach();
+      }
       addEventListener(type, handler) {
         if (type === 'error') this.errorHandler = handler;
         if (type === 'adaptation') this.adaptationHandler = handler;
@@ -416,7 +422,7 @@ beforeEach(() => {
         },
         attachMediaElement() {},
         load() {},
-        async play() {},
+        play: () => mpegtsPlay(),
         destroy() {
           mpegtsDestroyed += 1;
         },
@@ -485,6 +491,61 @@ describe('DanmakuLayer', () => {
 });
 
 describe('PlayerPage', () => {
+  test('destroys a pending Shaka attach when switching videos', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const attach = Promise.withResolvers();
+    shakaAttach.mockReturnValueOnce(attach.promise);
+    const oldMedia = createVideoMock();
+    const newMedia = createVideoMock();
+    const play = (bvid, media) =>
+      renderWithNodeMock(
+        React.createElement(PlayerPage, {
+          video: { bvid, cid: 7, title: bvid },
+        }),
+        ({ type }) => (type === 'video' ? media : null),
+      );
+
+    const previous = await play('BV-OLD', oldMedia);
+    expect(shakaAttach).toHaveBeenCalledTimes(1);
+
+    previous.unmount();
+    const next = await play('BV-NEW', newMedia);
+    await interact(() => attach.resolve());
+    expect(shakaDestroyed).toBe(1);
+    expect(oldMedia.playCalls).toBe(0);
+    expect(newMedia.playCalls).toBe(1);
+    expect(api.getPlayUrl).toHaveBeenCalledTimes(1);
+    expect(api.getPlayUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ bvid: 'BV-NEW' }),
+      7,
+      80,
+    );
+    next.unmount();
+  });
+
+  test('reports a Shaka attach failure and releases the engine', async () => {
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    shakaAttach.mockRejectedValueOnce(new Error('attach failed'));
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-ATTACH', cid: 7, title: 'Attach failure' },
+      }),
+      ({ type }) => (type === 'video' ? video : null),
+    );
+    await interact(flush);
+
+    expect(api.castReportState).toHaveBeenCalledWith({
+      playState: 'error',
+      error: 'attach failed',
+    });
+    expect(renderer.container.querySelector('.loading')).toBeNull();
+    expect(shakaDestroyed).toBe(1);
+    expect(video.playCalls).toBe(0);
+    renderer.unmount();
+    expect(shakaDestroyed).toBe(1);
+  });
+
   test('renders player controls in the requested order even without subtitles', async () => {
     const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
     const renderer = await renderWithNodeMock(
@@ -981,6 +1042,10 @@ describe('PlayerPage', () => {
       expect.anything(),
     );
     expect(JSON.stringify(noCidRenderer.toJSON())).not.toContain('加载中...');
+    expect(api.castReportState).toHaveBeenCalledWith({
+      playState: 'error',
+      error: 'missing-cid',
+    });
     await act(async () => {
       noCidRenderer.unmount();
     });
@@ -1000,6 +1065,10 @@ describe('PlayerPage', () => {
     });
     expect(shakaLoads).not.toContain('blob:test');
     expect(JSON.stringify(noDashRenderer.toJSON())).not.toContain('加载中...');
+    expect(api.castReportState).toHaveBeenCalledWith({
+      playState: 'error',
+      error: 'missing-dash',
+    });
     await act(async () => {
       noDashRenderer.unmount();
     });
@@ -1546,6 +1615,49 @@ describe('PlayerPage', () => {
     );
 
     await act(async () => renderer.unmount());
+  });
+
+  test('stops polling for the native media ID after exiting', async () => {
+    const request = mock(() => {});
+    Object.assign(window, {
+      PalmSystem: { identifier: 'com.biliwebos.app' },
+      webOS: { service: { request } },
+    });
+
+    const { default: PlayerPage } = await importFresh('./PlayerPage.tsx');
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(PlayerPage, {
+        video: { bvid: 'BV-NATIVE-EXIT', cid: 16 },
+      }),
+      ({ type }) => (type === 'video' ? video : null),
+    );
+    await interact(flush);
+    video.element.load = () => {};
+    await interact(() => video.dispatch('loadeddata'));
+    for (const key of [
+      'ArrowUp',
+      'ArrowDown',
+      'ArrowRight',
+      'ArrowRight',
+      'ArrowRight',
+      'ArrowRight',
+      'Enter',
+      'ArrowDown',
+      'ArrowDown',
+      'Enter',
+    ]) {
+      await interact(() => customKeyHandler(event(key)));
+    }
+
+    const isPoll = (timer) => timer.delay === 100;
+    const pendingPoll = timers.find(isPoll);
+    expect(pendingPoll).toBeDefined();
+    renderer.unmount();
+
+    await interact(() => pendingPoll.fn());
+    expect(timers.filter(isPoll)).toHaveLength(1);
+    expect(request).not.toHaveBeenCalled();
   });
 
   test('switches packaged webos playback to the native speed pipeline', async () => {
@@ -2679,6 +2791,130 @@ describe('scrub preview thumbnail', () => {
 });
 
 describe('LivePlayerPage', () => {
+  test('discards a late live source after exiting', async () => {
+    const { default: LivePlayerPage } = await importFresh(
+      './LivePlayerPage.tsx',
+    );
+    const source = Promise.withResolvers();
+    api.getLiveStreamSource.mockReturnValueOnce(source.promise);
+    const renderer = await renderWithNodeMock(
+      React.createElement(LivePlayerPage, { room: { roomid: 9 } }),
+      ({ type }) => (type === 'video' ? createVideoMock() : null),
+    );
+    expect(api.getLiveStreamSource).toHaveBeenCalledWith(9);
+
+    renderer.unmount();
+    await interact(() =>
+      source.resolve({ type: 'flv', url: 'https://live.test/old.flv' }),
+    );
+    expect(api.castReportState.mock.calls).toEqual([
+      [{ playState: 'loading' }],
+      [{ playState: 'stop' }],
+    ]);
+    expect(mpegtsPlayers).toHaveLength(0);
+    expect(intervals).toHaveLength(0);
+  });
+
+  test('destroys a pending live HLS attach when the room changes', async () => {
+    const { default: LivePlayerPage } = await importFresh(
+      './LivePlayerPage.tsx',
+    );
+    const attach = Promise.withResolvers();
+    shakaAttach.mockReturnValueOnce(attach.promise);
+    api.getLiveStreamSource.mockResolvedValueOnce({
+      type: 'hls',
+      url: 'https://live.test/old.m3u8',
+    });
+    const renderer = await render(
+      React.createElement(LivePlayerPage, { room: { roomid: 9 } }),
+      {
+        createNodeMock: ({ type }) =>
+          type === 'video' ? createVideoMock() : null,
+      },
+    );
+    await interact(flush);
+    expect(shakaAttach).toHaveBeenCalledTimes(1);
+
+    await update(
+      renderer,
+      React.createElement(LivePlayerPage, { room: { roomid: 10 } }),
+    );
+    const reportCount = api.castReportState.mock.calls.length;
+    const pollCount = intervals.length;
+    await interact(() => attach.resolve());
+    expect(shakaDestroyed).toBe(1);
+    expect(shakaLoads).toHaveLength(0);
+    expect(mpegtsPlayers).toHaveLength(1);
+    expect(api.castReportState).toHaveBeenCalledTimes(reportCount);
+    expect(intervals).toHaveLength(pollCount);
+
+    renderer.unmount();
+    expect(mpegtsDestroyed).toBe(1);
+    expect(shakaDestroyed).toBe(1);
+  });
+
+  test('clears an HLS first-frame poll and silences old engine events on room change', async () => {
+    const { default: LivePlayerPage } = await importFresh(
+      './LivePlayerPage.tsx',
+    );
+    api.getLiveStreamSource.mockResolvedValueOnce({
+      type: 'hls',
+      url: 'https://live.test/old.m3u8',
+    });
+    const video = createVideoMock();
+    const renderer = await renderWithNodeMock(
+      React.createElement(LivePlayerPage, { room: { roomid: 9 } }),
+      ({ type }) => (type === 'video' ? video : null),
+    );
+    await interact(flush);
+    const poll = intervals.find((interval) => !interval.cleared);
+    expect(poll).toBeDefined();
+    const reportError = shakaPlayers[0].errorHandler;
+
+    await update(
+      renderer,
+      React.createElement(LivePlayerPage, { room: { roomid: 10 } }),
+    );
+    expect(poll.cleared).toBe(true);
+    expect(renderer.container.querySelector('video')).not.toBe(video.element);
+
+    const reportCount = api.castReportState.mock.calls.length;
+    await interact(() => {
+      video.readyState = 2;
+      poll.fn();
+      reportError({ detail: { message: 'stale HLS error' } });
+    });
+    expect(api.castReportState).toHaveBeenCalledTimes(reportCount);
+    renderer.unmount();
+  });
+
+  test('ignores late FLV playback and decoder errors after exiting', async () => {
+    const { default: LivePlayerPage } = await importFresh(
+      './LivePlayerPage.tsx',
+    );
+    const play = Promise.withResolvers();
+    mpegtsPlay.mockReturnValueOnce(play.promise);
+    const renderer = await renderWithNodeMock(
+      React.createElement(LivePlayerPage, { room: { roomid: 9 } }),
+      ({ type }) => (type === 'video' ? createVideoMock() : null),
+    );
+    await interact(flush);
+    expect(mpegtsPlay).toHaveBeenCalledTimes(1);
+    const reportError = mpegtsPlayers[0].errorHandler;
+
+    renderer.unmount();
+    await interact(() => {
+      reportError('network', 'stalled', { msg: 'stale decoder' });
+      play.resolve();
+    });
+    expect(mpegtsDestroyed).toBe(1);
+    expect(api.castReportState.mock.calls).toEqual([
+      [{ playState: 'loading' }],
+      [{ playState: 'stop' }],
+    ]);
+    expect(intervals).toHaveLength(0);
+  });
+
   test('plays live stream, reacts to cast commands and key handler, and stops cleanly', async () => {
     const { default: LivePlayerPage } = await importFresh(
       './LivePlayerPage.tsx',

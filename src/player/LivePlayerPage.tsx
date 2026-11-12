@@ -33,8 +33,6 @@ type LivePlayerPageProps = {
 
 export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
   const videoRef = useRef(null);
-  const playerRef = useRef(null);
-  const playerKindRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [showControls, setShowControls] = useState(false);
@@ -43,7 +41,6 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
     () => storage.getSettings().danmaku,
   );
   const controlsTimer = useRef(null);
-  const firstFrameTimer = useRef(null);
   const { danmakus, currentTime: liveDanmakuTime } = useLiveDanmaku(
     room.roomid,
     danmakuEnabled,
@@ -85,24 +82,39 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
   }
 
   useEffect(() => {
-    let mounted = true;
+    const video = videoRef.current;
+    if (!video) return;
+    let active = true;
+    let player;
+    let firstFrameTimer: ReturnType<typeof setInterval> | undefined;
+    let firstFrameReady = false;
+    const isActive = () => active && videoRef.current === video;
+
+    function stopFirstFramePoll() {
+      clearInterval(firstFrameTimer);
+      firstFrameTimer = undefined;
+    }
+
+    async function dispose() {
+      active = false;
+      stopFirstFramePoll();
+      const instance = player;
+      player = null;
+      await instance?.destroy();
+    }
 
     function finishLoading() {
-      if (!mounted) return;
+      if (!isActive()) return;
+      firstFrameReady = true;
+      stopFirstFramePoll();
       setLoading(false);
-      if (firstFrameTimer.current) {
-        clearInterval(firstFrameTimer.current);
-        firstFrameTimer.current = null;
-      }
       castReportState({ playState: 'playing' }).catch(() => {});
       setPlaying(true);
     }
 
     function watchFirstFrame() {
-      if (firstFrameTimer.current) clearInterval(firstFrameTimer.current);
-      firstFrameTimer.current = setInterval(() => {
-        const video = videoRef.current;
-        if (!video) return;
+      if (!isActive() || firstFrameReady) return;
+      firstFrameTimer = setInterval(() => {
         if ((video.currentTime || 0) > 0 || (video.readyState || 0) >= 2) {
           finishLoading();
         }
@@ -111,17 +123,19 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
 
     async function loadHlsPlayer(url) {
       const shaka: any = await import('shaka-player');
+      if (!isActive()) return;
       shaka.polyfill.installAll();
       if (!shaka.Player.isBrowserSupported()) {
         throw new Error('shaka-live-not-supported');
       }
 
-      const player = new shaka.Player();
-      configureShakaForLive(player);
-      await player.attach(videoRef.current);
-      playerRef.current = player;
-      playerKindRef.current = 'shaka';
-      player.addEventListener('error', (e) => {
+      const shakaPlayer = new shaka.Player();
+      player = shakaPlayer;
+      configureShakaForLive(shakaPlayer);
+      await shakaPlayer.attach(video);
+      if (!isActive()) return;
+      shakaPlayer.addEventListener('error', (e) => {
+        if (!isActive()) return;
         console.error('Live Shaka error:', e.detail);
         castReportState({
           playState: 'error',
@@ -130,19 +144,23 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
       });
 
       const proxyBase = getProxyBase();
-      player.getNetworkingEngine().registerRequestFilter((type, request) => {
-        if (!request.uris?.[0]) return;
-        if (request.uris[0].startsWith(`${proxyBase}/proxy/`)) return;
-        const originalUrl = new URL(request.uris[0], url);
-        request.uris[0] = `${proxyBase}/proxy/${originalUrl.host}${originalUrl.pathname}${originalUrl.search}`;
-      });
+      shakaPlayer
+        .getNetworkingEngine()
+        .registerRequestFilter((type, request) => {
+          if (!request.uris?.[0]) return;
+          if (request.uris[0].startsWith(`${proxyBase}/proxy/`)) return;
+          const originalUrl = new URL(request.uris[0], url);
+          request.uris[0] = `${proxyBase}/proxy/${originalUrl.host}${originalUrl.pathname}${originalUrl.search}`;
+        });
 
-      await player.load(buildProxyUrl(url));
-      await videoRef.current.play();
+      await shakaPlayer.load(buildProxyUrl(url));
+      if (!isActive()) return;
+      await video.play();
     }
 
     async function loadFlvPlayer(url) {
       const mod = await import('mpegts.js');
+      if (!isActive()) return;
       const mpegts = getMpegtsModule(mod);
       if (
         !mpegts?.isSupported?.() ||
@@ -151,7 +169,7 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
         throw new Error('mpegts-live-not-supported');
       }
 
-      const player = mpegts.createPlayer(
+      const flvPlayer = mpegts.createPlayer(
         {
           type: 'flv',
           isLive: true,
@@ -179,7 +197,9 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
         },
       );
 
-      player.on(mpegts.Events.ERROR, (errorType, errorDetail, errorInfo) => {
+      player = flvPlayer;
+      flvPlayer.on(mpegts.Events.ERROR, (errorType, errorDetail, errorInfo) => {
+        if (!isActive()) return;
         console.error('Live mpegts error:', errorType, errorDetail, errorInfo);
         castReportState({
           playState: 'error',
@@ -188,11 +208,9 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
         }).catch(() => {});
       });
 
-      player.attachMediaElement(videoRef.current);
-      player.load();
-      playerRef.current = player;
-      playerKindRef.current = 'mpegts';
-      await player.play();
+      flvPlayer.attachMediaElement(video);
+      flvPlayer.load();
+      await flvPlayer.play();
       finishLoading();
     }
 
@@ -200,17 +218,20 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
       try {
         castReportState({ playState: 'loading' }).catch(() => {});
         const source = await getLiveStreamSource(room.roomid);
-        if (!source || !videoRef.current) {
+        if (!isActive()) return;
+        if (!source) {
           throw new Error('live-stream-source-missing');
         }
 
         if (source.type === 'flv') await loadFlvPlayer(source.url);
         else await loadHlsPlayer(source.url);
         watchFirstFrame();
-        if (!mounted) return;
       } catch (err) {
+        if (!isActive()) return;
+        dispose().catch(() => {});
         console.error('Live stream error:', err);
-        if (mounted) setLoading(false);
+        setLoading(false);
+        setPlaying(false);
         castReportState({
           playState: 'error',
           error: err?.message || 'live-load-failed',
@@ -218,52 +239,45 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
       }
     }
 
-    const video = videoRef.current;
-    const onPlaying = () => finishLoading();
-    const onLoadedData = () => finishLoading();
-    const onCanPlay = () => finishLoading();
     const onTimeUpdate = () => {
-      if ((videoRef.current?.currentTime || 0) > 0) finishLoading();
+      if ((video.currentTime || 0) > 0) finishLoading();
     };
-    const onWaiting = () =>
+    const onWaiting = () => {
+      if (!isActive()) return;
       castReportState({ playState: 'loading' }).catch(() => {});
+    };
     const onPause = () => {
-      if (videoRef.current?.ended) return;
+      if (!isActive() || video.ended) return;
       setPlaying(false);
       castReportState({ playState: 'paused' }).catch(() => {});
     };
     const onEnded = () => {
+      if (!isActive()) return;
       setPlaying(false);
       castReportState({ playState: 'stop' }).catch(() => {});
     };
 
-    if (video) {
-      video.addEventListener('playing', onPlaying);
-      video.addEventListener('loadeddata', onLoadedData);
-      video.addEventListener('canplay', onCanPlay);
-      video.addEventListener('timeupdate', onTimeUpdate);
-      video.addEventListener('waiting', onWaiting);
-      video.addEventListener('pause', onPause);
-      video.addEventListener('ended', onEnded);
-    }
+    setLoading(true);
+    setPlaying(false);
+    video.addEventListener('playing', finishLoading);
+    video.addEventListener('loadeddata', finishLoading);
+    video.addEventListener('canplay', finishLoading);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('ended', onEnded);
 
-    load();
+    void load();
     return () => {
-      mounted = false;
-      if (video) {
-        video.removeEventListener('playing', onPlaying);
-        video.removeEventListener('loadeddata', onLoadedData);
-        video.removeEventListener('canplay', onCanPlay);
-        video.removeEventListener('timeupdate', onTimeUpdate);
-        video.removeEventListener('waiting', onWaiting);
-        video.removeEventListener('pause', onPause);
-        video.removeEventListener('ended', onEnded);
-      }
-      if (firstFrameTimer.current) clearInterval(firstFrameTimer.current);
+      dispose().catch(() => {});
+      video.removeEventListener('playing', finishLoading);
+      video.removeEventListener('loadeddata', finishLoading);
+      video.removeEventListener('canplay', finishLoading);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('ended', onEnded);
       if (controlsTimer.current) clearTimeout(controlsTimer.current);
-      playerRef.current?.destroy?.();
-      playerRef.current = null;
-      playerKindRef.current = null;
       castReportState({ playState: 'stop' }).catch(() => {});
     };
   }, [room.roomid]);
@@ -391,7 +405,12 @@ export default function LivePlayerPage({ room, onBack }: LivePlayerPageProps) {
 
   return (
     <div className="player-page">
-      <video ref={videoRef} className="player-video" autoPlay />
+      <video
+        key={room.roomid}
+        ref={videoRef}
+        className="player-video"
+        autoPlay
+      />
 
       <DanmakuLayer
         danmakus={danmakus}

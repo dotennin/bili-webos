@@ -1,19 +1,28 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  lazy,
+  Suspense,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import { initKeyboardNav, setFocus, useFocusable } from './hooks/useFocus';
 import { castAck, castSubscribe, getNavInfo } from './api/client';
 import { storage } from './utils/storage';
 import SidebarItem from './components/SidebarItem';
+import PageState from './components/PageState';
 import type { AppIconName } from './components/AppIcon';
 import packageJson from '../package.json';
 
-import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import HistoryPage from './pages/HistoryPage';
-import FavoritesPage from './pages/FavoritesPage';
-import SettingsPage from './pages/SettingsPage';
 import PlayerPage from './player/PlayerPage';
 import LivePlayerPage from './player/LivePlayerPage';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const FavoritesPage = lazy(() => import('./pages/FavoritesPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 type NavItem = {
   key: string;
@@ -104,6 +113,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const pendingCastAckRef = useRef(null);
+  const castPlayIdRef = useRef(0);
 
   useEffect(() => {
     initKeyboardNav();
@@ -122,10 +132,12 @@ export default function App() {
         const command = event.command;
 
         if (command.type === 'play') {
+          const castPlayId = ++castPlayIdRef.current;
           pendingCastAckRef.current = command;
           if (command.contentType === 'live') {
             setPlayerVideo(null);
             setLiveRoom({
+              castPlayId,
               roomid: command.roomId,
               title: command.title || '投屏直播',
               owner: { name: '' },
@@ -133,6 +145,7 @@ export default function App() {
           } else {
             setLiveRoom(null);
             setPlayerVideo({
+              castPlayId,
               aid: command.aid,
               bvid: command.bvid,
               cid: command.cid,
@@ -336,23 +349,32 @@ export default function App() {
           )}
           {page === 'search' && <SearchPage onPlayVideo={handlePlayVideo} />}
           {page === 'history' && <HistoryPage onPlayVideo={handlePlayVideo} />}
-          {page === 'favorites' && (
-            <FavoritesPage userMid={user?.mid} onPlayVideo={handlePlayVideo} />
-          )}
-          {page === 'settings' && (
-            <SettingsPage
-              onLogout={handleLogout}
-              user={user}
-              onPlayVideo={handlePlayVideo}
-            />
-          )}
+          <Suspense fallback={<PageState state="loading" />}>
+            {page === 'favorites' && (
+              <FavoritesPage
+                userMid={user?.mid}
+                onPlayVideo={handlePlayVideo}
+              />
+            )}
+            {page === 'settings' && (
+              <SettingsPage
+                onLogout={handleLogout}
+                user={user}
+                onPlayVideo={handlePlayVideo}
+              />
+            )}
+          </Suspense>
         </div>
         {toast && <div className="toast">{toast}</div>}
       </div>
 
       {playerVideo && (
         <PlayerPage
-          key={playerVideo.bvid || playerVideo.aid || playerVideo.cid}
+          key={
+            playerVideo.castPlayId
+              ? `cast-${playerVideo.castPlayId}`
+              : `${playerVideo.bvid || playerVideo.aid}:${playerVideo.cid ?? ''}`
+          }
           video={playerVideo}
           onBack={() => setPlayerVideo(null)}
           onPlayNext={(v) => setPlayerVideo(v)}
@@ -360,7 +382,11 @@ export default function App() {
       )}
       {liveRoom && (
         <LivePlayerPage
-          key={liveRoom.roomid}
+          key={
+            liveRoom.castPlayId
+              ? `cast-${liveRoom.castPlayId}`
+              : liveRoom.roomid
+          }
           room={liveRoom}
           onBack={() => setLiveRoom(null)}
         />
@@ -368,7 +394,9 @@ export default function App() {
 
       {showLogin && (
         <div className="login-overlay">
-          <LoginPage onLogin={handleLogin} />
+          <Suspense fallback={<PageState state="loading" />}>
+            <LoginPage onLogin={handleLogin} />
+          </Suspense>
         </div>
       )}
     </>

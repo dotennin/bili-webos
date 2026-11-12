@@ -35,6 +35,7 @@ export function useLiveDanmaku(roomId, enabled) {
     async function connect() {
       try {
         const info = await getLiveDanmakuInfo(roomId);
+        if (cancelled) return;
         const url = resolveLiveDanmakuUrl(info);
         const token = info?.data?.token;
         if (!url || !token) {
@@ -72,18 +73,20 @@ export function useLiveDanmaku(roomId, enabled) {
         };
 
         socket.onerror = () => {
+          if (cancelled) return;
           if (console.warn) console.warn('[live-danmaku] WebSocket error');
           setAvailable(false);
         };
 
         socket.onclose = () => {
-          setAvailable(false);
+          if (!cancelled) setAvailable(false);
         };
       } catch (err) {
+        if (cancelled) return;
         if (console.warn) {
           console.warn('[live-danmaku] Live danmaku unavailable:', err);
         }
-        if (!cancelled) setAvailable(false);
+        setAvailable(false);
       }
     }
 
