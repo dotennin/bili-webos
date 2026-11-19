@@ -47,17 +47,19 @@ export default function DanmakuLayer({
   seekable = false,
 }: DanmakuLayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const liveRenderedRef = useRef(new Set<number>());
+  const liveRenderedRef = useRef(new WeakSet<Danmaku>());
   const trackRef = useRef(new Array<number>(MAX_TRACKS).fill(0));
   const cursorRef = useRef(0);
   const previousTimeRef = useRef<number | null>(null);
 
+  // Reset on VOD source changes and keep active live comments across batches.
+  const vodDanmakus = seekable ? danmakus : null;
   useEffect(() => {
-    liveRenderedRef.current.clear();
+    liveRenderedRef.current = new WeakSet<Danmaku>();
     previousTimeRef.current = null;
     trackRef.current.fill(0);
     containerRef.current?.replaceChildren();
-  }, [danmakus, enabled, seekable]);
+  }, [vodDanmakus, enabled]);
 
   // Render danmakus that should appear at currentTime
   useEffect(() => {
@@ -98,10 +100,13 @@ export default function DanmakuLayer({
         continue;
       }
       if (seekable) cursorRef.current = i + 1;
-      if (dm.time < earliestTime || liveRenderedRef.current.has(i)) continue;
+      if (dm.time < earliestTime) continue;
 
       if (dm.mode !== 1 && dm.mode !== undefined) continue;
-      if (!seekable) liveRenderedRef.current.add(i);
+      if (!seekable) {
+        if (liveRenderedRef.current.has(dm)) continue;
+        liveRenderedRef.current.add(dm);
+      }
 
       let track = -1;
       for (let t = 0; t < trackCount; t++) {
